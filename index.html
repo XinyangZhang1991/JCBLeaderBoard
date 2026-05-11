@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JCB Leadership in Action</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Welcome Screen -->
+        <div id="welcome-screen" class="screen active">
+            <div class="welcome-content">
+                <div class="welcome-left">
+                    <div class="jcb-logo-large"></div>
+                    <h1 class="title-main">LEADERSHIP</h1>
+                    <h2 class="title-sub">IN ACTION</h2>
+                    <button class="btn-primary" id="start-btn" onclick="window.game.game.startRegistration();" style="position: relative !important; z-index: 9999 !important; pointer-events: auto !important; cursor: pointer !important;">TOUCH TO BEGIN</button>
+                    <div class="version-info">Version 1.0 | JCB Leadership Development</div>
+                </div>
+                <div class="welcome-right">
+                    <h3 class="leaderboard-title">LEADERBOARD</h3>
+                    <div id="leaderboard-container" class="leaderboard-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Registration Screen -->
+        <div id="registration-screen" class="screen">
+            <div class="registration-container">
+                <h2>PLAYER REGISTRATION</h2>
+
+                <div class="form-group">
+                    <label>Enter Your Name:</label>
+                    <input type="text" id="player-name" class="input-large" placeholder="Your full name">
+                </div>
+
+                <div class="form-group">
+                    <label>What is your primary leadership style?</label>
+                    <div class="radio-group">
+                        <div class="radio-option" onclick="game.selectLeadershipStyle('coercive')">
+                            <input type="radio" name="leadership-style" value="coercive">
+                            <div class="radio-content">
+                                <strong>Coercive</strong>
+                                <p>Demanding immediate compliance</p>
+                            </div>
+                        </div>
+                        <div class="radio-option" onclick="game.selectLeadershipStyle('authoritative')">
+                            <input type="radio" name="leadership-style" value="authoritative">
+                            <div class="radio-content">
+                                <strong>Authoritative</strong>
+                                <p>Mobilising people toward a vision</p>
+                            </div>
+                        </div>
+                        <div class="radio-option" onclick="game.selectLeadershipStyle('affiliative')">
+                            <input type="radio" name="leadership-style" value="affiliative">
+                            <div class="radio-content">
+                                <strong>Affiliative</strong>
+                                <p>Creating emotional bonds and harmony</p>
+                            </div>
+                        </div>
+                        <div class="radio-option" onclick="game.selectLeadershipStyle('democratic')">
+                            <input type="radio" name="leadership-style" value="democratic">
+                            <div class="radio-content">
+                                <strong>Democratic</strong>
+                                <p>Building consensus through participation</p>
+                            </div>
+                        </div>
+                        <div class="radio-option" onclick="game.selectLeadershipStyle('pacesetting')">
+                            <input type="radio" name="leadership-style" value="pacesetting">
+                            <div class="radio-content">
+                                <strong>Pacesetting</strong>
+                                <p>Setting high standards for performance</p>
+                            </div>
+                        </div>
+                        <div class="radio-option" onclick="game.selectLeadershipStyle('coaching')">
+                            <input type="radio" name="leadership-style" value="coaching">
+                            <div class="radio-content">
+                                <strong>Coaching</strong>
+                                <p>Developing people for the future</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="consent-checkbox">
+                        I consent to my results being displayed publicly
+                    </label>
+                </div>
+
+                <button class="btn-primary" onclick="game.validateAndStartBriefing()">BEGIN</button>
+            </div>
+        </div>
+
+        <!-- Mission Briefing Screen -->
+        <div id="briefing-screen" class="screen">
+            <div class="briefing-container">
+                <div class="briefing-text">
+                    <div class="jcb-logo-small"></div>
+                    <h2>MISSION BRIEFING</h2>
+                    <div class="briefing-narrative">
+                        <p><strong>Congratulations on your appointment as Business Unit Director for JCB's European Division.</strong></p>
+
+                        <p>The Board has high expectations. Your predecessor achieved steady 8-10% annual growth, but market conditions demand more. The Board has set an ambitious target: <strong>20% revenue growth in your first 12 months</strong>.</p>
+
+                        <p>You have full operational authority over the division, including:</p>
+                        <ul>
+                            <li>Complete product portfolio Leadership, Beachhead Leaders, Everyman, and Loading Shovels</li>
+                            <li>Budget authority: £20M operational budget, plus £5M discretionary for strategic initiatives</li>
+                            <li>Decision-making: 87 staff across sales, operations, and service functions</li>
+                            <li>13 dealers across 12 European markets</li>
+                        </ul>
+
+                        <p><strong>Your Mission:</strong> Demonstrate the JCB PAD framework in action - Leadership, Excellence, Agility, and Determination - as you navigate the challenges ahead.</p>
+
+                        <p>The decisions you make will shape not only your division's performance, but your leadership legacy at JCB.</p>
+
+                        <p class="briefing-emphasis">Are you ready to lead?</p>
+                    </div>
+                </div>
+                <div class="briefing-info">
+                    <h3>KEY PARAMETERS</h3>
+                    <div class="briefing-details">
+                        <p><strong>Role:</strong> Business Unit Director</p>
+                        <p><strong>Region:</strong> European Division</p>
+                        <p><strong>Team Size:</strong> 87 staff across sales, operations, service</p>
+                        <p><strong>Budget Authority:</strong> £20M operational, £5M discretionary</p>
+                        <p><strong>Timeline:</strong> 12 Months</p>
+                        <p><strong>Success Threshold:</strong> 20% Revenue Growth</p>
+                    </div>
+                    <div class="countdown" id="briefing-countdown">Your journey begins in <span>98</span>s...</div>
+                    <button class="btn-secondary" onclick="game.skipBriefing()">SKIP BRIEFING</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gameplay Screen -->
+        <div id="gameplay-screen" class="screen">
+            <!-- HUD -->
+            <div class="hud">
+                <div class="hud-header">
+                    <div class="hud-title">JCB LEADERSHIP IN ACTION</div>
+                    <div class="hud-period" id="game-period">Month 1</div>
+                </div>
+                <div class="hud-metrics">
+                    <div class="metric">
+                        <span class="metric-label">Revenue Growth:</span>
+                        <span class="metric-value" id="metric-growth">+0.6%</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Market Share:</span>
+                        <span class="metric-value" id="metric-market">+0.0%</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Profit Margin:</span>
+                        <span class="metric-value" id="metric-profit">20%</span>
+                    </div>
+                    <div class="metric" id="metric-morale">
+                        <span class="metric-label">Team Morale:</span>
+                        <div class="morale-bar">
+                            <div class="morale-fill" style="width: 75%"></div>
+                        </div>
+                        <span class="metric-value">75%</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Staff Attrition:</span>
+                        <span class="metric-value" id="metric-attrition">5%</span>
+                    </div>
+                </div>
+                <div class="hud-footer">
+                    <button class="btn-info" onclick="game.requestInfo()">REQUEST INFO</button>
+                    <div class="timer" id="game-timer">Time: 15:00</div>
+                </div>
+            </div>
+
+            <!-- Scenario Content -->
+            <div class="scenario-container" id="scenario-container">
+                <!-- Dynamic scenario content loads here -->
+            </div>
+        </div>
+
+        <!-- Results Screen -->
+        <div id="results-screen" class="screen">
+            <div class="results-container">
+                <div class="results-header">
+                    <h1>CALCULATING YEAR 1 RESULTS...</h1>
+                </div>
+                <div class="results-metrics" id="results-metrics">
+                    <!-- Populated by JavaScript -->
+                </div>
+                <div class="results-outcome" id="results-outcome">
+                    <!-- SUCCESS or FAILURE -->
+                </div>
+                <div class="results-breakdown" id="results-breakdown">
+                    <!-- Leadership style breakdown -->
+                </div>
+                <div class="results-feedback" id="results-feedback">
+                    <!-- Radical candor feedback -->
+                </div>
+                <div class="results-actions">
+                    <button class="btn-primary" onclick="game.playRound2()">PLAY ROUND 2</button>
+                    <button class="btn-secondary" onclick="game.viewDetailedFeedback()">VIEW DETAILED FEEDBACK</button>
+                    <button class="btn-tertiary" onclick="game.restart()">NEW PLAYER</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Modal -->
+        <div id="info-modal" class="modal">
+            <div class="modal-content">
+                <h3>ADDITIONAL INFORMATION</h3>
+                <p>Available sources:</p>
+                <div id="info-options">
+                    <!-- Dynamic info options -->
+                </div>
+                <div class="modal-actions">
+                    <button class="btn-primary" onclick="game.confirmInfoRequest()">REQUEST SELECTED</button>
+                    <button class="btn-secondary" onclick="game.closeInfoModal()">PROCEED WITHOUT INFO</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Consequence Video Modal -->
+        <div id="consequence-modal" class="modal">
+            <div class="modal-content large">
+                <div class="video-container">
+                    <div class="video-placeholder">
+                        <p id="consequence-text" class="consequence-text"></p>
+                    </div>
+                </div>
+                <div class="consequence-continue">
+                    <div class="auto-continue">Auto-continuing in <span id="consequence-timer">5</span>s...</div>
+                    <button class="btn-secondary" onclick="game.skipConsequence()">CONTINUE NOW</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="game-engine.js"></script>
+    <script src="scenarios.js"></script>
+    <script src="scoring.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        // Diagnostic: Check what element is at the button position
+        window.addEventListener('load', () => {
+            const button = document.getElementById('start-btn');
+            if (button) {
+                const rect = button.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const elementAtPoint = document.elementFromPoint(centerX, centerY);
+
+                console.log('=== BUTTON DIAGNOSTIC ===');
+                console.log('Button element:', button);
+                console.log('Button position:', rect);
+                console.log('Element at button center:', elementAtPoint);
+                console.log('Is element the button?', elementAtPoint === button);
+                console.log('Element blocking:', elementAtPoint.tagName, elementAtPoint.className, elementAtPoint.id);
+                console.log('Button z-index:', window.getComputedStyle(button).zIndex);
+                console.log('Button pointer-events:', window.getComputedStyle(button).pointerEvents);
+                console.log('Blocking element z-index:', window.getComputedStyle(elementAtPoint).zIndex);
+                console.log('===');
+            }
+        });
+
+        // Global error handler to catch and display errors
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.log('Global error caught:', message, 'at', source, 'line', lineno);
+            alert('JavaScript Error: ' + message + '\n\nAt: ' + source + ':' + lineno + '\n\nPlease check the browser console (F12) for details.');
+            return true;
+        };
+
+        // Log when page is fully loaded
+        window.addEventListener('load', () => {
+            console.log('Page fully loaded');
+            console.log('window.game:', !!window.game);
+            console.log('window.scenarios:', !!window.scenarios);
+            console.log('window.scoringEngine:', !!window.scoringEngine);
+
+            if (window.game) {
+                console.log('game.scenarios:', window.game.scenarios ? window.game.scenarios.length : 'NULL');
+            }
+        });
+    </script>
+</body>
+</html>
