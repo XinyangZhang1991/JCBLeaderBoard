@@ -500,8 +500,8 @@ class ScoringEngine {
     const totalStylePoints = Object.values(gameState.leadershipStyles).reduce((a, b) => a + b, 0);
 
     Object.keys(gameState.leadershipStyles).forEach(style => {
-      results.leadershipProfile[style] = totalStylePoints > 0
-        ? Math.round((gameState.leadershipStyles[style] / totalStylePoints) * 100) : 0;
+      results.leadershipProfile[style] = totalStylePoints > 0 ?
+        Math.round((gameState.leadershipStyles[style] / totalStylePoints) * 100) : 0;
     });
 
     // Determine personality color
@@ -620,13 +620,13 @@ class ScoringEngine {
         feedback += '<h4>Where You Left Performance on the Table:</h4>';
         feedback += '<p>';
 
-        if (dominantStyle.percentage > 60) {
+        if (dominantStyle.percentage >= 60) {
           feedback += `Your overreliance on ${dominantStyle.name} leadership (${dominantStyle.percentage}%) limited your effectiveness. `;
           feedback += `More balanced use of ${underusedStyle.name} (only ${underusedStyle.percentage}%) could have unlocked higher performance. `;
         }
 
         if (growth < 28) {
-          feedback += `You achieved ${growth.toFixed(1)}% when 30% was possible with more strategic choices. `;
+          feedback += `You achieved ${growth.toFixed(1)}% when 30%+ was possible with more strategic choices. `;
         }
 
         if (morale < 75) {
@@ -643,7 +643,7 @@ class ScoringEngine {
       if (results.optimal) {
         feedback += 'You demonstrated balanced leadership, adapting your style to context while keeping both results and people in focus. This is sustainable high performance.';
       } else if (dominantStyle.name === 'pacesetting') {
-        feedback += "You're a strong driver who sometimes forgets that sustainable leadership requires bringing people with you, not just pushing them forward. Your team delivered despite pressure, not because of it.";
+        feedback += "You're a strong driver who sometimes forgets that sustainable leadership requires bringing people with you, not just pushing them forward. Your team delivered despite pressure, not because of inspiration.";
       } else if (dominantStyle.name === 'affiliative') {
         feedback += 'Your people-first approach built goodwill, but sometimes avoided necessary tough decisions. Great leaders care personally AND challenge directly.';
       } else {
@@ -661,7 +661,7 @@ class ScoringEngine {
         feedback += `You did not meet your target because growth reached only ${growth.toFixed(1)}% against a 20% target. `;
       }
 
-      if (attrition > 25) {
+      if (attrition >= 25) {
         feedback += `Your team attrition rate of ${attrition.toFixed(0)}% made sustained performance impossible. `;
       }
 
@@ -676,7 +676,7 @@ class ScoringEngine {
         feedback += 'When talented people started leaving, you tried to power through instead of addressing the root cause: your leadership style.';
       } else if (dominantStyle.name === 'affiliative' && growth < 15) {
         feedback += 'Your desire to maintain harmony prevented you from making tough decisions when needed.';
-        feedback += `Avoiding conflict doesn't make it go away - it just delays the consequences. `;
+        feedback += `Avoiding conflict doesn\'t make it go away - it just delays the consequences. `;
       } else {
         feedback += 'You optimized for what seemed immediately important but missed the systemic patterns.';
       }
@@ -754,7 +754,7 @@ class ScoringEngine {
 
         // Check for short-term thinking
         const shortTermDecisions = gameState.decisions.filter(d => 
-            d.scenario < 2 // Early scenarios
+            d.scenario <= 2 // Early scenarios
         ).length;
 
         if (shortTermDecisions > 0) {

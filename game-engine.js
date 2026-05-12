@@ -23,7 +23,7 @@ class GameEngine {
         affiliative: 0,
         democratic: 0,
         pacesetting: 0,
-        coaching: 0,
+        coaching: 0
       },
 
       // Quality metrics
@@ -42,7 +42,7 @@ class GameEngine {
       // Timing
       startTime: null,
       timeRemaining: 900, // 15 minutes in seconds
-      timerInterval: null,
+      timerInterval: null
     };
 
     this.scenarios = null; // Will be loaded from scenarios.js
@@ -61,7 +61,7 @@ class GameEngine {
     if (!container) return;
 
     if (leaderboardData.length === 0) {
-      container.innerHTML = '<div class="leaderboard-empty">No players yet. You\'ll be the first to lead!</div>';
+      container.innerHTML = '<div class="leaderboard-empty">No players yet. <br/>Be the first to lead!</div>';
       return;
     }
 
@@ -70,7 +70,7 @@ class GameEngine {
         <div class="leaderboard-rank">${index + 1}</div>
         <div class="leaderboard-info">
           <div class="leaderboard-name">${player.name}</div>
-          <div class="leaderboard-details">${player.leadershipStyle} • ${player.personality}</div>
+          <div class="leaderboard-details">${player.leadershipStyle} • ${player.personalityColor}</div>
         </div>
         <div class="leaderboard-score">${player.growth.toFixed(1)}%</div>
       </div>
@@ -126,7 +126,7 @@ class GameEngine {
     // Use event if available, otherwise find the element
     const targetOption = window.event ?
       window.event.target.closest('.radio-option') :
-      document.querySelector(`.radio-option input[value="${style}"]`).closest('.radio-option');
+      document.querySelector(`.radio-option input[value="${style}"]`)?.closest('.radio-option');
 
     if (targetOption) {
       targetOption.classList.add('selected');
@@ -380,14 +380,14 @@ class GameEngine {
           <div class="slider-label">
             <span class="slider-name">${slider.label}</span>
             <span class="slider-value" id="slider-value-${decisionIndex}-${i}">
-              ${slider.value}
+              £0M
             </span>
           </div>
           <input type="range"
             class="slider"
             min="0"
             max="${slider.max * 10}"
-            value="${slider.value * 10}"
+            value="0"
             data-decision="${decisionIndex}"
             data-slider="${i}"
             oninput="game.updateSlider(${decisionIndex}, ${i}, this.value)">
@@ -406,7 +406,7 @@ class GameEngine {
   }
 
   renderRanking(items, decisionIndex) {
-    let html = `<div class="ranking-container" id="ranking-container-${decisionIndex}">`;
+    let html = '<div class="ranking-container" id="ranking-container-${decisionIndex}">';
     items.forEach((item, i) => {
       html += `
         <div class="ranking-item" draggable="true" data-decision="${decisionIndex}" data-item="${i}">
@@ -507,7 +507,7 @@ class GameEngine {
         total += parseFloat(slider.value) / 10;
       });
 
-      const remaining = budgetLimit - total;
+      const remaining = decision.sliders[0].budgetConstraint - total;
       const budgetEl = document.getElementById(`budget-remaining-${decisionIndex}`);
       budgetEl.textContent = `Budget Remaining: £${remaining.toFixed(1)}M`;
 
@@ -644,7 +644,7 @@ class GameEngine {
       console.log('Showing info:', info.label, info.content);
       infoContent += `
         <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 203, 0, 0.1); border-left: 3px solid var(--jcb-yellow);">
-          <h4 style="color: var(--jcb-yellow); margin-bottom: 4px;">${info.label}</h4>
+          <h4 style="color: var(--jcb-yellow); margin-bottom: 10px;">${info.label}</h4>
           <p style="line-height: 1.6; color: rgba(255, 255, 255, 0.9);">${info.content}</p>
         </div>
       `;
@@ -976,7 +976,7 @@ class GameEngine {
         <h4>YOUR LEADERSHIP COLOR: ${results.personalityColor}</h4>
         <p>${results.personalityDescription}</p>
       </div>
-    `;
+    </div>`;
 
     return html;
   }
@@ -985,7 +985,7 @@ class GameEngine {
     if (percentage >= 60) return '⚠️ OVERUSED ⚠️';
     if (percentage <= 20) return '🔽 UNDERUSED 🔽';
     if (percentage >= 40) return '✅ PRIMARY';
-    if (percentage >= 20) return '🔹 SECONDARY';
+    if (percentage >= 30) return '🔹 SECONDARY';
     return '';
   }
 
@@ -1111,13 +1111,13 @@ class GameEngine {
     this.state.decisions.forEach((decision, index) => {
       const scenario = this.scenarios[decision.scenario];
       
-      detailedView += `<div style="margin-bottom: 25px; padding: 15px; background: rgba(0, 0, 0, 0.3); border-left: 3px solid var(--jcb-yellow);">`;
-      detailedView += `<h5 style="color: var(--jcb-yellow); margin-bottom: 10px;">Scenario ${index + 1}: ${scenario.title}</h5>`;
+      detailedView += `<div style="margin-bottom: 25px; padding: 15px; background: rgba(0, 0, 0, 0.3); border-left: 3px solid rgba(225,203,0,0.5);">`;
+      detailedView += `<h5 style="color: var(--jcb-yellow); margin-bottom: 10px;">Scenario ${index + 1}: ${decision.scenarioTitle||scenario.title}</h5>`;
 
       // Show leadership styles used
       if (decision.stylesUsed && decision.stylesUsed.length > 0) {
         const uniqueStyles = [...new Set(decision.stylesUsed)];
-        detailedView += `<p style="margin-bottom: 10px;"><strong>Goldenman Style(s):</strong> ${uniqueStyles.map(s => this.capitalizeFirst(s)).join(', ')}</p>`;
+        detailedView += `<p style="margin-bottom: 8px;"><strong>Golenman Style(s):</strong> ${uniqueStyles.map(s => this.capitalizeFirst(s)).join(', ')}</p>`;
       }
 
       // Show personality colors used
@@ -1127,21 +1127,21 @@ class GameEngine {
           const label = this.getColorLabel(c);
           return `<span style="color: ${this.getColorHex(c)}; font-weight: bold;">${c} (${label})</span>`;
         }).join(', ');
-        detailedView += `<p style="margin-bottom: 10px;"><strong>Personality Color(s):</strong> ${colorLabels}</p>`;
+        detailedView += `<p style="margin-bottom: 8px;"><strong>Personality Color(s):</strong> ${colorLabels}</p>`;
       }
 
       // Show impacts
         if (decision.impact) {
             const impact = decision.impact;
-            detailedView += `<p style="margin-top: 10px; margin-bottom: 5px; font-size: 14px; color: rgba(255, 255, 255, 0.9);"><strong>Impact on Metrics:</strong></p>`;
-            detailedView += `<ul style="margin: 0; padding-left: 20px; font-size: 14px; color: rgba(255, 255, 255, 0.8);">`;
+            detailedView += '<p style="margin-top: 10px; margin-bottom: 5px; font-size: 14px; color: rgba(255, 255, 255, 0.9);"><strong>Impact on Metrics:</strong></p>';
+            detailedView += '<ul style="margin: 0; padding-left: 20px; font-size: 14px; color: rgba(255, 255, 255, 0.8);">';
 
             if (impact.growth) detailedView += `<li>Growth: ${impact.growth > 0 ? '+' : ''}${impact.growth.toFixed(1)}%</li>`;
             if (impact.morale) detailedView += `<li>Morale: ${impact.morale > 0 ? '+' : ''}${impact.morale.toFixed(0)}%</li>`;
             if (impact.attrition) detailedView += `<li>Attrition: ${impact.attrition > 0 ? '+' : ''}${impact.attrition.toFixed(0)}%</li>`;
             if (impact.profitMargin) detailedView += `<li>Profit Margin: ${impact.profitMargin > 0 ? '+' : ''}${impact.profitMargin.toFixed(0)}%</li>`;
 
-            detailedView += `</ul>`;
+            detailedView += '</ul>';
 
             // Show LEAD framework impacts
             const leadImpacts = [];
@@ -1155,71 +1155,71 @@ class GameEngine {
             }
         }
 
-        detailedView += `</div>`;
+        detailedView += '</div>';
       });
 
-        detailedView += `</div>`;
+        detailedView += '</div>';
 
         // JCB LEAD Framework Summary with North Star alignment
         detailedView += `<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.15); border-left: 4px solid var(--jcb-yellow);">`;
         detailedView += `<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">JCB LEAD FRAMEWORK PERFORMANCE</h4>`;
 
-        detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
+        detailedView += `<div style="margin-bottom: 5px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
         detailedView += `<p><strong style="color: var(--jcb-yellow); font-size: 18px;">A</strong><strong>Leadership Quality: ${this.state.leadership} points</p>`;
         detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0;">${this.getLeadFeedback('leadership', this.state.leadership)}</p>`;
         detailedView += `</div>`;
 
-        detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
+        detailedView += `<div style="margin-bottom: 5px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
         detailedView += `<p><strong style="color: var(--jcb-yellow); font-size: 18px;">E</strong><strong>Excellence Standards: ${this.state.excellence} points</p>`;
         detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0;">${this.getLeadFeedback('excellence', this.state.excellence)}</p>`;
         detailedView += `</div>`;
 
-        detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
+        detailedView += `<div style="margin-bottom: 5px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
         detailedView += `<p><strong style="color: var(--jcb-yellow); font-size: 18px;">A</strong><strong>Agility & Adaptability: ${this.state.agility} points</p>`;
         detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0;">${this.getLeadFeedback('agility', this.state.agility)}</p>`;
         detailedView += `</div>`;
 
-        detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
+        detailedView += `<div style="margin-bottom: 5px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
         detailedView += `<p><strong style="color: var(--jcb-yellow); font-size: 18px;">D</strong><strong>Determination to Succeed: ${this.state.determination} points</p>`;
         detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0;">${this.getLeadFeedback('determination', this.state.determination)}</p>`;
         detailedView += `</div>`;
 
-        detailedView += `</div>`;
+        detailedView += '</div>';
 
         // Final Metrics
-        detailedView += `<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">`;
-        detailedView += `<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;"><strong>Final Performance Metrics</h4>`;
+        detailedView += '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
+        detailedView += '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;"><strong>Final Performance Metrics</h4>';
         detailedView += `<p><strong>Revenue Growth:</strong> ${this.state.growth.toFixed(1)}% (Target: 20%)</p>`;
         detailedView += `<p><strong>Team Morale:</strong> ${this.state.morale}%</p>`;
         detailedView += `<p><strong>Staff Attrition:</strong> ${this.state.attrition.toFixed(1)}%</p>`;
         detailedView += `<p><strong>Profit Margin:</strong> ${this.state.profitMargin}%</p>`;
         detailedView += `<p><strong>Market Share:</strong> ${this.state.marketShare.toFixed(1)}%</p>`;
-        detailedView += `</div>`;
+        detailedView += '</div>';
 
         // Leadership Profile Breakdown
-        detailedView += `<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">`;
-        detailedView += `<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Leadership Style Analysis (Goleman Framework)</h4>`;
+        detailedView += '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
+        detailedView += '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Leadership Style Analysis (Goleman Framework)</h4>';
           Object.keys(this.finalResults.leadershipProfile).forEach(style => {
             const percentage = this.finalResults.leadershipProfile[style];
             let annotation = '';
-            if (percentage > 60) annotation = ' ▲ OVERUSED';
-            else if (percentage > 40) annotation = ' (Primary)';
-            else if (percentage > 30) annotation = ' (Secondary)';
-            else if (percentage < 20) annotation = ' (Underused)';
+            if (percentage >= 60) annotation = ' ▲ OVERUSED';
+            else if (percentage >= 40) annotation = ' (Primary)';
+            else if (percentage >= 30) annotation = ' (Secondary)';
+            else if (percentage <= 20) annotation = ' (Underused)';
 
-            detailedView += `<p><strong>${style.charAt(0).toUpperCase() + style.slice(1)}: ${percentage}%${annotation}</p>`;
+            detailedView += `<p><strong>${style.charAt(0).toUpperCase() + style.slice(1)}:</strong> ${percentage}%${annotation}</p>`;
         });
         detailedView += `<p style="margin-top: 15px;"><strong>Personality Color:</strong> ${this.finalResults.personalityColor}</p>`;
         detailedView += `<p style="margin-top: 15px; font-size: 14px; color: rgba(255,255,255,0.8);">${this.finalResults.personalityDescription}</p>`;
-        detailedView += `</div>`;
+        detailedView += '</div>';
 
         // Information Requests
         if (this.state.infoRequests.length > 0) {
-            detailedView += `<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">`;
-            detailedView += `<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Information Gathering Behavior</h4>`;
+            detailedView += '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
+            detailedView += '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Information Gathering Behavior</h4>';
             detailedView += `<p>You requested additional information ${this.state.infoRequests.length} times during the game.</p>`;
-            detailedView += `<p style="font-size: 14px; color: rgba(255,255,255,0.8);">This demonstrates thoroughness in decision-making and willingness to seek data before acting.</p>`;
-            detailedView += `</div>`;
+            detailedView += '<p style="font-size: 14px; color: rgba(255,255,255,0.8);">This demonstrates thoroughness in decision-making and willingness to seek data before acting.</p>';
+            detailedView += '</div>';
         }
 
         // Full Feedback
@@ -1229,15 +1229,15 @@ class GameEngine {
 
         // Development Recommendations
         if (this.finalResults.recommendations && this.finalResults.recommendations.length > 0) {
-            detailedView += `<div style="margin-bottom: 20px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">`;
-            detailedView += `<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Development Recommendations</h4>`;
+            detailedView += '<div style="margin-bottom: 20px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
+            detailedView += '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Development Recommendations</h4>';
             this.finalResults.recommendations.forEach((rec, i) => {
-                detailedView += `<p style="margin-bottom: 15px;"><strong>${i + 1}. ${rec.title}</strong><br><span style="font-size: 14px; color: rgba(255,255,255,0.8);">${rec.description}</span></p>`;
+                detailedView += `<p style="margin-bottom: 15px;"><strong>${i + 1}. ${rec.title}</strong><br/><span style="font-size: 14px; color: rgba(255,255,255,0.8);">${rec.description}</span></p>`;
             });
-            detailedView += `</div>`;
+            detailedView += '</div>';
         }
 
-        detailedView += `</div>`;
+        detailedView += '</div>';
 
         modalContent.innerHTML = detailedView + `
         <div class="modal-actions" style="margin-top: 30px;">
@@ -1245,7 +1245,7 @@ class GameEngine {
         </div>
         `;
 
-        modal.classList.add("active");
+        modal.classList.add('active');
     }
 
     getColorLabel(color) {
@@ -1262,7 +1262,7 @@ class GameEngine {
         const hexColors = {
             'RED': '#E31C23',
             'BLUE': '#0066CC',
-            'YELLOW': '#FFCD00',
+            'YELLOW': '#FFCB00',
             'GREEN': '#008E4C'
         };
         return hexColors[color] || '#FFFFFF';
@@ -1272,7 +1272,7 @@ class GameEngine {
         const feedback = {
             leadership: {
                 high: "You demonstrated strong leadership by building positive relationships, showing commercial acumen, and considering the bigger picture. Your decisions showed courage in motivating and influencing your style to inspire and influence others.",
-                medium: "You showed good analytical capability in some areas, particularly in decision-making and stakeholder management. To strengthen this, focus on building more inclusive relationships and consistently adapting style to inspire and influence others.",
+                medium: "You showed good leadership potential in some areas, particularly in decision-making and stakeholder management. To strengthen this, focus on building more inclusive relationships and consistently adapting style to inspire and influence others.",
                 low: "Your leadership decisions were primarily transactional. To develop JCB leadership qualities, focus on: building positive relationships within and outside the organization, demonstrating commercial acumen by operating as if it's your own company, and being more ethical and sustainable in addressing both praise and performance issues."
             },
             excellence: {

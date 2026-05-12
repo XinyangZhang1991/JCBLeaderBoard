@@ -15,7 +15,7 @@
                     <div class="jcb-logo-large"></div>
                     <h1 class="title-main">LEADERSHIP</h1>
                     <h2 class="title-sub">IN ACTION</h2>
-                    <button class="btn-primary" id="start-btn" onclick="window.game.game.startRegistration();" style="position: relative !important; z-index: 9999 !important; pointer-events: auto !important; cursor: pointer !important;">TOUCH TO BEGIN</button>
+                    <button class="btn-primary" id="start-btn" onclick="if(window.game) game.startRegistration();" style="position: relative !important; z-index: 9999 !important; pointer-events: auto !important; cursor: pointer !important;">TOUCH TO BEGIN</button>
                     <div class="version-info">Version 1.0 | JCB Leadership Development</div>
                 </div>
                 <div class="welcome-right">
@@ -107,10 +107,10 @@
 
                         <p>You have full operational authority over the division, including:</p>
                         <ul>
-                            <li>Complete product portfolio Leadership, Beachhead Leaders, Everyman, and Loading Shovels</li>
+                            <li>Complete product portfolio Loadalls, Backhoe Loaders, Excavators, and Loading Shovels</li>
                             <li>Budget authority: £20M operational budget, plus £5M discretionary for strategic initiatives</li>
-                            <li>Decision-making: 87 staff across sales, operations, and service functions</li>
-                            <li>13 dealers across 12 European markets</li>
+                            <li>Leadership team: 87 staff across sales, operations, and service functions</li>
+                            <li>Regional network: 45 dealers across 12 European markets</li>
                         </ul>
 
                         <p><strong>Your Mission:</strong> Demonstrate the JCB PAD framework in action - Leadership, Excellence, Agility, and Determination - as you navigate the challenges ahead.</p>
@@ -122,15 +122,15 @@
                 </div>
                 <div class="briefing-info">
                     <h3>KEY PARAMETERS</h3>
-                    <div class="briefing-details">
+                    <div class="brief-details">
                         <p><strong>Role:</strong> Business Unit Director</p>
                         <p><strong>Region:</strong> European Division</p>
                         <p><strong>Team Size:</strong> 87 staff across sales, operations, service</p>
-                        <p><strong>Budget Authority:</strong> £20M operational, £5M discretionary</p>
+                        <p><strong>Budget Authority:</strong> £12M operational, £5M discretionary</p>
                         <p><strong>Timeline:</strong> 12 Months</p>
                         <p><strong>Success Threshold:</strong> 20% Revenue Growth</p>
                     </div>
-                    <div class="countdown" id="briefing-countdown">Your journey begins in <span>98</span>s...</div>
+                    <div class="countdown" id="briefing-countdown">Your journey begins in <span>90</span>s...</div>
                     <button class="btn-secondary" onclick="game.skipBriefing()">SKIP BRIEFING</button>
                 </div>
             </div>
@@ -142,12 +142,12 @@
             <div class="hud">
                 <div class="hud-header">
                     <div class="hud-title">JCB LEADERSHIP IN ACTION</div>
-                    <div class="hud-period" id="game-period">Month 1</div>
+                    <div class="hud-period" id="game-period">Q1 Month 1</div>
                 </div>
                 <div class="hud-metrics">
                     <div class="metric">
                         <span class="metric-label">Revenue Growth:</span>
-                        <span class="metric-value" id="metric-growth">+0.6%</span>
+                        <span class="metric-value" id="metric-growth">+0.0%</span>
                     </div>
                     <div class="metric">
                         <span class="metric-label">Market Share:</span>
@@ -159,10 +159,9 @@
                     </div>
                     <div class="metric" id="metric-morale">
                         <span class="metric-label">Team Morale:</span>
-                        <div class="morale-bar">
+                        <div class="morale-bar"> id="morale-bar">
                             <div class="morale-fill" style="width: 75%"></div>
-                        </div>
-                        <span class="metric-value">75%</span>
+                            <span class="metric-value">75%</span>
                     </div>
                     <div class="metric">
                         <span class="metric-label">Staff Attrition:</span>
@@ -262,14 +261,14 @@
                 console.log('Button z-index:', window.getComputedStyle(button).zIndex);
                 console.log('Button pointer-events:', window.getComputedStyle(button).pointerEvents);
                 console.log('Blocking element z-index:', window.getComputedStyle(elementAtPoint).zIndex);
-                console.log('===');
+                console.log('====================');
             }
         });
 
         // Global error handler to catch and display errors
         window.onerror = function(message, source, lineno, colno, error) {
-            console.log('Global error caught:', message, 'at', source, 'line', lineno);
-            alert('JavaScript Error: ' + message + '\n\nAt: ' + source + ':' + lineno + '\n\nPlease check the browser console (F12) for details.');
+            console.error('Global error caught:', message, 'at', source, 'line', lineno);
+            alert('JavaScript Error:\n' + message + '\n\nAt: ' + source + ':' + lineno + '\n\nPlease check the browser console (F12) for details.');
             return true;
         };
 

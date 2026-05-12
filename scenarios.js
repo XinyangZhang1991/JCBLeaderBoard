@@ -15,7 +15,7 @@ const round1Scenarios = [
         title: 'Part 1: Priority Ranking - Drag to Prioritize (Top 3 will be funded)',
         type: 'ranking',
         items: [
-          'Launch aggressive marketing campaign for new Lonsdale model',
+          'Launch aggressive marketing campaign for new Loadall model',
           'Implement comprehensive staff training program',
           'Overhaul dealer network relationships',
           'Fast-track new product innovation project',
@@ -26,11 +26,11 @@ const round1Scenarios = [
         title: 'Part 2: Communication Approach',
         type: 'choice',
         options: [
-          { text: 'A) "I\'ve analyzed the situation and we\'ll keep what we\'re doing"', style: 'authoritative', color: 'BLUE' },
+          { text: 'A) "I\'ve analyzed the situation and here\'s what we\'re doing"', style: 'authoritative', color: 'BLUE' },
           { text: 'B) "Let\'s workshop this together as a team"', style: 'democratic', color: 'YELLOW' },
-          { text: 'C) "I need to understand your perspectives first"', style: 'coaching', color: 'GREEN' },
-          { text: 'D) "We need your focus - here are your targets"', style: 'pacesetting', color: 'RED' },
-          { text: 'E) "I trust you all - you know what\'s best for your team"', style: 'affiliative', color: 'YELLOW' }
+          { text: 'C) "I want to understand your perspectives first"', style: 'coaching', color: 'GREEN' },
+          { text: 'D) "We need results fast - here are your targets"', style: 'pacesetting', color: 'RED' },
+          { text: 'E) "I trust you all - you know what\'s best for your areas"', style: 'affiliative', color: 'YELLOW' }
         ]
       }
     ],
@@ -43,7 +43,7 @@ const round1Scenarios = [
       },
       {
         label: 'Staff survey from predecessor\'s tenure',
-        type: 'red-herring',
+        type: 'red_herring',
         content: 'Focuses on office facilities and parking - not strategically relevant'
       },
       {
@@ -73,21 +73,21 @@ const round1Scenarios = [
   
   // SCENARIO 2: THE SAFETY CRISIS
   {
-    id: 'safety-crisis',
+    id: 'safety_crisis',
     title: 'THE SAFETY CRISIS',
     subtitle: 'Month 3 - Q1',
     month: 3,
     quarter: 1,
-    description: 'A near‑miss safety incident occurred at your main distribution facility involving a Telescopic Handler. No injuries, but HSE regulations were nearly breached. Three departments are pointing fingers. Your ops director wants immediate disciplinary action. Your HR director advocates for retraining, Your safety officer wants a full operational shutdown for review (costing £400k and 2 weeks)',
+    description: 'A near-miss safety incident occurred at your main distribution facility involving a Telescopic Handler. No injuries, but HSE regulations were nearly breached. Three departments are pointing fingers. Your ops director wants immediate disciplinary action. Your HR director advocates for retraining, Your safety officer wants a full operational shutdown for review (costing £400k and 2 weeks)',
     
     decisions: [
       {
         title: 'Part 1: Stakeholder Alignment - who do you primarily support?',
         type: 'choice',
         options: [
-          { text: 'Ops Director (Discipline + move on quickly)', style: 'coercive', color: 'RED' },
-          { text: 'HR Director (Training + supportive approach)', style: 'coaching', color: 'GREEN' },
-          { text: 'Safety Officer (Full investigation + comprehensive)', style: 'coaching', color: 'YELLOW' },
+          { text: 'Operations Director (Discipline + move on quickly)', style: 'coercive', color: 'RED' },
+          { text: 'HR Director (Retraining + supportive approach)', style: 'coaching', color: 'GREEN' },
+          { text: 'Safety Officer (Full shutdown + comprehensive review)', style: 'coaching', color: 'Blue' },
           { text: 'Split approach (Investigate thoroughly, then decide)', style: 'democratic', color: 'YELLOW' }
         ]
       },
@@ -104,8 +104,8 @@ const round1Scenarios = [
         options: [
           { text: 'Firm warning about standards', style: 'coercive', color: 'RED' },
           { text: 'Learning opportunity focus', style: 'coaching', color: 'GREEN' },
-          { text: "We're all in this together", style: 'affiliative', color: 'YELLOW' },
-          { text: 'Shared excellence going forward', style: 'pacesetting', color: 'RED' }
+          { text: '"We\'re all in this together"', style: 'affiliative', color: 'YELLOW' },
+          { text: 'Demand excellence going forward', style: 'pacesetting', color: 'RED' }
         ]
       }
     ],
@@ -124,11 +124,11 @@ const round1Scenarios = [
       {
         label: 'Legal team memo on liability',
         type: 'trap',
-        content: 'Emphasizes HSE disciplining approach, creates fear culture'
+        content: 'Emphasizes disciplining approach, creates fear culture'
       },
       {
         label: 'Cost‑benefit analysis of shutdown',
-        type: 'red‑herring',
+        type: 'red_herring',
         content: 'Focuses only on short‑term costs, misses long‑term safety culture value'
       }
     ],
@@ -144,7 +144,7 @@ const round1Scenarios = [
 
   // SCENARIO 3: THE COMPETITOR THREAT
   {
-    id: 'competitor-threat',
+    id: 'competitor_threat',
     title: 'THE COMPETITOR THREAT',
     subtitle: 'Month 6 - Q2',
     month: 6,
@@ -200,23 +200,23 @@ const round1Scenarios = [
       },
       {
         label: 'Sales team sentiment survey',
-        type: 'red‑herring',
-        content: 'Shows anger with aggressive discounts, but it\'s short‑sighted'
+        type: 'red_herring',
+        content: 'They want aggressive discounts, but it\'s short‑sighted'
       }
     ],
 
     consequenceText: 'Market responds to your strategy. Dealer relationships and profit margins adjust...',
 
     scoreTemplates: {
-      predatory: { growth: 5, profitMargin: -8, marketShare: 3 }, // Heavy discounting
-      balanced: { growth: 3, profitMargin: 2, marketShare: 2, futureGrowth: 12 }, // Invest in R&D + relationships
-      reactive: { growth: -5, morale: -1 } // Panic response
+      pricewar: { growth: 5, profitMargin: -8, marketShare: 3 }, // Heavy discounting
+      balanced: { growth: -3, profitMargin: -1, marketShare: -1, futureGrowth: 12 }, // Invest in R&D + relationships
+      reactive: { growth: 2, morale: -5 } // Panic response
     }
   },
 
   // SCENARIO 4: THE TALENT EXODUS
   {
-    id: 'talent‑exodus',
+    id: 'talent_exodus',
     title: 'THE TALENT EXODUS',
     subtitle: 'Month 8 - Q3',
     month: 8,
@@ -257,7 +257,7 @@ const round1Scenarios = [
 
     additionalInfo: [
       {
-        label: 'Exit interview data from departed employee',
+        label: 'Exit interview data from departed employees',
         type: 'useful',
         content: 'Confirms pace and pressure issues - "felt like numbers, not people"'
       },
@@ -273,7 +273,7 @@ const round1Scenarios = [
       },
       {
         label: 'Retention case studies from other divisions',
-        type: 'red‑herring',
+        type: 'red_herring',
         content: 'Different contexts, not directly applicable to your situation'
       }
     ],
@@ -282,11 +282,11 @@ const round1Scenarios = [
 
     scoreTemplates: {
       moneyOnly: { attrition: 20, morale: -10, growth: -8 }, // Retention bounuses fail
-      connect: { attrition: -8, morale: 15, growth: -5, agility: 25 }, // Admit and adjust
-      denial: { attrition: 30, morale: -30, growth: -15 } // Failure path
+      courseCorrect: { attrition: -8, morale: 15, growth: -5, agility: 25 }, // Admit and adjust
+      denial: { attrition: 30, morale: -20, growth: -15 } // Failure path
     },
 
-    isCriticalMoment: true // This is a reckoning for aggressive players
+    isCriticalMoment: true // This is the reckoning for aggressive players
   },
 
   // SCENARIO 5: THE INNOVATION GAMBLE
@@ -305,7 +305,7 @@ const round1Scenarios = [
             options: [
                 { text: 'Immediate (6 weeks, high risk, maximum impact)', timing: 'immediate', style: 'pacesetting', color: 'RED' },
                 { text: 'Accelerated Q4 (10 weeks, moderate risk, strong impact)', timing: 'accelerated', style: 'authoritative', color: 'BLUE' },
-                { text: 'Planned Q4 launch (18 weeks, low risk, miss year-end)', timing: 'planned', style: 'coaching', color: 'GREEN' },
+                { text: 'Planned Q1 launch (18 weeks, low risk, miss year-end)', timing: 'planned', style: 'coaching', color: 'GREEN' },
                 { text: 'Pilot program first (8 weeks pilot + delayed launch)', timing: 'pilot', style: 'democratic', color: 'YELLOW' }
             ]
         },
@@ -360,7 +360,7 @@ const round1Scenarios = [
     scoreTemplates: {
         rush: { growth: 18, futureGrowth: -25 }, // Spectacular short-term, disaster long-term
         balanced: { growth: 9, morale: 5, futureGrowth: 15 }, // Accelerated with testing
-        tooSlow: { growth: 3, missTarget: true } // Safe but miss escape threshold
+        tooSlow: { growth: -3, missTarget: true } // Safe but miss escape threshold
     }
 },
 
@@ -424,7 +424,7 @@ const round1Scenarios = [
         },
         {
             label: 'Year 2 market forecast',
-            type: 'red herring',
+            type: 'red_herring',
             content: 'Macro trends less important than internal capability'
         }
     ],
