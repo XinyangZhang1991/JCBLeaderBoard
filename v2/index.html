@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JCB Leadership in Action</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="culture-dashboard-styles.css">
 </head>
 <body>
     <div id="app">
@@ -15,12 +16,16 @@
                     <div class="jcb-logo-large"></div>
                     <h1 class="title-main">LEADERSHIP</h1>
                     <h2 class="title-sub">IN ACTION</h2>
-                    <button class="btn-primary" id="start-btn" onclick="if(window.game) game.startRegistration();" style="position: relative !important; z-index: 99999 !important; pointer-events: auto !important; cursor: pointer !important;">TOUCH TO BEGIN</button>
+                    <button class="btn-primary" id="start-btn" onclick="if(window.game) game.startRegistration();" style="position: relative !important; z-index: 9999 !important; pointer-events: auto !important; cursor: pointer !important;">TOUCH TO BEGIN</button>
                     <div class="version-info">Version 1.0 | JCB Leadership Development</div>
                 </div>
                 <div class="welcome-right">
                     <h3 class="leaderboard-title">LEADERBOARD</h3>
                     <div id="leaderboard-container" class="leaderboard-list"></div>
+                    <button class="btn-culture-analysis" id="culture-btn" onclick="if(window.game) game.showCultureDashboard();">
+                        📊 COMPANY CULTURE ANALYSIS
+                        <span class="btn-subtitle">Requires 3+ players</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -49,7 +54,7 @@
                             <input type="radio" name="leadership-style" value="authoritative">
                             <div class="radio-content">
                                 <strong>Authoritative</strong>
-                                <p>Mobilising people toward a vision</p>
+                                <p>Mobilizing people toward a vision</p>
                             </div>
                         </div>
                         <div class="radio-option" onclick="game.selectLeadershipStyle('affiliative')">
@@ -105,15 +110,17 @@
 
                         <p>The Board has high expectations. Your predecessor achieved steady 8-10% annual growth, but market conditions demand more. The Board has set an ambitious target: <strong>20% revenue growth in your first 12 months</strong>.</p>
 
+                        <p><strong>Growth alone is not success.</strong> The Board expects <em>sustainable</em> performance. Excessive team attrition or low morale will be viewed as indicators of poor leadership. You must deliver results while maintaining organizational health and team engagement.</p>
+
                         <p>You have full operational authority over the division, including:</p>
                         <ul>
-                            <li>Complete product portfolio Loadalls, Backhoe Loaders, Excavators, and Loading Shovels</li>
-                            <li>Budget authority: £20M operational budget, plus £5M discretionary for strategic initiatives</li>
+                            <li>Complete product portfolio: Loadalls, Backhoe Loaders, Excavators, and Loading Shovels</li>
+                            <li>Budget authority: £12M operational budget, plus £5M discretionary for strategic initiatives</li>
                             <li>Leadership team: 87 staff across sales, operations, and service functions</li>
                             <li>Regional network: 45 dealers across 12 European markets</li>
                         </ul>
 
-                        <p><strong>Your Mission:</strong> Demonstrate the JCB PAD framework in action - Leadership, Excellence, Agility, and Determination - as you navigate the challenges ahead.</p>
+                        <p><strong>Your Mission:</strong> Demonstrate the JCB LEAD framework in action - Leadership, Excellence, Agility, and Determination - as you navigate the challenges ahead.</p>
 
                         <p>The decisions you make will shape not only your division's performance, but your leadership legacy at JCB.</p>
 
@@ -150,16 +157,12 @@
                         <span class="metric-value" id="metric-growth">+0.0%</span>
                     </div>
                     <div class="metric">
-                        <span class="metric-label">Market Share:</span>
-                        <span class="metric-value" id="metric-market">+0.0%</span>
-                    </div>
-                    <div class="metric">
                         <span class="metric-label">Profit Margin:</span>
                         <span class="metric-value" id="metric-profit">20%</span>
                     </div>
                     <div class="metric">
                         <span class="metric-label">Team Morale:</span>
-                        <div class="morale-bar"> id="morale-bar">
+                        <div class="morale-bar" id="morale-bar">
                             <div class="morale-fill" style="width: 75%"></div>
                             <span class="morale-value">75%</span>
                         </div>
@@ -167,6 +170,10 @@
                     <div class="metric">
                         <span class="metric-label">Staff Attrition:</span>
                         <span class="metric-value" id="metric-attrition">5%</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Org Capability:</span>
+                        <span class="metric-value" id="metric-capability">75 pts</span>
                     </div>
                 </div>
                 <div class="hud-footer">
@@ -196,13 +203,25 @@
                 <div class="results-breakdown" id="results-breakdown">
                     <!-- Leadership style breakdown -->
                 </div>
-                <div class="results-feedback" id="results-feedback">
+                <div class="results-feedback" id="results-feedback" style="max-height: 60vh; overflow-y: auto; margin-bottom: 30px;">
                     <!-- Radical candor feedback -->
                 </div>
                 <div class="results-actions">
-                    <button class="btn-primary" onclick="game.playRound2()">PLAY ROUND 2</button>
                     <button class="btn-secondary" onclick="game.viewDetailedFeedback()">VIEW DETAILED FEEDBACK</button>
                     <button class="btn-tertiary" onclick="game.restart()">NEW PLAYER</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Culture Dashboard Screen -->
+        <div id="culture-dashboard-screen" class="screen">
+            <div class="culture-dashboard-container">
+                <div class="culture-header">
+                    <h1>COMPANY CULTURE ANALYSIS</h1>
+                    <button class="btn-back" onclick="game.showScreen('welcome-screen')">← BACK TO LEADERBOARD</button>
+                </div>
+                <div id="culture-content">
+                    <!-- Dynamic content populated by culture analysis -->
                 </div>
             </div>
         </div>
@@ -241,6 +260,9 @@
     <script src="game-engine.js"></script>
     <script src="scenarios.js"></script>
     <script src="scoring.js"></script>
+    <script src="executive-summary-generator.js"></script>
+    <script src="culture-analysis.js"></script>
+    <script src="game-simulator.js"></script>
     <script src="app.js"></script>
 
     <script>
@@ -258,19 +280,20 @@
                 console.log('Button position:', rect);
                 console.log('Element at button center:', elementAtPoint);
                 console.log('Is element the button?', elementAtPoint === button);
-                console.log('Element blocking:', elementAtPoint.tagName, elementAtPoint.className, elementAtPoint.id);
+                console.log('Element blocking:', elementAtPoint.id || elementAtPoint.tagName, elementAtPoint.className);
                 console.log('Button z-index:', window.getComputedStyle(button).zIndex);
                 console.log('Button pointer-events:', window.getComputedStyle(button).pointerEvents);
                 console.log('Blocking element z-index:', window.getComputedStyle(elementAtPoint).zIndex);
-                console.log('====================');
+                console.log('========================');
             }
         });
 
-        // Global error handler to catch and display errors
+        // Global error handler to catch and display errors (DISABLED FOR DEBUGGING)
         window.onerror = function(message, source, lineno, colno, error) {
             console.error('Global error caught:', message, 'at', source, 'line', lineno);
-            alert('JavaScript Error:\n' + message + '\n\nAt: ' + source + ':' + lineno + '\n\nPlease check the browser console (F12) for details.');
-            return true;
+            console.error('Full error object:', error);
+            // alert('JavaScript Error:\n' + message + '\nAt: ' + source + ':' + lineno + '\n\nPlease check the browser console (F12) for details.');
+            return true; // Prevent default error handling
         };
 
         // Log when page is fully loaded
