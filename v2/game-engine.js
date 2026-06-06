@@ -88,7 +88,7 @@ class GameEngine {
 
             return `
             <div class="leaderboard-item leaderboard-item-compact">
-                <div class="leaderboard-rank">#${index + 1}</div>
+                <div class="leaderboard-rank">${index + 1}</div>
                 <div class="leaderboard-player-info">
                     <div class="leaderboard-name">${player.name}</div>
                     <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
@@ -324,11 +324,11 @@ class GameEngine {
 
                 // Adjust root cause options
                 scenario.decisions[0].options = [
-                    { text: 'Proactive career development conversations with key performers', impact: 'development', style: 'coaching', color: 'GREEN' },
+                    { text: 'Proactive career development conversations with key performers', impact: 'external', style: 'coaching', color: 'GREEN' },
                     { text: 'Review compensation to ensure competitiveness', impact: 'compensation', style: 'authoritative', color: 'BLUE' },
                     { text: 'Create more stretch assignments and growth opportunities', impact: 'development', style: 'coaching', color: 'GREEN' }
                 ];
-            } else if (state.morale >= moraleThreshold && state.attrition >= attritionThreshold) {
+            } else if (state.morale < moraleThreshold && state.attrition >= attritionThreshold) {
                 // Poor performance - keep original crisis scenario but make it clear
                 scenario.description = `Your top-performing regional sales manager just resigned, citing "unsustainable pressure and lack of support." Two other high-performers are rumored to be interviewing elsewhere. Team attrition is now at ${Math.round(state.attrition)}% (healthy is <10%) and morale is ${Math.round(state.morale)}%) (concerning). You've hit ${state.growth.toFixed(1)}% growth but at what cost? An anonymous employee survey reveals burnout and feeling undervalued.`;
             } else {
@@ -359,19 +359,19 @@ class GameEngine {
 **Your gut:** "Our team's approach has gone stale - we're not listening to customers"
 
 Data is incomplete and contradictory. Your CFO demands immediate action. Your strategy lead wants 3 weeks to research properly.`;
-            } else if (state.growth < 5) {
+            } else if (state.growth < 10) {
                 // Poor growth - frame as critical pivot point
-                scenario.description = `Growth is only ${state.growth.toFixed(1)}%, well below target, and now customer sentiment is "changing." Sales velocity has slowed another 8%. You can't afford to get this wrong.
+                scenario.description = `Your growth is only ${state.growth.toFixed(1)}%, well below target, and now customer sentiment is "changing." Sales velocity has slowed another 8%. You can't afford to get this wrong.
 
 **Sales Director:** "Competitor launched new hydraulic feature we don't have"
 **Finance Director:** "Economic uncertainty making buyers delay decisions"
 **Your gut:** "Our team's approach has gone stale - we're not listening to customers"
 
-Data is incomplete. Every week of delay costs 50k in lost sales. What do you do?`;
+Data is incomplete. Every week of delay costs £50K in lost sales. What do you do?`;
             }
         }
 
-        // MEN: COMPETITOR THREAT - Adapt based on prior growth achievement
+        // NEW: COMPETITOR THREAT - Adapt based on prior growth achievement
         if (scenario.id === 'competitor_threat') {
             if (state.growth > 15) {
                 // Strong growth - competitor targets YOUR success
@@ -386,7 +386,7 @@ Your Board is concerned. You have £2.5M to allocate. How do you respond?`;
             }
         }
 
-        // NEN: INNOVATION GAMBLE - Adapt based on team capacity (morale/attrition)
+        // NEW: INNOVATION GAMBLE - Adapt based on team capacity (morale/attrition)
         if (scenario.id === 'innovation_gamble') {
             if (state.morale > 75 && state.attrition < 10) {
                 // Strong team - ready for bold moves
@@ -395,7 +395,7 @@ Your Board is concerned. You have £2.5M to allocate. How do you respond?`;
 **Engineering:** "Ready now - we've tested it thoroughly"
 **Sales:** "Dealers want it immediately"
 **Manufacturing:** "12-week delay gives us time to scale properly"
-**CFO:** "Early launch = £80M revenue this year, delayed launch = £20M risk if competitor beats us"
+**CFO:** "Early launch = £8M revenue this year, delayed launch = £2M risk if competitor beats us"
 
 Your team has the energy for a sprint. When do you launch?`;
             } else if (state.morale < 65 || state.attrition > 15) {
@@ -405,13 +405,13 @@ Your team has the energy for a sprint. When do you launch?`;
 **Engineering:** "We can rush it, but we're stretched thin"
 **Sales:** "Dealers want it, but honestly, our team needs a break"
 **Manufacturing:** "We NEED 12 weeks to do this right and not kill our people"
-**CFO:** "Early launch = £80M revenue this year, but if we break the team, what's next year worth?"
+**CFO:** "Early launch = £8M revenue this year, but if we break the team, what's next year worth?"
 
 Your team is fragile. When do you launch?`;
             }
         }
 
-        // NEN: SAFETY CRISIS - Acknowledge if player has pattern of coercive/pacesetting leadership
+        // NEW: SAFETY CRISIS - Acknowledge if player has pattern of coercive/pacesetting leadership
         if (scenario.id === 'safety_crisis') {
             // Count aggressive decisions in scenarios 1-2
             const priorDecisions = state.decisions.slice(0, 2);
@@ -516,7 +516,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         return html;
     }
 
-    renderDecisionType(decision, index) {
+    renderDecisionType(decision, decisionIndex) {
         switch (decision.type) {
             case 'choice':
                 return this.renderChoiceOptions(decision.options, decisionIndex);
@@ -555,7 +555,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                     <div class="slider-label">
                         <span class="slider-name">${slider.label}</span>
                         <span class="slider-value" id="slider-value-${decisionIndex}-${i}">
-                            0M
+                            £0M
                         </span>
                     </div>
                     <input type="range"
@@ -581,7 +581,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     }
 
     renderRanking(items, decisionIndex) {
-        let html = `<div class="ranking-container" id="ranking-container-${decisionIndex}">`;
+        let html = '<div class="ranking-container" id="ranking-container-${decisionIndex}">';
         items.forEach((item, i) => {
             html += `
                 <div class="ranking-item" draggable="true" data-decision="${decisionIndex}" data-item="${i}">
@@ -611,7 +611,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                             max="${options.length - 1}"
                             value="0"
                             data-decision="${decisionIndex}"
-                            oninput="game.updateTimeline(${decisionIndex}, this.value, ${options.length})"
+                            oninput="game.updateTimeline(${decisionIndex}, this.value, ${options.length})">
                 </div>
             </div>
         `;
@@ -664,7 +664,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
         const actualValue = (value / 10).toFixed(1);
         document.getElementById(`slider-value-${decisionIndex}-${sliderIndex}`).textContent =
-            `${actualValue}%`
+            `£${actualValue}M` ;
 
         // Update budget if constraint exists
         this.updateBudgetRemaining(decisionIndex);
@@ -859,7 +859,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         console.log('Scenario decisions count:', scenario.decisions.length);
 
         // Validate all decisions have been made
-        if (this.validateAllDecisionsMade(scenario)) {
+        if (!this.validateAllDecisionsMade(scenario)) {
             console.log('Validation failed: Not all decisions made');
             alert('Please make all decisions before continuing.');
             return;
@@ -868,7 +868,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         console.log('All decisions validated successfully');
 
         // Validate budget constraints before submitting
-        if (this.validateBudgetConstraints(scenario)) {
+        if (!this.validateBudgetConstraints(scenario)) {
             console.log('Validation failed: Budget constraint exceeded');
             alert('You have exceeded the allocated budget. Please adjust your spending allocation.');
             return;
@@ -1011,8 +1011,8 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         if (window.scoringEngine) {
             const impact = scoringEngine.calculateDecisionImpact(scenario, decision, this.state);
 
-            // BUFFIX 2026-05-17: Calculate organizational capability impact BEFORE storing
-            // so it can be displayed in decision-by-decision feedback (like growth, morale, etc.)
+            // BUGFIX 2026-05-17: Calculate organizational capability impact BEFORE storing
+            // So it can be displayed in decision-by-decision feedback (like growth, morale, etc.)
             let capabilityGain = 0;
 
             // Calculate from leadership styles (coaching/democratic/affiliative)
@@ -1079,14 +1079,14 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             if (this.state.attrition > 12) {
                 const attritionMoralePenalty = Math.floor((this.state.attrition - 12) * 0.5);
                 this.state.morale -= attritionMoralePenalty;
-                console.log(`High attrition (${this.state.attrition.toFixed(0)}%) reduced morale by ${attritionMoralePenalty}`);
+                console.log(`High attrition (${this.state.attrition.toFixed(0)}%) reduced morale by ${attritionMoralePenalty}%`);
             }
 
             // Similarly, very high morale should reduce attrition somewhat
             if (this.state.morale > 80 && this.state.attrition > 0) {
                 const moraleRetentionBonus = Math.floor((this.state.morale - 80) * 0.1);
                 this.state.attrition -= moraleRetentionBonus;
-                console.log(`High morale (${this.state.morale.toFixed(0)}%) reduced attrition by ${moraleRetentionBonus}`);
+                console.log(`High morale (${this.state.morale.toFixed(0)}%) reduced attrition by ${moraleRetentionBonus}%`);
             }
 
             // PROFIT MARGIN REALISM: Link to attrition, morale, and growth
@@ -1108,7 +1108,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             if (this.state.growth > 25) {
                 const growthProfitBonus = (this.state.growth - 25) * 0.15;
                 this.state.profitMargin += growthProfitBonus;
-                console.log(`High growth (${this.state.growth.toFixed(0)}%) improved profit margin by ${growthProfitBonus.toFixed(1)}%`);
+                console.log(`High growth (${this.state.growth.toFixed(1)}%) improved profit margin by ${growthProfitBonus.toFixed(1)}%`);
             }
 
             // Update leadership style tracking
@@ -1129,12 +1129,12 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             this.state.agility += impact.agility || 0;
             this.state.determination += impact.determination || 0;
 
-            // CRITICAL FIX #92: Handle Delayed Payoffs
+            // CRITICAL FIX #2: Handle Delayed Payoffs
             // Strategic investments (R&D, dealer relationships) tracked for future benefit
-            if (impact.delayedPayoffs) {
-                this.state.delayedPayoffs.push({
+            if (impact.delayedGrowth) {
+                this.state.delayedGrowthPayoffs.push({
                     amount: impact.delayedGrowth,
-                    triggersScenario: impact.delayedGrowth ? triggerScenario : (this.state.currentScenario + 2) // Default: 2 scenarios later
+                    triggerScenario: impact.delayedGrowth.triggerScenario || (this.state.currentScenario + 2) // Default: 2 scenarios later
                 });
                 console.log(`📅 Delayed growth payoff scheduled: +${impact.delayedGrowth}% growth at scenario ${impact.delayedGrowth.triggerScenario || (this.state.currentScenario + 2)}`);
             }
@@ -1146,7 +1146,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             if (payoffsToApply.length > 0) {
                 const totalDelayedGrowth = payoffsToApply.reduce((sum, p) => sum + p.amount, 0);
                 this.state.growth += totalDelayedGrowth;
-                console.log(`📈 STRATEGIC INVESTMENT PAYOFF: +${totalDelayedGrowth.toFixed(1)}% growth from prior R&D/dealer investments`);
+                console.log(`✅ STRATEGIC INVESTMENT PAYOFF: +${totalDelayedGrowth.toFixed(1)}% growth from prior R&D/dealer investments`);
 
                 // Remove applied payoffs
                 this.state.delayedGrowthPayoffs = this.state.delayedGrowthPayoffs.filter(p => p.triggerScenario > currentScenario);
@@ -1172,11 +1172,11 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         // AND poor LEAD competencies should penalize outcomes (unsustainable approaches)
 
         // Calculate LEAD performance ratios vs benchmarks
-        // BENCHMARKS UPDATED 2026-05-26: Set to realistic values based on actual maximum achievable points
+        // BENCHMARKS UPDATED 2026-05-16: Set to realistic values based on actual maximum achievable points
         // These represent "good but not perfect" performance (~70% of maximum per scenario)
         const benchmarks = {
             leadership: 25,  // Max ~35 per scenario, benchmark = 70% of max
-            excellence: 39,   // Max ~56 per scenario, benchmark = 70% of max
+            excellence: 35,   // Max ~50 per scenario, benchmark = 70% of max
             agility: 15,     // Max ~22 per scenario, benchmark = 70% of max
             determination: 20 // Max ~28 per scenario, benchmark = 70% of max
         };
@@ -1296,8 +1296,8 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             const growthBefore = this.state.growth;
             this.state.growth = this.state.growth * teamHealthMultiplier;
             console.log(`✅ EXCEPTIONAL TEAM HEALTH: ${teamHealthMultiplier}x growth multiplier (+${(this.state.growth - growthBefore).toFixed(1)}% growth)`);
-            console.log(`✅ Morale: ${cappedMorale}% (capped at 285%), Attrition: ${cappedAttrition.toFixed(1)}% (<8%)`);
-        } else if (cappedMorale > 75 && cappedAttrition < 12) {
+            console.log(` Morale: ${cappedMorale}% (≥85%), Attrition: ${cappedAttrition.toFixed(1)}% (<8%)`);
+        } else if (cappedMorale >= 75 && cappedAttrition < 12) {
             // Healthy teams deliver 15% more results
             const teamHealthMultiplier = 1.15;
             const growthBefore = this.state.growth;
@@ -1328,7 +1328,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             const growthBefore = this.state.growth;
             this.state.growth = this.state.growth * crisisMultiplier;
             console.log(`❌ TEAM COLLAPSE: ${crisisMultiplier}x growth multiplier (-${(growthBefore - this.state.growth).toFixed(1)}% growth)`);
-            console.log(`❌ Morale: ${cappedMorale}% (<40%), Attrition: ${cappedAttrition.toFixed(1)}% (>40%)`);
+            console.log(` Morale: ${cappedMorale}% (<40%), Attrition: ${cappedAttrition.toFixed(1)}% (>40%)`);
         }
 
         // CRITICAL FIX #3: Morale Cap Waste → Productivity Bonus
@@ -1539,10 +1539,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     }
 
     getStyleAnnotation(style, percentage) {
-        if (percentage >= 60) return '→ OVERUSED ⚠️';
+        if (percentage >= 60) return '← OVERUSED ⚠️';
         if (percentage <= 20) return '← UNDERUSED';
-        if (percentage > 40) return '→ PRIMARY';
-        if (percentage > 30) return '→ SECONDARY';
+        if (percentage >= 40) return '← PRIMARY';
+        if (percentage >= 30) return '← SECONDARY';
         return '';
     }
 
@@ -1553,9 +1553,9 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         const criticalImprovement = this.extractCriticalImprovement(results);
 
         feedbackContainer.innerHTML = `
-            <div class="most-important-improvement-highlight" style="background: linear-gradient(135deg, rgba(255, 203, 0, 0.2) 0%, rgba(255, 203, 0, 0.05) 100%); border: 3px solid var(--jcb-yellow); border-radius: 12px; padding: 25px; text-align: center;">
+            <div class="most-important-improvement-highlight" style="background: linear-gradient(135deg, rgba(255, 203, 0, 0.2) 0%, rgba(255, 203, 0, 0.05) 100%); border: 3px solid var(--jcb-yellow); border-radius: 12px; padding: 25px; margin-bottom: 30px; text-align: center;">
                 <div style="font-size: 14px; color: rgba(255, 255, 255, 0.7); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">Your #1 Development Priority:</div>
-                <h2 style="color: var(--jcb-yellow); margin: 0 0 15px 0; font-size: 24px;">MOST IMPORTANT IMPROVEMENT</h2>
+                <h2 style="color: var(--jcb-yellow); margin: 0 0 15px 0; font-size: 24px;">🎯 MOST IMPORTANT IMPROVEMENT</h2>
                 <div style="font-size: 18px; line-height: 1.6; color: white;">${criticalImprovement}</div>
             </div>
             <h3>RADICAL CANDOR FEEDBACK</h3>
@@ -1653,7 +1653,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             const totalScore = cumulativeScores[dimension];
             const maximum = maximums[dimension];
             const percentOfMaximum = ((totalScore / maximum) * 100).toFixed(0);
-            const performanceColor = percentOfMaximum >= 70 ? '#00D884' :
+            const performanceColor = percentOfMaximum >= 70 ? '#00D084' :
                                     percentOfMaximum >= 50 ? '#FFCB00' : '#FFA500';
 
             html += `
@@ -1666,17 +1666,17 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             `;
         });
 
-        html += `</div>`;
+        html +='</div>';
 
         // Overall assessment
         const totalScore = Object.values(cumulativeScores).reduce((a, b) => a + b, 0);
         const totalMaximum = Object.values(maximums).reduce((a, b) => a + b, 0);
         const overallPercentage = ((totalScore / totalMaximum) * 100).toFixed(0);
 
-        html += `<div style="margin-top: 20px; padding: 15px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow); border-radius: 4px;">`;
+        html += '<div style="margin-top: 20px; padding: 15px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow); border-radius: 4px;">';
         html += `<strong>Overall LEAD Score:</strong> ${totalScore} out of ${totalMaximum} maximum → `;
-        html += `<span style="color: #00D884;">${overallPercentage}% of maximum achievable</span>`;
-        html += `</div>`;
+        html += `<span style="color: #00D084;">${overallPercentage}% of maximum achievable</span>`;
+        html += '</div>';
 
         html += `</div>`;
         return html;
@@ -1688,18 +1688,18 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         const feedbackHTML = results.feedback;
 
         // Look for the Most Important Improvement section
-        const improvementMatch = feedbackHTML.match(/<h4> Most Important Improvement:<\/h4>[\s\S]*?<p[^>]*>(.*?)<\/p>/i);
+        const improvementMatch = feedbackHTML.match(/🎯 Most Important Improvement:<\/h4>[\s\S]*?<p[^>]*>(.*?)<\/p>/i);
 
         if (improvementMatch && improvementMatch[1]) {
             // Remove HTML tags and get first sentence
             let improvement = improvementMatch[1]
-                .replace(/<[^>]+>/g, '') // Remove HTML tags
+                .replace(/<[^>]*>/g, '') // Remove HTML tags
                 .replace(/&nbsp;/g, ' ') // Replace &nbsp;
                 .trim();
 
-            // BUGFIX 2025-05-17: Get first sentence (period not followed by digit to avoid truncating decimals like "11.2%")
-            // Old regex `/^.*?\./` would match "but 11," and cut off at decimal point
-            // New regex `/^.*?(?<!\d)\.(?!\d)/` uses negative lookahead to skip decimals
+            // BUGFIX 2026-05-17: Get first sentence (period not followed by digit to avoid truncating decimals like "11.2%")
+            // Old regex /^[^.]+\./` would match "but 11." and cut off at decimal point
+            // New regex /^.+?\.(?!\d)/` uses negative lookahead to skip decimals
             const firstSentence = improvement.match(/^.+?\.(?!\d)/);
             if (firstSentence) {
                 return firstSentence[0];
@@ -1781,7 +1781,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             const modalContent = modal.querySelector('.modal-content');
             if (!modalContent) {
                 alert('Modal content element not found. Please refresh the page.');
-                console.error('modal-content element not found');
+                console.error('.modal-content element not found');
                 return;
             }
 
@@ -1801,7 +1801,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         this.state.decisions.forEach((decision, index) => {
             const scenario = allScenarios[decision.scenario];
 
-            detailedView += '<div style="margin-bottom: 25px; padding: 15px; background: rgba(0, 0, 0, 0.3); border-left: 3px solid rgba(255, 203, 0, 0.5);">';
+            detailedView += `<div style="margin-bottom: 25px; padding: 15px; background: rgba(0, 0, 0, 0.3); border-left: 3px solid rgba(255, 203, 0, 0.5);">`;
             detailedView += `<h5 style="color: var(--jcb-yellow); margin-bottom: 10px;">Scenario ${index + 1}: ${decision.scenarioTitle || (scenario ? scenario.title : 'Unknown Scenario')}</h5>`;
 
             // Show leadership styles used
@@ -1823,12 +1823,12 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             // Show impacts
             if (decision.impact) {
                 const impact = decision.impact;
-                detailedView += `<p style="margin-top: 10px; margin-bottom: 5px; font-size: 14px; color: rgba(255, 255, 255, 0.9);"><strong>Impact on Metrics:</strong></p>`;
+                detailedView += '<p style="margin-top: 10px; margin-bottom: 5px; font-size: 14px; color: rgba(255, 255, 255, 0.9);"><strong>Impact on Metrics:</strong></p>';
                 detailedView += '<ul style="margin: 0; padding-left: 20px; font-size: 14px; color: rgba(255, 255, 255, 0.8);">';
 
-                if (impact.growth) detailedView += `<li>Growth: ${impact.growth > 0 ? '+' : ''}${impact.growth.toFixed(0)}</li>`;
-                if (impact.morale) detailedView += `<li>Morale: ${impact.morale > 0 ? '+' : ''}${impact.morale.toFixed(0)}</li>`;
-                if (impact.attrition) detailedView += `<li>Attrition: ${impact.attrition > 0 ? '+' : ''}${impact.attrition.toFixed(0)}</li>`;
+                if (impact.growth) detailedView += `<li>Growth: ${impact.growth > 0 ? '+' : ''}${impact.growth.toFixed(1)}%</li>`;
+                if (impact.morale) detailedView += `<li>Morale: ${impact.morale > 0 ? '+' : ''}${impact.morale.toFixed(0)}%</li>`;
+                if (impact.attrition) detailedView += `<li>Attrition: ${impact.attrition > 0 ? '+' : ''}${impact.attrition.toFixed(0)}%</li>`;
                 if (impact.profitMargin) detailedView += `<li>Profit Margin: ${impact.profitMargin > 0 ? '+' : ''}${impact.profitMargin.toFixed(0)}%</li>`;
                 if (impact.organizationalCapability && impact.organizationalCapability > 0) {
                     detailedView += `<li>Organizational Capability: +${impact.organizationalCapability.toFixed(0)} points</li>`;
@@ -1857,25 +1857,25 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         detailedView += '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.15); border-left: 4px solid var(--jcb-yellow);">';
         detailedView += '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">JCB LEAD FRAMEWORK PERFORMANCE</h4>';
 
-        detailedView += '<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">';
-        detailedView += '<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">L</strong>eadership Quality: ${this.state.leadership} points</p>';
+        detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
+        detailedView += `<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">L</strong>eadership Quality: ${this.state.leadership} points</p>`;
         detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback('leadership', this.state.leadership)}</p>`;
-        detailedView += '</div>';
+        detailedView += `</div>`;
 
-        detailedView += '<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">';
-        detailedView += '<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">E</strong>xcellence Standards: ${this.state.excellence} points</p>';
+        detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
+        detailedView += `<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">E</strong>xcellence Standards: ${this.state.excellence} points</p>`;
         detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback('excellence', this.state.excellence)}</p>`;
-        detailedView += '</div>';
+        detailedView += `</div>`;
 
-        detailedView += '<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">';
-        detailedView += '<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">A</strong>gility & Adaptability: ${this.state.agility} points</p>';
+        detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
+        detailedView += `<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">A</strong>gility & Adaptability: ${this.state.agility} points</p>`;
         detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback('agility', this.state.agility)}</p>`;
-        detailedView += '</div>';
+        detailedView += `</div>`;
 
-        detailedView += '<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">';
-        detailedView += '<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">D</strong>etermination to Succeed: ${this.state.determination} points</p>';
+        detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
+        detailedView += `<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">D</strong>etermination to Succeed: ${this.state.determination} points</p>`;
         detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback('determination', this.state.determination)}</p>`;
-        detailedView += '</div>';
+        detailedView += `</div>`;
 
         detailedView += '</div>';
 
@@ -1900,52 +1900,52 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
         detailedView += `<p><strong>Profit Margin:</strong> ${this.state.profitMargin.toFixed(1)}%</p>`;
         if (this.state.organizationalCapability > 0) {
-            detailedView += `<p><strong>Organizational Capability:</strong> +${this.state.organizationalCapability.toFixed(0)} points</p>`;
+            detailedView += `<p><strong>Organizational Capability:</strong> ${this.state.organizationalCapability.toFixed(0)} points</p>`;
         }
-        detailedView += `</div>`;
+        detailedView += '</div>';
 
         // Leadership Profile Breakdown
-        detailedView += `<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">`;
-        detailedView += `<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Leadership Style Analysis (Goleman Framework)</h4>`;
+        detailedView += '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
+        detailedView += '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Leadership Style Analysis (Goleman Framework)</h4>';
         Object.keys(this.finalResults.leadershipProfile).forEach(style => {
             const percentage = this.finalResults.leadershipProfile[style];
             let annotation = '';
             if (percentage >= 60) annotation = ' ⚠️ OVERUSED';
             else if (percentage >= 40) annotation = ' (Primary)';
             else if (percentage >= 30) annotation = ' (Secondary)';
-            else if (percentage < 20) annotation = ' (Underused)';
+            else if (percentage <= 20) annotation = ' (Underused)';
 
-            detailedView += `<p><strong>${style.charAt(0).toUpperCase() + style.slice(1)}</strong> ${percentage}%${annotation}</p>`;
+            detailedView += `<p><strong>${style.charAt(0).toUpperCase() + style.slice(1)}:</strong> ${percentage}%${annotation}</p>`;
         });
         detailedView += `<p style="margin-top: 15px;"><strong>Personality Color:</strong> ${this.finalResults.personalityColor}</p>`;
         detailedView += `<p style="font-size: 14px; color: rgba(255,255,255,0.8);">${this.finalResults.personalityDescription}</p>`;
-        detailedView += `</div>`;
+        detailedView += '</div>';
 
         // Information Requests
         if (this.state.infoRequests.length > 0) {
-            detailedView += `<div style="margin-bottom: 20px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">`;
-            detailedView += `<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Information Gathering Behavior</h4>`;
+            detailedView += '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
+            detailedView += '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Information Gathering Behavior</h4>';
             detailedView += `<p>You requested additional information ${this.state.infoRequests.length} times during the game.</p>`;
-            detailedView += `<p style="font-size: 14px; color: rgba(255,255,255,0.8);">This demonstrates thoroughness in decision-making and willingness to seek data before acting.</p>`;
-            detailedView += `</div>`;
+            detailedView += '<p style="font-size: 14px; color: rgba(255,255,255,0.8);">This demonstrates thoroughness in decision-making and willingness to seek data before acting.</p>';
+            detailedView += '</div>';
         }
 
         // Full Feedback
-        detailedView += `<div style="margin-bottom: 30px;">`;
+        detailedView += '<div style="margin-bottom: 30px;">';
         detailedView += this.finalResults.feedback;
-        detailedView += `</div>`;
+        detailedView += '</div>';
 
         // Development Recommendations
         if (this.finalResults.recommendations && this.finalResults.recommendations.length > 0) {
-            detailedView += `<div style="margin-bottom: 20px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">`;
-            detailedView += `<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Development Recommendations</h4>`;
+            detailedView += '<div style="margin-bottom: 20px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
+            detailedView += '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Development Recommendations</h4>';
             this.finalResults.recommendations.forEach((rec, i) => {
                 detailedView += `<p style="margin-bottom: 15px;"><strong>${i + 1}. ${rec.title}</strong><br/><span style="font-size: 14px; color: rgba(255,255,255,0.8);">${rec.description}</span></p>`;
             });
-            detailedView += `</div>`;
+            detailedView += '</div>';
         }
 
-        detailedView += `</div>`;
+        detailedView += '</div>';
 
         modalContent.innerHTML = detailedView + `
             <div class="modal-actions" style="margin-top: 30px;">
@@ -2045,7 +2045,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             leadership: {
                 high: "You demonstrated strong leadership by building positive relationships, showing commercial acumen, and considering the bigger picture. Your decisions showed courage in motivating and influencing your team while adapting your style to different situations.",
                 medium: "You showed leadership potential in some areas, particularly in decision-making and stakeholder management. To strengthen this, focus on building more inclusive relationships and consistently adapting your style to inspire and influence others.",
-                low: "Your leadership decisions were primarily transactional. To develop leadership qualities, focus on: building positive relationships within and outside the organization, demonstrating commercial acumen by operating as if it's your own company, and being more ethical and sustainable in addressing both praise and performance issues."
+                low: "Your leadership decisions were primarily transactional. To develop JCB leadership qualities, focus on: building positive relationships within and outside the organization, demonstrating commercial acumen by operating as if it's your own company, and being more ethical and sustainable in addressing both praise and performance issues."
             },
             excellence: {
                 high: "You exemplified excellence through emotional intelligence, critical thinking, and informed decision-making. Your self-awareness and willingness to make courageous, data-driven decisions while owning the outcomes demonstrated mature leadership.",
@@ -2055,7 +2055,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             agility: {
                 high: "You demonstrated exceptional agility by navigating ambiguity, adapting quickly to changing situations, and showing resilience in the face of setbacks. Your proactive approach and creative problem-solving reflected JCB's values of not giving up and moving quickly.",
                 medium: "You showed some adaptability but could improve in handling ambiguity and recovering from setbacks. To strengthen agility, be more pragmatic in driving change quickly, don't overthink in evolving situations, and be more proactive in taking initiative without being asked.",
-                low: "Your decisions showed rigidity when faced with ambiguity and change. To develop agility: practice handling unclear situations without all the information, consider VUCA (volatility, uncertainty, complexity, ambiguity) impacts, build resilience to recover from setbacks, and take more initiative proactively"
+                low: "Your decisions showed rigidity when faced with ambiguity and change. To develop agility: practice handling unclear situations without all the information, consider VUCA (volatility, uncertainty, complexity, ambiguity) impacts, build resilience to recover from setbacks, and take more initiative proactively."
             },
             determination: {
                 high: "You displayed relentless determination through your drive to excel, growth mindset, and willingness to innovate. Your passion for achieving goals, openness to feedback, and view of failure as a learning opportunity embodied JCB's values.",
@@ -2100,13 +2100,13 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
         // Executive Summary Card
         html += '<div class="culture-summary-card">';
-        html += '<h2>Executive Summary</h2>';
+        html += `<h2>Executive Summary</h2>`;
         html += `<p style="margin-bottom: 20px; color: rgba(255, 255, 255, 0.85); line-height: 1.6;">This dashboard analyzes the collective leadership culture of your team based on ${analysis.playerCount} completed simulations. Scores compare your team's average performance against high-performance benchmarks.</p>`;
         html += `<div class="culture-stat-row">`;
         html += `<div class="culture-stat"><span class="culture-stat-label">Players Analyzed:</span><span class="culture-stat-value">${analysis.playerCount}</span></div>`;
         html += `<div class="culture-stat"><span class="culture-stat-label">Success Rate:</span><span class="culture-stat-value">${analysis.metrics.successRate.toFixed(0)}%</span></div>`;
-        html += `<div class="culture-stat"><span class="culture-stat-label">Performance Level:</span><span class="culture-stat-value">${analysis.comparisonToHighPerformance}</span></div>`;
-        html += `<div class="culture-stat"><span class="culture-stat-label" title="Estimated ranking compared to other companies (50th = average, 90th = top 10%)">Estimated Percentile:</span><span class="culture-stat-value">${analysis.comparisonToHighPerformance.percentileEstimate}th</span></div>`;
+        html += `<div class="culture-stat"><span class="culture-stat-label">Performance Level:</span><span class="culture-stat-value">${analysis.comparisonToHighPerformance.performanceLevel}</span></div>`;
+        html += `<div class="culture-stat"><span class="culture-stat-label">Estimated Percentile:</span><span class="culture-stat-value" title="Estimated ranking compared to other companies (50th = average, 90th = top 10%)">Estimated Percentile:</span><span class="culture-stat-value">${analysis.comparisonToHighPerformance.percentileEstimate}th</span></div>`;
         html += `</div>`;
         html += '</div>';
 
@@ -2114,7 +2114,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         html += '<div class="culture-section">';
         html += '<h2>📊 Aggregate Performance Metrics</h2>';
         html += '<div class="culture-metrics-grid">';
-        html += `<div class="culture-metric-card">;
+        html += `<div class="culture-metric-card">
             <div class="culture-metric-label">Average Growth</div>
             <div class="culture-metric-value ${analysis.metrics.avgGrowth >= 20 ? 'success' : 'warning'}">${analysis.metrics.avgGrowth.toFixed(1)}%</div>
             <div class="culture-metric-target">Target: 20%</div>
@@ -2134,25 +2134,25 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             <div class="culture-metric-value">${analysis.metrics.optimalRate.toFixed(0)}%</div>
             <div class="culture-metric-target">% of players who achieved optimal</div>
         </div>`;
-        html += `</div>`;
-        html += `</div>`;
+        html += '</div>';
+        html += '</div>';
 
         // Leadership Style Distribution
-        html += `<div class="culture-section">`;
-        html += `<h2>👥 Leadership Style Distribution</h2>`;
-        html += `<div class="culture-diversity-score ${analysis.leadership.diversity.balanced ? 'success' : 'warning'}">`;
-        html += `<strong>Diversity Index:</strong> ${(analysis.leadership.diversity.score * 100).toFixed(0)} %`;
+        html += '<div class="culture-section">';
+        html += '<h2>👥 Leadership Style Distribution</h2>';
+        html += `<div class="culture-diversity-score ${analysis.leadership.balanced ? 'success' : 'warning'}">`;
+        html += `<strong>Diversity Index:</strong> ${(analysis.leadership.diversity * 100).toFixed(0)} %`;
         html += ` (${analysis.leadership.balanced ? 'BALANCED ✓' : 'NEEDS IMPROVEMENT'})`;
         html += `</div>`;
         html += '<div class="culture-style-bars">';
 
         Object.entries(analysis.leadership.aggregate).forEach(([style, percentage]) => {
             const warning = (style === 'pacesetting' && percentage > 30) || (style === 'coaching' && percentage < 15);
-            html += '<div class="culture-style-bar">';
+            html += `<div class="culture-style-bar">`;
             html += `<div class="culture-style-label">${this.capitalizeFirst(style)}</div>`;
-            html += '<div class="culture-style-track">';
+            html += `<div class="culture-style-track">`;
             html += `<div class="culture-style-fill ${warning ? 'warning' : ''}" style="width: ${percentage}%"></div>`;
-            html += '</div>';
+            html += `</div>`;
             html += `<div class="culture-style-percentage">${percentage.toFixed(0)}%</div>`;
             html += '</div>';
         });
@@ -2178,11 +2178,11 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             html += '<div class="culture-section culture-strengths">';
             html += '<h2>✅ Cultural Strengths</h2>';
             analysis.strengths.forEach(strength => {
-                html += '<div class="culture-strength-card">';
+                html += `<div class="culture-strength-card">`;
                 html += `<h3>${strength.area}</h3>`;
                 html += `<div class="culture-strength-score">${strength.score}</div>`;
                 html += `<p>${strength.insight}</p>`;
-                html += '</div>';
+                html += `</div>`;
             });
             html += '</div>';
         }
@@ -2192,11 +2192,11 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             html += '<div class="culture-section culture-weaknesses">';
             html += '<h2>⚠️ Cultural Weaknesses</h2>';
             analysis.weaknesses.forEach(weakness => {
-                html += '<div class="culture-weakness-card">';
+                html += `<div class="culture-weakness-card">`;
                 html += `<h3>${weakness.area}</h3>`;
                 html += `<div class="culture-weakness-score">${weakness.score} <span class="culture-gap">${weakness.gap}</span></div>`;
                 html += `<p>${weakness.insight}</p>`;
-                html += '</div>';
+                html += `</div>`;
             });
             html += '</div>';
         }
@@ -2208,38 +2208,38 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             analysis.culturalRisks.forEach(risk => {
                 const severityClass = risk.severity === 'CRITICAL' ? 'critical' : risk.severity === 'HIGH' ? 'high' : 'medium';
                 html += `<div class="culture-risk-card ${severityClass}">`;
-                html += '<div class="culture-risk-header">';
+                html += `<div class="culture-risk-header">`;
                 html += `<h3>${risk.risk}</h3>`;
                 html += `<span class="culture-risk-severity">${risk.severity}</span>`;
-                html += '</div>';
+                html += `</div>`;
                 html += `<p><strong>Detail:</strong> ${risk.detail}</p>`;
                 html += `<p><strong>Consequence:</strong> ${risk.consequence}</p>`;
-                html += '</div>';
+                html += `</div>`;
             });
             html += '</div>';
-        }x + 1;
+        }
 
         // Recommendations
         if (analysis.recommendations.length > 0) {
             html += '<div class="culture-section culture-recommendations">';
             html += '<h2>💡 Prioritized Recommendations</h2>';
             analysis.recommendations.forEach((rec, index) => {
-                const displayPriority = index + 1;
+                const displayPriority = index + 1; // Use index for display (1, 2, 3...)
                 html += `<div class="culture-rec-card priority-${displayPriority}">`;
-                html += '<div class="culture-rec-header">';
+                html += `<div class="culture-rec-header">`;
                 html += `<h3><span class="culture-rec-number">Priority ${displayPriority}</span> ${rec.title}</h3>`;
-                html += '</div>';
-                html += '<div class="culture-rec-body">';
-                html += '<h4>Actions:</h4>';
-                html += '<ul>';
+                html += `</div>`;
+                html += `<div class="culture-rec-body">`;
+                html += `<h4>Actions:</h4>`;
+                html += `<ul>`;
                 rec.actions.forEach(action => {
                     html += `<li>${action}</li>`;
                 });
-                html += '</ul>';
+                html += `</ul>`;
                 html += `<p><strong>Timeline:</strong> ${rec.timeline}</p>`;
                 html += `<p><strong>Expected Impact:</strong> ${rec.expectedImpact}</p>`;
-                html += '</div>';
-                html += '</div>';
+                html += `</div>`;
+                html += `</div>`;
             });
             html += '</div>';
         }

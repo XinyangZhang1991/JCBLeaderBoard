@@ -473,8 +473,8 @@ body {
   font-weight: bold;
   color: var(--jcb-yellow);
   text-align: center;
-  margin-top: 30px;
-  padding-top: 28px;
+  margin-top: 30px !important;
+  padding-top: 20px;
   border-top: 1px solid rgba(255, 203, 0, 0.3);
 }
 
@@ -650,7 +650,7 @@ body {
   font-size: 14px;
   font-weight: bold;
   color: var(--jcb-white);
-  text-shadow: 0 4px 4px rgba(0,0,0,0.8);
+  text-shadow: 0 0 4px rgba(0,0,0,0.8);
 }
 
 .hud-footer {
@@ -973,7 +973,7 @@ body {
   margin-top: 30px;
 }
 
-.info-options {
+#info-options {
   display: flex;
   flex-direction: column;
   gap: 15px;

@@ -16,7 +16,7 @@
                     <div class="jcb-logo-large"></div>
                     <h1 class="title-main">LEADERSHIP</h1>
                     <h2 class="title-sub">IN ACTION</h2>
-                    <button class="btn-primary" id="start-btn" onclick="if(window.game) game.startRegistration();" style="position: relative !important; z-index: 9999 !important; pointer-events: auto !important; cursor: pointer !important;">TOUCH TO BEGIN</button>
+                    <button class="btn-primary" id="start-btn" onclick="if(window.game) game.startRegistration();" style="position: relative !important; z-index: 99999 !important; pointer-events: auto !important; cursor: pointer !important;">TOUCH TO BEGIN</button>
                     <div class="version-info">Version 1.0 | JCB Leadership Development</div>
                 </div>
                 <div class="welcome-right">
@@ -110,7 +110,7 @@
 
                         <p>The Board has high expectations. Your predecessor achieved steady 8-10% annual growth, but market conditions demand more. The Board has set an ambitious target: <strong>20% revenue growth in your first 12 months</strong>.</p>
 
-                        <p><strong>Growth alone is not success.</strong> The Board expects <em>sustainable</em> performance. Excessive team attrition or low morale will be viewed as indicators of poor leadership. You must deliver results while maintaining organizational health and team engagement.</p>
+                        <p><strong class="warning-text">Critical:</strong> Growth alone is not success.</strong> The Board expects <em>sustainable</em> performance. Excessive team attrition or low morale will be viewed as indicators of poor leadership. You must deliver results while maintaining organizational health and team engagement.</p>
 
                         <p>You have full operational authority over the division, including:</p>
                         <ul>
@@ -280,7 +280,7 @@
                 console.log('Button position:', rect);
                 console.log('Element at button center:', elementAtPoint);
                 console.log('Is element the button?', elementAtPoint === button);
-                console.log('Element blocking:', elementAtPoint.id || elementAtPoint.tagName, elementAtPoint.className);
+                console.log('Element blocking:', elementAtPoint.tagName, elementAtPoint.className, elementAtPoint.id);
                 console.log('Button z-index:', window.getComputedStyle(button).zIndex);
                 console.log('Button pointer-events:', window.getComputedStyle(button).pointerEvents);
                 console.log('Blocking element z-index:', window.getComputedStyle(elementAtPoint).zIndex);
@@ -292,7 +292,7 @@
         window.onerror = function(message, source, lineno, colno, error) {
             console.error('Global error caught:', message, 'at', source, 'line', lineno);
             console.error('Full error object:', error);
-            // alert('JavaScript Error:\n' + message + '\nAt: ' + source + ':' + lineno + '\n\nPlease check the browser console (F12) for details.');
+            // alert('JavaScript Error:\n' + message + '\n\nAt: ' + source + ':' + lineno + '\n\nPlease check the browser console (F12) for details.');
             return true; // Prevent default error handling
         };
 

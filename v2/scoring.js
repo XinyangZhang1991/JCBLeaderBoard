@@ -633,7 +633,7 @@ class ScoringEngine {
     impact.leadership += 20;
     impact.excellence += 15;
     impact.determination += 18; // Playing long game under pressure
-    console.log('📈📈 R&D + Dealer investment: Will pay off +10% growth at Year-End scenario');
+    console.log('📈 R&D + Dealer investment: Will pay off +10% growth at Year-End scenario');
   }
 
   // NEW: Dealer partnership strengthening (affiliative approach - KEEP FULL IMPACT)
@@ -1229,17 +1229,17 @@ class ScoringEngine {
         //
         // TIER 2: Balanced Leadership Path (Well-Balanced + Strong LEAD)
         // - Rewards balanced, quality leadership
-        // - Requires: LEAD 50%+, Well Balanced (max 50% single style), Growth 8%, Team Health
+        // - Requires: LEAD 50%+, Well Balanced (max 50% single style), Growth 8%+, Team Health
         //
-        // TIER 3: Capability Path (People Focused Excellence)
-        // Build organizational capability through coaching/development
+        // TIER 3: Capability Path (People-Focused Excellence)
+        // - Build organizational capability through coaching/development
         // - Requires: Capability 145+, LEAD 50%+, Growth 6%+, Team Health
         // - Balance: Reasonably Balanced (max 70% single style)
-
+        //
         // REBALANCED WIN CONDITIONS v9: Five-Tier System (Reduce Overpowered Strategies)
         // User feedback: "Balanced 46.5% (below target), Pure Democratic 55.6%, Random 54.9%, Coaching+Democratic 52.1%"
         // Issue: THREE strategies beating Balanced - need to make Excellence and People Paths harder
-
+        //
         // TIER 1: Excellence Path (Exceptional LEAD + Modest Growth)
         // - Exceptional LEAD leaders (78%+) can win with modest growth - RAISED v9
         // - Requires: LEAD 78%+, Growth 7%+, Team Health 
@@ -1265,7 +1265,7 @@ class ScoringEngine {
         // TIER 5: Growth Path (Results-Focused, accepts trade-offs but not burnout)
         // - High growth with acceptable LEAD quality and sustainable team impact
         // - Requires: Growth 15%+, LEAD 40%+ (minimum)
-        // - Partial Team Health: Morale >45%, Attrition <30% (survivable but not ideal)
+        // - Partial Team Health: Morale ≥45%, Attrition <30% (survivable but not ideal)
         // - Balance: NO REQUIREMENT (aggressive strategies allowed)
         // - Philosophy: You can push hard for growth, but can't completely destroy your team
 
@@ -1425,12 +1425,12 @@ class ScoringEngine {
             if (wonViaCapability) {
                 feedback += `<strong>Organizational Capability Path:</strong> You achieved ${growth.toFixed(1)}% growth - below the 15% growth target, but you built exceptional organizational capability (${gameState.organizationalCapability.toFixed(0)} points). `;
                 feedback += `This coaching-focused approach invests in long-term team development. `;
-                feedback += `While Year 1 growth is moderate, you\'ve built a strong foundation for sustainable performance. `;
+                feedback += `While Year 1 growth is moderate, you've built a strong foundation for sustainable performance. `;
 
                 // WARN if growth is on the low end of viable (8-10%)
                 if (growth >= 8 && growth < 10) {
-                    feedback += `<br><br><b>⚠️ <em>Note:</em> Your ${growth.toFixed(1)}% growth is at the minimum threshold for organizational viability. `;
-                    feedback += `While investing in capability is valuable, ensure you\'re generating sufficient revenue to sustain the team you\'re developing.</em>`;
+                    feedback += `<br><br>⚠️ <em>Note: Your ${growth.toFixed(1)}% growth is at the minimum threshold for organizational viability. `;
+                    feedback += `While investing in capability is valuable, ensure you're generating sufficient revenue to sustain the team you\'re developing.</em>`;
                 }
         } else if (growth >= 28) {
             feedback += `You achieved exceptional growth (${growth.toFixed(1)}%) while maintaining team performance. `;
@@ -1470,7 +1470,7 @@ class ScoringEngine {
         if (avgDetermination < benchmarks.determination * 0.6) leadDeficits.push(`Determination (${avgDetermination.toFixed(0)} vs ${benchmarks.determination})`);
 
         // Only warn about Pyrrhic Victory if they won via GROWTH path (not capability path)
-        // Coaching/capability players may have lower LEAD scores in some LEAD dimensions but that's intentional
+        // Coaching/capability players may have lower scores in some LEAD dimensions but that's intentional
         // (wonViaCapability is already calculated above when checking win conditions)
         if (leadDeficits.length >= 3 && !wonViaCapability) {
             // Pyrrhic victory - succeeded with terrible leadership quality
@@ -1489,7 +1489,7 @@ class ScoringEngine {
                 feedback += `Your reliance on ${dominantStyle.name} (${dominantStyle.percentage}%) achieved short-term results but didn't develop leadership capability. `;
             }
 
-            feedback += `<strong>Year 1 success, but what about Year 2?</strong> This approach is unsustainable - you haven\'t built the LEAD competencies that drive long-term organizational success.`;
+            feedback += `<strong>Year 1 success, but what about Year 2?</strong> This approach is unsustainable - you haven't built the LEAD competencies that drive long-term organizational success.`;
             feedback += `</p>`;
         }
 
@@ -1570,7 +1570,7 @@ class ScoringEngine {
             if (selfIdentified === actualDominant) {
                 feedback += `✅ <strong>Accurate self-awareness:</strong> You identified as ${gameState.selfIdentifiedStyle} and indeed used it ${actualPercentage.toFixed(0)}% of the time. `;
                 if (actualPercentage > 60) {
-                    feedback += `However, you\'re <em>overusing</em> this style - even strengths become weaknesses when overplayed. `;
+                    feedback += `However, you're <em>overusing</em> this style - even strengths become weaknesses when overplayed. `;
                 } else {
                     feedback += `This alignment between self-perception and behavior suggests good self-awareness.`;
                 }
@@ -1592,9 +1592,9 @@ class ScoringEngine {
 
         if (dataRequestCount === 0) {
             feedback += `⚠️ You requested <strong>zero additional information</strong> across all ${gameState.decisions.length} scenarios. `;
-            feedback += `This "decide on instinct" approach is fast but dangerous - you\'re operating with incomplete data. `;
+            feedback += `This "decide on instinct" approach is fast but dangerous - you're operating with incomplete data. `;
         if (escaped) {
-            feedback += `You succeeded despite this, but won\'t always be lucky. Evidence-based leaders outperform gut-decision makers over time.`;
+            feedback += `You succeeded despite this, but won't always be lucky. Evidence-based leaders outperform gut-decision makers over time.`;
         } else {
             feedback += `This likely contributed to your challenges - key decisions lacked the information needed for success.`;
         }
@@ -1649,7 +1649,7 @@ class ScoringEngine {
         if (leadRatios.determination >= 0.80 && leadRatios.excellence < 0.60) {
             feedback += `✅ This matches your profile - strong drive but could benefit from more evidence-based decisions.`;
         } else if (leadRatios.excellence >= 0.80) {
-            feedback += `Interestingly, your Excellence score is higher than typical for RED - you\'ve developed beyond your natural preference.`;
+            feedback += `Interestingly, your Excellence score is higher than typical for RED - you've developed beyond your natural preference.`;
         }
     } else if (results.personalityColor === 'BLUE' || results.personalityColor.includes('BLUE')) {
         feedback += `<br><br><strong>Typical BLUE strengths:</strong> High Excellence (systematic analysis), clear vision, strategic thinking. `;
@@ -1657,7 +1657,7 @@ class ScoringEngine {
         if (leadRatios.excellence >= 0.80 && leadRatios.agility < 0.60) {
             feedback += `✅ This matches your profile - analytical strength but could be more adaptive to changing contexts.`;
         } else if (leadRatios.agility >= 0.80) {
-            feedback += `Interestingly, your Agility score is higher than typical for BLUE - you\'ve developed flexibility beyond your natural preference.`;
+            feedback += `Interestingly, your Agility score is higher than typical for BLUE - you've developed flexibility beyond your natural preference.`;
         }
     } else if (results.personalityColor === 'YELLOW' || results.personalityColor.includes('YELLOW')) {
         feedback += `<br><br><strong>Typical YELLOW strengths:</strong> High Leadership (collaborative), High Agility (adaptable), energizing teams. `;
@@ -1665,7 +1665,7 @@ class ScoringEngine {
         if (leadRatios.leadership >= 0.80 && leadRatios.determination < 0.60) {
             feedback += `✅ This matches your profile - great people skills but could be more results-focused when needed.`;
         } else if (leadRatios.determination >= 0.80) {
-            feedback += `Interestingly, your Determination score is higher than typical for YELLOW - you\'ve developed drive beyond your natural preference.`;
+            feedback += `Interestingly, your Determination score is higher than typical for YELLOW - you've developed drive beyond your natural preference.`;
         }
     } else if (results.personalityColor === 'GREEN' || results.personalityColor.includes('GREEN')) {
         feedback += `<br><br><strong>Typical GREEN strengths:</strong> High Leadership (coaching), people development, building organizational capability. `;
@@ -1676,7 +1676,7 @@ class ScoringEngine {
             feedback += `Interestingly, your Determination score is higher than typical for GREEN - you\'ve developed urgency beyond your natural preference.`;
         }
     } else if (results.personalityColor === 'BALANCED') {
-        feedback += `<br><br><strong>Balanced Leadership Profile:</strong> You don\'t show a strong preference for any single Jung temperament. `;
+        feedback += `<br><br><strong>Balanced Leadership Profile:</strong> You don't show a strong preference for any single Jung temperament. `;
         feedback += `This suggests high adaptability - you can shift between different leadership modes as context requires. `;
         feedback += `Your LEAD scores likely show relatively even development across all four dimensions.`;
     }
@@ -1690,7 +1690,7 @@ class ScoringEngine {
     if (results.optimal) {
         feedback += 'You demonstrated balanced leadership, adapting your style to context while keeping both results and people in focus. This is sustainable high performance.';
     } else if (dominantStyle.name === 'pacesetting') {
-        feedback += `You\'re a strong driver who sometimes forgets that sustainable leadership requires bringing people with you, not just pushing them forward. Your team delivered despite pressure, not because of inspiration.`;
+        feedback += `You're a strong driver who sometimes forgets that sustainable leadership requires bringing people with you, not just pushing them forward. Your team delivered despite pressure, not because of inspiration.`;
     } else if (dominantStyle.name === 'affiliative') {
         feedback += `Your people-first approach built goodwill, but sometimes avoided necessary tough decisions. Great leaders care personally AND challenge directly.`;
     } else {
@@ -1756,7 +1756,7 @@ class ScoringEngine {
         feedback += `<strong>Target not met - but you were close to an alternative win path.</strong> `;
         feedback += `You built strong organizational capability (${gameState.organizationalCapability.toFixed(0)} points, need 145) through coaching and people development. `;
         feedback += `With slightly more focus on team capability building, you could have succeeded via the Organizational Capability path (which requires 145+ capability and 8%+ growth). `;
-        feedback += `You achieved ${growth.toFixed(1)}% growth which shows potential, but didn\'t quite reach the threshold for either path. `;
+        feedback += `You achieved ${growth.toFixed(1)}% growth which shows potential, but didn't quite reach the threshold for either path. `;
     } else if (meetsGrowth && failureReasons.length > 0) {
         // They hit growth but failed on other metrics - THIS WAS THE BUG SCENARIO
         feedback += `<strong>Target not met.</strong> While you achieved ${growth.toFixed(1)}% growth (exceeding the 15% target), you failed because: `;
@@ -1864,7 +1864,7 @@ if (yearEndDecision && yearEndDecision.choices[0]) {
 }
 } else if (!meetsGrowth && gameState.leadership < 30) {
     // New: Low leadership score
-    feedback += `You achieved ${growth.toFixed(1)}% growth against a 15% target. Your leadership quality score (${gameState.leadership}) suggests you managed tasks but didn\'t truly lead people. `;
+    feedback += `You achieved ${growth.toFixed(1)}% growth against a 15% target. Your leadership quality score (${gameState.leadership}) suggests you managed tasks but didn't truly lead people. `;
     feedback += 'The gap between management and leadership is the gap between your result and success.';
 } else {
     feedback += 'You had the capability to succeed but made choices that prioritized short-term gains over sustainable performance. ';
@@ -2112,7 +2112,7 @@ if (biggestLEADGap[1] < -20) {
   } else if (dimension === 'excellence') {
     const decisionCount = gameState.decisions?.length || 6;
     const infoRequestRate = gameState.infoRequests ? (gameState.infoRequests.length / (decisionCount * 2) * 100).toFixed(0) : 0;
-    return `Excellence score is ${gap} points below benchmark (${score} vs ${benchmark}) - you made ${decisionCount} decisions without gathering enough evidence (info request rate: ${infoRequestRate}%). Fast decisions aren't always good decisions. Read "Thinking in Bets" by Duke: learn to improve decision quality in uncertain environments.`;
+    return `Excellence score is ${gap} points below benchmark (${score} vs ${benchmark}) - you made ${decisionCount} decisions without gathering enough evidence (info request rate: ~${infoRequestRate}%). Fast decisions aren't always good decisions. Read "Thinking in Bets" by Duke: learn to improve decision quality in uncertain environments.`;
   } else if (dimension === 'agility') {
     return `Agility is ${gap} points below benchmark (${score} vs ${benchmark}) - you're uncomfortable with ambiguity and change. JCB's environment demands adaptability; rigidity is a liability. Read "The Lean Startup" by Ries: learn to pivot based on evidence, or "Antifragile" by Taleb to understand how to gain from uncertainty.`;
   } else if (dimension === 'determination') {

@@ -42,7 +42,7 @@ const round1Scenarios = [
                     { text: 'A) "I know this is hard - let\'s support each other through it"', style: 'affiliative', color: 'BLUE' },
                     { text: 'B) "This is what we\'re doing - I need 100% commitment"', style: 'coercive', color: 'YELLOW' },
                     { text: 'C) "This is the decision - execute it immediately"', style: 'coercive', color: 'RED' },
-                    { text: 'D) "Me need results fast - here are your targets"', style: 'pacesetting', color: 'RED' },
+                    { text: 'D) "We need results fast - here are your targets"', style: 'pacesetting', color: 'RED' },
                     { text: 'E) "I trust you all - you know what\'s best for your areas"', style: 'affiliative', color: 'YELLOW' }
                 ]
             },  
@@ -55,14 +55,14 @@ const round1Scenarios = [
                     { text: 'Direct mandate - "These are your assignments, get started now"', style: 'coercive', color: 'RED' },
                     { text: 'Individual check-ins to ensure everyone feels supported', style: 'affiliative', color: 'YELLOW' }
                 ]
-            },
+            }
         ],    
 
 additionalInfo: [
   {
     label: 'Last year\'s performance data',
     type: 'useful',
-    content: 'Shows marketing had poor ROI last year (6% return vs 35% from training, 42% from dealer relationships). Training and dealer relationships yielded significantly better results.',
+    content: 'Shows marketing had poor ROI last year (8% return vs 35% from training, 42% from dealer relationships). Training and dealer relationships yielded significantly better results.',
     validatesDecision: [0] // Validates cutting marketing (choice A in Part 1)
   },
   {
@@ -74,12 +74,12 @@ additionalInfo: [
   {
     label: 'Attrition data by department',
     type: 'useful',
-    content: '22% attrition in sales (highest in division), 18% in operations, 12% in marketing. HR warns that without training investment, attrition could reach 36%.',
+    content: '22% attrition in sales (highest in division), 18% in operations, 12% in marketing. HR warns that without training investment, attrition could reach 30%+.',
     validatesDecision: [1] // Shows you should NOT cut training (avoid choice B in Part 1)
   }
 ],
 
-consequenceText: 'Your team responds to your leadership approach, First month metrics are being calculated...',
+consequenceText: 'Your team responds to your leadership approach. First month metrics are being calculated...',
 
 // Scoring impacts (will be calculated by scoring engine)
 scoreTemplates: {
@@ -128,7 +128,7 @@ scoreTemplates: {
       type: 'choice',
       options: [
         { text: 'Acknowledge complexity and present both viewpoints honestly', style: 'affiliative', color: 'GREEN' },
-        { text: 'Synthesize into single narrative: "Core customers happy, growth segments need attention"', style: 'narrative', color: 'BLUE' },
+        { text: 'Synthesize into single narrative: "Core customers happy, growth segments need attention"', style: 'npacesetting', color: 'BLUE' },
         { text: 'Frame as strategic opportunity: satisfaction high + complaints rising = growth opportunity', style: 'authoritative', color: 'BLUE' },
         { text: 'Request more time to investigate fully before presenting', style: 'affiliative', color: 'YELLOW' }
       ]
@@ -153,7 +153,7 @@ scoreTemplates: {
     }
   ],
 
-  consequenceText: 'Your analytical approach to conflicting data influences team\'s trust in your judgment...',
+  consequenceText: 'Your analytical approach to conflicting data influences team\'s trust in your judgment...'
 },
 
 // SCENARIO 3: THE SAFETY CRISIS
@@ -236,11 +236,11 @@ scoreTemplates: {
   subtitle: 'Month 5 - Q2',
   month: 5,
   quarter: 2,
-  description: `Your sales team reports that customer sentiment is "changing" but can't pinpoint why. Sales velocity has slowed 8% month-over-month. Three conflicting theories:
+  description: `Your sales team reports that customer sentiment is "changing" but can\'t pinpoint why. Sales velocity has slowed 8% month-over-month. Three conflicting theories:
 
-**Sales Director:** "Competitor launched new hydraulic feature we don't have"
+**Sales Director:** "Competitor launched new hydraulic feature we don\'t have"
 **Finance Director:** "Economic uncertainty making buyers delay decisions"
-**Your gut:** "Our team's approach has gone stale - we're not listening to customers"
+**Your gut:** "Our team\'s approach has gone stale - we\'re not listening to customers"
 
 Data is incomplete and contradictory. Your CFO demands immediate action. Your strategy lead wants 3 weeks to research properly.`,
 
@@ -295,7 +295,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
     }
   ],
 
-  consequenceText: 'How you handle ambiguity and uncertainty shapes team\'s confidence in your leadership...',
+  consequenceText: 'How you handle ambiguity and uncertainty shapes team\'s confidence in your leadership...'
 },
 
 // SCENARIO 5: THE COMPETITOR THREAT
@@ -315,8 +315,8 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
         { label: 'Price matching / discounts', max: 1.5, budgetConstraint: 3.0, color: 'RED' },
         { label: 'Accelerated R&D for next-gen features', max: 2.0, color: 'BLUE' },
         { label: 'Dealer incentive program', max: 1.5, color: 'YELLOW' },
-        { label: 'Marketing counteroffensive', max: 1.5, color: 'RED' },
-        { label: 'Customer loyalty program', max: 1.2, color: 'RED' },
+        { label: 'Marketing counteroffensive', max: 1.2, color: 'RED' },
+        { label: 'Customer loyalty program', max: 0.8, color: 'YELLOW' },
         { label: 'Dealer partnership strengthening (relationship-first)', max: 1.0, color: 'GREEN' }
       ]
     },
@@ -358,7 +358,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
     },
      {
       label: 'Sales team sentiment survey',
-      type: 'red herring',
+      type: 'red_herring',
       content: 'They want aggressive discounts, but it\'s short-sighted'
     }
   ],
@@ -430,7 +430,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
     },
     {
       label: 'Retention case studies from other divisions',
-      type: 'red herring',
+      type: 'red_herring',
       content: 'Different contexts, not directly applicable to your situation'
     }
   ],
@@ -438,7 +438,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
   consequenceText: 'Your team watches closely to see if you genuinely change or just talk about it...',
 
   scoreTemplates: {
-    moneyOnly: { attrition: 28, morale: -10, growth: -8 }, // Retention bonuses fail
+    moneyOnly: { attrition: 20, morale: -10, growth: -8 }, // Retention bonuses fail
     courseCorrect: { attrition: -8, morale: 15, growth: -5, agility: 25 }, // Admit and adjust
     denial: { attrition: 30, morale: -20, growth: -15 } // Failure path
   },
@@ -453,7 +453,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
   subtitle: 'Month 9 - Q3',
   month: 9,
   quarter: 3,
-  description: `Your most senior team member (20 years at JCB) is underperforming. Their results are 25% below target for two quarters. They're defensive when given feedback and resistant to change, but they're widely respected and well-liked. Their team's morale is starting to drop. This must be addressed.`,
+  description: `Your most senior team member (20 years at JCB) is underperforming. Their results are 25% below target for two quarters. They're defensive when given feedback and resistant to change, but they're widely respected and well-liked. Their team\'s morale is starting to drop. This must be addressed.`,
   
   decisions: [
     {
@@ -506,7 +506,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
     }
   ],
 
-  consequenceText: 'Your ability to balance empathy and accountability becomes clear...',
+  consequenceText: 'Your ability to balance empathy and accountability becomes clear...'
 },
 
 // SCENARIO 8: THE INNOVATION GAMBLE
@@ -516,7 +516,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
   subtitle: 'Month 10 - Q3/Q4',
   month: 10,
   quarter: 3,
-  description: `Your R&D team presents a breakthrough hybrid-electric Loadall prototype 8 months ahead of schedule. Early customer feedback is phenomenal. You could rush to market in Q4 (risky but game-changing) or wait for Q1 next year (safer, proven approach). Marketing wants £1.2M for launch campaign. Operations says rushing could compromise quality.`,
+  description: `Your R&D team presents a breakthrough: hybrid-electric Loadall prototype 8 months ahead of schedule. Early customer feedback is phenomenal. You could rush to market in Q4 (risky but game-changing) or wait for Q1 next year (safer, proven approach). Marketing wants £1.2M for launch campaign. Operations says rushing could compromise quality.`,
 
   decisions: [
     {
@@ -620,7 +620,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
       type: 'slider',
       sliders: [
         { label: 'Year-end bonuses for performance', max: 0.8, budgetConstraint: 0.8, color: 'RED' },
-        { label: 'Team celebration and recognition events', max: 0.1, color: 'YELLOW' },
+        { label: 'Team celebration and recognition event', max: 0.1, color: 'YELLOW' },
         { label: 'Year 2 capability investment (training, tools)', max: 0.7, color: 'GREEN' },
         { label: 'Roll budget to Year 2 targets (save money)', max: 0.8, color: 'BLUE' }
       ]
@@ -655,7 +655,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
     },
     {
       label: 'Year 2 market forecast',
-      type: 'red herring',
+      type: 'red_herring',
       content: 'Macro trends less important than internal capability'
     }
   ],

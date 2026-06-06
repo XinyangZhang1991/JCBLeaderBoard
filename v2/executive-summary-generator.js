@@ -172,7 +172,7 @@ class ExecutiveSummaryGenerator {
 
     <div class="assessment-box">
         <div class="assessment-title">OVERALL ASSESSMENT: ${assessment.level}</div>
-        <p style="margin: 5px 0 0;">${assessment.summary}</p>
+        <p style="margin: 5px 0 0 0;">${assessment.summary}</p>
     </div>
 
     ${careerRisks.length > 0 ? this.renderCareerRisks(careerRisks) : ''}
@@ -233,7 +233,7 @@ class ExecutiveSummaryGenerator {
 
     <div class="footer">
         <p><strong>JCB Leadership Development Programme</strong> | Assessment Version 2.0</p>
-        <p><em>This assessment is based on simulation performance and should be considered alongside 360° feedback, business results, and manager assessment.</em></p>
+        <p><em>This assessment is based on simulation performance and should be considered alongside 360° feedback, business results, and manager assessment.</p>
         <p><em>See detailed appendix for full analysis, decision history, and psychometric validation.</em></p>
     </div>
 </body>
@@ -249,7 +249,7 @@ class ExecutiveSummaryGenerator {
         <div class="risk-flag">
             <span class="risk-icon">${risk.icon}</span>
             <strong>${risk.title}</strong>
-            <p style="margin: 5px 0 0;">${risk.detail}</p>
+            <p style="margin: 5px 0 0 0;">${risk.detail}</p>
         </div>
         `).join('')}
     </div>
@@ -286,7 +286,7 @@ class ExecutiveSummaryGenerator {
             return {
                 level: 'DEVELOPING',
                 color: '#fff3cd',
-                summary: `Shows leadership potential but needs development in key areas. ${escaped ? 'Met objectives but' : 'Narrowly missed objectives -'} LEAD competencies at ${(leadRatio * 100).toFixed(0)}% of benchmark suggest gaps in leadership effectiveness. Requires targeted development and coaching to reach full potential.`
+                summary: `Shows leadership potential but needs development in key areas. ${escaped ? `Met objectives but` : `Narrowly missed objectives -`} LEAD competencies at ${(leadRatio * 100).toFixed(0)}% of benchmark suggest gaps in leadership effectiveness. Requires targeted development and coaching to reach full potential.`
             };
         }
 
@@ -362,8 +362,8 @@ class ExecutiveSummaryGenerator {
         // If no clear strengths above 80%, find relative strengths
         if (strengths.length === 0) {
             const maxRatio = Math.max(leadRatios.leadership, leadRatios.excellence, leadRatios.agility, leadRatios.determination);
-            if (maxRatio > 0.60) {
-                const dimension = Object.entries(leadRatios).find(([k, v]) => v === maxRatio)[0];
+            if (maxRatio >= 0.60) {
+                const dimension = Object.entries(leadRatios).find(([_, v]) => v === maxRatio)[0];
                 const dimensionName = dimension.charAt(0).toUpperCase() + dimension.slice(1);
                 strengths.push({
                     title: `Relative Strength in ${dimensionName}`,
@@ -462,7 +462,7 @@ class ExecutiveSummaryGenerator {
             risks.push({
                 icon: '⚠️',
                 title: 'CAREER RISK: Gut-Feel Decision Making',
-                detail: 'Zero information requests across all scenarios. Making £10M+ decisions on instinct rather than evidence is career-limiting at senior levels. This pattern will eventually lead to a major error.'
+                detail: `Zero information requests across all scenarios. Making £10M+ decisions on instinct rather than evidence is career-limiting at senior levels. This pattern will eventually lead to a major error.`
             });
         }
 
@@ -570,7 +570,7 @@ class ExecutiveSummaryGenerator {
         if (escaped || avgLEAD >= 0.50) {
             return {
                 status: 'NOT READY - DEVELOPMENT REQUIRED',
-                rationale: `Needs significant development before promotion consideration. ${careerRisks.length > 0 ? "Has identified career risks that must be addressed." : "Gap between current capability and next-level requirements is substantial."} Focus on current role excellence and targeted development for 18-24 months before reassessment.`,
+                rationale: 'Needs significant development before promotion consideration. ${careerRisks.length > 0 ? "Has identified career risks that must be addressed." : "Gap between current capability and next-level requirements is substantial."} Focus on current role excellence and targeted development for 18-24 months before reassessment.',
                 conditions: 'Complete development plan, demonstrate sustained improvement, retake assessment'
             };
         }
@@ -598,22 +598,22 @@ class ExecutiveSummaryGenerator {
         if (dimensionName === 'excellence' && dimensionRatio < 0.60) {
             actions.push({
                 action: 'PRIORITY 1: Develop Evidence-Based Decision Making',
-                detail: 'Before your next 3 major decisions, ask: "What data would make me 90% confident in this choice?" Seek 2-3 sources of information before deciding. Track: Did additional data change your decision?'
+                detail: `Before your next 3 major decisions, ask: "What data would make me 90% confident in this choice?" Seek 2-3 sources of information before deciding. Track: Did additional data change your decision?`
             });
         } else if (dimensionName === 'leadership' && dimensionRatio < 0.60) {
             actions.push({
                 action: 'PRIORITY 1: Expand Leadership Style Repertoire',
-                detail: 'Identify your 2 least-used styles from: Authoritative, Democratic, Coaching, Pacesetting, Affiliative, Coercive. Practice each deliberately in next 4 weeks. Seek feedback: "Did my approach feel different today?"'
+                detail: `Identify your 2 least-used styles from: Authoritative, Democratic, Coaching, Pacesetting, Affiliative, Coercive. Practice each deliberately in next 4 weeks. Seek feedback: "Did my approach feel different today?"`
             });
         } else if (dimensionName === 'agility' && dimensionRatio < 0.60) {
             actions.push({
                 action: 'PRIORITY 1: Build Comfort with Ambiguity',
-                detail: 'When facing uncertainty, resist urge to decide immediately. Spend 24 hours gathering diverse perspectives. Practice: "I don\'t know yet, but here\'s how I\'ll figure it out." Read: "Thinking in Bets" by Annie Duke.'
+                detail: `When facing uncertainty, resist urge to decide immediately. Spend 24 hours gathering diverse perspectives. Practice: "I don\'t know yet, but here\'s how I\'ll figure it out." Read: "Thinking in Bets" by Annie Duke.`
             });
         } else if (dimensionName === 'determination' && dimensionRatio < 0.60) {
             actions.push({
                 action: 'PRIORITY 1: Strengthen Growth Orientation',
-                detail: 'Set one ambitious "stretch goal" for next quarter (20% above comfortable target). When facing obstacles, ask: "What would I do if failure wasn\'t an option?" Track persistence through setbacks.'
+                detail: `Set one ambitious "stretch goal" for next quarter (20% above comfortable target). When facing obstacles, ask: "What would I do if failure wasn\'t an option?" Track persistence through setbacks.`
             });
         }
 
@@ -629,21 +629,21 @@ class ExecutiveSummaryGenerator {
         // Priority 3: 360° feedback
         actions.push({
             action: 'Request Structured 360° Feedback',
-            detail: 'Ask 5 direct reports, 3 peers, and your manager: "Rate me 1-10 on: (1) Data-driven decisions, (2) Style adaptability, (3) Comfort with ambiguity, (4) Drive for results." Compare to self-assessment. Identify blind spots.'
+            detail: `Ask 5 direct reports, 3 peers, and your manager: "Rate me 1-10 on: (1) Data-driven decisions, (2) Style adaptability, (3) Comfort with ambiguity, (4) Drive for results." Compare to self-assessment. Identify blind spots.`
         });
 
         // Priority 4: Specific behavior change based on gaps
         if (infoRequests === 0) {
             actions.push({
                 action: 'Implement "Data Check" Habit',
-                detail: 'For next 30 days, before ANY decision >£10k or affecting >5 people, pause and gather ONE additional data point you don\'t currently have. Build the habit of evidence-seeking.'
+                detail: `For next 30 days, before ANY decision >£10k or affecting >5 people, pause and gather ONE additional data point you don\'t currently have. Build the habit of evidence-seeking.`
             });
         }
 
         if (this.gameState.morale < 65) {
             actions.push({
                 action: 'Increase People-Centered Touchpoints',
-                detail: 'Schedule weekly 1-on-1s with direct reports (30 min each). Use 70/30 rule: 70% listening, 30% directing. Ask: "What\'s blocking your success?" and "How can I help?" Track morale shifts.'
+                detail: `Schedule weekly 1-on-1s with direct reports (30 min each). Use 70/30 rule: 70% listening, 30% directing. Ask: "What\'s blocking your success?" and "How can I help?" Track morale shifts.`
             });
         }
 
@@ -858,7 +858,7 @@ class ExecutiveSummaryGenerator {
         <p><strong>Jung Personality Model Validation:</strong></p>
         <p>${jungAlignment}</p>
   
-        <p style="margin-top: 10px;"><strong>Goleman's 6 Styles Validation:</strong></p>
+        <p style="margin-top: 10px;"><strong>Goleman's Six Styles Validation:</strong></p>
         <p>${golemanAlignment}</p>
   
         <p style="margin-top: 10px;"><strong>Self-Awareness Assessment:</strong></p>
@@ -924,7 +924,7 @@ class ExecutiveSummaryGenerator {
 
         if (selfID === actualDominant) {
             return `✅ Strong self-awareness - You identified as ${this.gameState.selfIdentifiedStyle} and used it ${selfPct}% (your dominant style). This self-perception/behavior alignment suggests you understand how others experience your leadership. Self-aware leaders are more coachable and develop faster.`;
-        } else if (selfPct > 25) {
+        } else if (selfPct >= 25) {
             return `⚠️ Moderate self-awareness gap - You identified as ${this.gameState.selfIdentifiedStyle} (${selfPct}% usage) but your dominant style was actually ${actualDominant} (${actual[actualDominant]}%). Small gap suggests minor blind spot - you may not fully recognize your behavioral patterns. Recommend 360° feedback to calibrate self-perception.`;
         } else {
             return `❌ Significant self-awareness gap - You identified as ${this.gameState.selfIdentifiedStyle} but only used it ${selfPct}% of the time. Actual dominant style: ${actualDominant} (${actual[actualDominant]}%). This suggests you don't recognize how others experience your leadership. CRITICAL: lack of self-awareness is #1 predictor of derailment in senior leaders. URGENTLY recommend 360° feedback and executive coaching.`;
@@ -963,7 +963,7 @@ class ExecutiveSummaryGenerator {
             <tr>
                 <td>Excellence (Evidence-Based)</td>
                 <td>${(this.calculateLEADRatios().excellence * 100).toFixed(0)}%</td>
-                <td>55%</td>
+                <td>51%</td>
                 <td>72%</td>
                 <td>88%</td>
             </tr>
@@ -976,7 +976,7 @@ class ExecutiveSummaryGenerator {
             </tr>
         </table>
   
-        <p style="font-size: 9pt; color: #666; margin-top: 10px;"><em>* Benchmarks based on aggregated simulation data and leadership research. Industry benchmarks from Goleman (2009), CCL (2022), and DDI Global Leadership Forecast (2023).</em></p>
+        <p style="font-size: 9pt; color: #666; margin-top: 10px;"><em>* Benchmarks based on aggregated simulation data and leadership research. Industry benchmarks from Goleman (2000), CCL (2022), and DDI Global Leadership Forecast (2023).</em></p>
     </div>
         `;
     }

@@ -338,7 +338,7 @@ class CultureAnalysis {
         const criticalCount = criticalGaps.filter(g => g).length;
 
         if (criticalCount >= 3) return 'NEEDS IMMEDIATE ATTENTION';
-        if (criticalCount === 2) return 'BELOW BENCHMARK';
+        if (criticalCount >= 2) return 'BELOW BENCHMARK';
         if (criticalCount === 1) return 'APPROACHING BENCHMARK';
         if (gaps.growth >= 0 && gaps.morale >= 0 && gaps.attrition <= 0) return 'AT BENCHMARK';
         return 'ABOVE BENCHMARK';
@@ -349,8 +349,8 @@ class CultureAnalysis {
         const factors = [
             analysis.metrics.avgGrowth >= 28 ? 20 : analysis.metrics.avgGrowth >= 22 ? 10 : 0,
             analysis.metrics.avgMorale >= 80 ? 20 : analysis.metrics.avgMorale >= 70 ? 10 : 0,
-            analysis.metrics.avgAttrition < 8 ? 20 : analysis.metrics.avgAttrition < 12 ? 10 : 0,
-            analysis.leadership.diversity > 0.75 ? 20 : analysis.leadership.diversity > 0.6 ? 10 : 0,
+            analysis.metrics.avgAttrition <= 8 ? 20 : analysis.metrics.avgAttrition <= 12 ? 10 : 0,
+            analysis.leadership.diversity >= 0.75 ? 20 : analysis.leadership.diversity >= 0.6 ? 10 : 0,
             analysis.metrics.optimalRate >= 50 ? 20 : analysis.metrics.optimalRate >= 30 ? 10 : 0
         ];
 
@@ -508,7 +508,7 @@ class CultureAnalysis {
     }
 
     generateCulturalRecommendations(analysis) {
-        const { weaknesses, culturalRisks, comparisonHighPerformance, leadership, metrics } = analysis;
+        const { weaknesses, culturalRisks, comparisonToHighPerformance, leadership, metrics } = analysis;
 
         // Priority 1: Critical gaps
         if (metrics.avgAttrition >= 15 || culturalRisks.some(r => r.severity === 'CRITICAL')) {
@@ -538,7 +538,7 @@ class CultureAnalysis {
                     'Develop context-based leadership playbook: "When to use which style"'
                 ],
                 timeline: 'Q1-Q2 (3-6 months)',
-                expectedImpact: `Increase leadership diversity index from ${(leadership.diversity * 100).toFixed(0)}% to 75%+`
+                expectedImpact: 'Increase leadership diversity index from ' + (leadership.diversity * 100).toFixed(0) + '% to 75%+'
             });
         }
 
@@ -554,7 +554,7 @@ class CultureAnalysis {
                     'Bring in external business coach to work with underperforming leaders'
                 ],
                 timeline: 'Q2-Q3 (6-9 months)',
-                expectedImpact: 'Improve commercial growth trajectory and strategic decision quality'
+                expectedImpact: 'Close ' + (20 - metrics.avgGrowth).toFixed(1) + '% growth gap, improve strategic confidence' 
             });
         }
 
