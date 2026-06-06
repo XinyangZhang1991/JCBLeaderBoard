@@ -1430,7 +1430,7 @@ class ScoringEngine {
                 // WARN if growth is on the low end of viable (8-10%)
                 if (growth >= 8 && growth < 10) {
                     feedback += `<br><br>⚠️ <em>Note: Your ${growth.toFixed(1)}% growth is at the minimum threshold for organizational viability. `;
-                    feedback += `While investing in capability is valuable, ensure you're generating sufficient revenue to sustain the team you\'re developing.</em>`;
+                    feedback += `While investing in capability is valuable, ensure you're generating sufficient revenue to sustain the team you're developing.</em>`;
                 }
         } else if (growth >= 28) {
             feedback += `You achieved exceptional growth (${growth.toFixed(1)}%) while maintaining team performance. `;
@@ -1673,7 +1673,7 @@ class ScoringEngine {
         if (leadRatios.leadership >= 0.80 && leadRatios.determination < 0.60) {
             feedback += `✅ This matches your profile - exceptional people development but could be more action-oriented when urgency demands it.`;
         } else if (leadRatios.determination >= 0.80) {
-            feedback += `Interestingly, your Determination score is higher than typical for GREEN - you\'ve developed urgency beyond your natural preference.`;
+            feedback += `Interestingly, your Determination score is higher than typical for GREEN - you've developed urgency beyond your natural preference.`;
         }
     } else if (results.personalityColor === 'BALANCED') {
         feedback += `<br><br><strong>Balanced Leadership Profile:</strong> You don't show a strong preference for any single Jung temperament. `;
@@ -2301,9 +2301,9 @@ calculateNumericalScore(gameState, results) {
   return finalScore;
 }
 
-// ==============================================
+// ============================================
 // ROUND 2 SCENARIO SCORING METHODS
-// ==============================================
+// ============================================
 
 scoreMergerIntegration(scenario, decision, impact, gameState) {
   // CRITICAL FIX: Award Excellence points for info requests FIRST

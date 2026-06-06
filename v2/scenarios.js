@@ -128,7 +128,7 @@ scoreTemplates: {
       type: 'choice',
       options: [
         { text: 'Acknowledge complexity and present both viewpoints honestly', style: 'affiliative', color: 'GREEN' },
-        { text: 'Synthesize into single narrative: "Core customers happy, growth segments need attention"', style: 'npacesetting', color: 'BLUE' },
+        { text: 'Synthesize into single narrative: "Core customers happy, growth segments need attention"', style: 'pacesetting', color: 'BLUE' },
         { text: 'Frame as strategic opportunity: satisfaction high + complaints rising = growth opportunity', style: 'authoritative', color: 'BLUE' },
         { text: 'Request more time to investigate fully before presenting', style: 'affiliative', color: 'YELLOW' }
       ]
@@ -453,7 +453,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action. Your st
   subtitle: 'Month 9 - Q3',
   month: 9,
   quarter: 3,
-  description: `Your most senior team member (20 years at JCB) is underperforming. Their results are 25% below target for two quarters. They're defensive when given feedback and resistant to change, but they're widely respected and well-liked. Their team\'s morale is starting to drop. This must be addressed.`,
+  description: `Your most senior team member (20 years at JCB) is underperforming. Their results are 25% below target for two quarters. They\'re defensive when given feedback and resistant to change, but they're widely respected and well-liked. Their team\'s morale is starting to drop. This must be addressed.`,
   
   decisions: [
     {

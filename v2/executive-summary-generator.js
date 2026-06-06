@@ -233,7 +233,7 @@ class ExecutiveSummaryGenerator {
 
     <div class="footer">
         <p><strong>JCB Leadership Development Programme</strong> | Assessment Version 2.0</p>
-        <p><em>This assessment is based on simulation performance and should be considered alongside 360° feedback, business results, and manager assessment.</p>
+        <p>This assessment is based on simulation performance and should be considered alongside 360° feedback, business results, and manager assessment.</p>
         <p><em>See detailed appendix for full analysis, decision history, and psychometric validation.</em></p>
     </div>
 </body>
@@ -241,7 +241,7 @@ class ExecutiveSummaryGenerator {
         `;
     }
 
-   renderCareerRisks(careerRisks) {
+    renderCareerRisks(careerRisks) {
         return `
     <div class="section">
         <div class="section-title">⚠️ CAREER RISKS IDENTIFIED</div>
@@ -282,7 +282,7 @@ class ExecutiveSummaryGenerator {
         }
 
         // Developing: Escaped but Lower LEAD OR Failed narrowly
-        if (escaped || (leadRatio >= 0.50 && growth >= 15)) { 
+        if (escaped || (leadRatio >= 0.50 && growth >= 15)) {
             return {
                 level: 'DEVELOPING',
                 color: '#fff3cd',
@@ -392,7 +392,7 @@ class ExecutiveSummaryGenerator {
         } else if (leadRatios.excellence < 0.60) {
             areas.push({
                 title: 'Decision-Making Rigor',
-                detail: `Excellence at ${(leadRatios.excellence * 100).toFixed(0)}% - Insufficient information-seeking (${infoRequests} requests). Need to develop habit of asking "What data would make me 90% confident?" before major decisions.`
+                detail: `Excellence at ${(leadRatios.excellence * 100).toFixed(0)}% - Insufficient information-seeking (${infoRequests} requests). Need to develop habit of asking "What data would make me 90% confident?"  before major decisions.`
             });
         }
 
@@ -407,7 +407,7 @@ class ExecutiveSummaryGenerator {
                 detail: `${dominantStyleName.charAt(0).toUpperCase() + dominantStyleName.slice(1)} used ${maxStyle}% of time (max 70%) - Even strengths become weaknesses when overplayed. Need to develop complementary styles.`
             });
         }
-        
+
         if (leadRatios.agility < 0.30) {
             areas.push({
                 title: '⚠️ CRITICAL: Struggles with Ambiguity',
@@ -416,7 +416,7 @@ class ExecutiveSummaryGenerator {
         } else if (leadRatios.agility < 0.60) {
             areas.push({
                 title: 'Adaptability in Uncertainty',
-                detail: `Agility at ${(leadRatios.agility * 100).toFixed(0)}% - Room to improve how you handle ambiguous situations and changing priorities. Need to become more comfortable with "gray areas."`});
+                detail: `Agility at ${(leadRatios.agility * 100).toFixed(0)}% - Room to improve how you handle ambiguous situations and changing priorities. Need to become more comfortable with "gray areas."` });
         }
 
         if (leadRatios.determination < 0.30) {
@@ -608,12 +608,12 @@ class ExecutiveSummaryGenerator {
         } else if (dimensionName === 'agility' && dimensionRatio < 0.60) {
             actions.push({
                 action: 'PRIORITY 1: Build Comfort with Ambiguity',
-                detail: `When facing uncertainty, resist urge to decide immediately. Spend 24 hours gathering diverse perspectives. Practice: "I don\'t know yet, but here\'s how I\'ll figure it out." Read: "Thinking in Bets" by Annie Duke.`
+                detail: `When facing uncertainty, resist urge to decide immediately. Spend 24 hours gathering diverse perspectives. Practice: "I don't know yet, but here's how I'll figure it out." Read: "Thinking in Bets" by Annie Duke.`
             });
         } else if (dimensionName === 'determination' && dimensionRatio < 0.60) {
             actions.push({
                 action: 'PRIORITY 1: Strengthen Growth Orientation',
-                detail: `Set one ambitious "stretch goal" for next quarter (20% above comfortable target). When facing obstacles, ask: "What would I do if failure wasn\'t an option?" Track persistence through setbacks.`
+                detail: `Set one ambitious "stretch goal" for next quarter (20% above comfortable target). When facing obstacles, ask: "What would I do if failure wasn't an option?" Track persistence through setbacks.`
             });
         }
 
@@ -636,21 +636,21 @@ class ExecutiveSummaryGenerator {
         if (infoRequests === 0) {
             actions.push({
                 action: 'Implement "Data Check" Habit',
-                detail: `For next 30 days, before ANY decision >£10k or affecting >5 people, pause and gather ONE additional data point you don\'t currently have. Build the habit of evidence-seeking.`
+                detail: `For next 30 days, before ANY decision >£10k or affecting >5 people, pause and gather ONE additional data point you don't currently have. Build the habit of evidence-seeking.`
             });
         }
 
         if (this.gameState.morale < 65) {
             actions.push({
                 action: 'Increase People-Centered Touchpoints',
-                detail: `Schedule weekly 1-on-1s with direct reports (30 min each). Use 70/30 rule: 70% listening, 30% directing. Ask: "What\'s blocking your success?" and "How can I help?" Track morale shifts.`
+                detail: `Schedule weekly 1-on-1s with direct reports (30 min each). Use 70/30 rule: 70% listening, 30% directing. Ask: "What's blocking your success?" and "How can I help?" Track morale shifts.`
             });
         }
 
         // Priority 5: Retake assessment
         actions.push({
             action: '90-Day Follow-Up: Retake Assessment',
-            detail: 'After implementing above actions for 90 days, retake this simulation. Compare scores. Target: +15% improvement in your lowest LEAD dimension. Track: Did specific actions translate to behavior change?'
+            detail: `After implementing above actions for 90 days, retake this simulation. Compare scores. Target: +15% improvement in your lowest LEAD dimension. Track: Did specific actions translate to behavior change?`
         });
 
         return actions.slice(0, 5); // Top 5 actions maximum
@@ -765,7 +765,7 @@ class ExecutiveSummaryGenerator {
         <div style="font-size: 18pt; font-weight: bold;">DETAILED ANALYSIS APPENDIX</div>
         <div style="font-size: 10pt; color: #666;">Player: ${this.playerData.name} | Date: ${new Date().toLocaleDateString('en-GB')}</div>
     </div>
-    
+
     ${this.generateLEADAnalysis()}
     ${this.generateDecisionHistory()}
     ${this.generatePsychometricValidation()}
@@ -814,7 +814,7 @@ class ExecutiveSummaryGenerator {
         `;
     }
 
-   getScoreColor(ratio) {
+    getScoreColor(ratio) {
         if (ratio >= 0.85) return '#2e7d32';
         if (ratio >= 0.70) return '#388e3c';
         if (ratio >= 0.50) return '#f57c00';
@@ -857,10 +857,10 @@ class ExecutiveSummaryGenerator {
 
         <p><strong>Jung Personality Model Validation:</strong></p>
         <p>${jungAlignment}</p>
-  
+
         <p style="margin-top: 10px;"><strong>Goleman's Six Styles Validation:</strong></p>
         <p>${golemanAlignment}</p>
-  
+
         <p style="margin-top: 10px;"><strong>Self-Awareness Assessment:</strong></p>
         <p>${selfAwarenessCheck}</p>
 
@@ -903,7 +903,7 @@ class ExecutiveSummaryGenerator {
         const highMatch = leadRatios[pattern.high] >= 0.65;
         const lowMatch = leadRatios[pattern.low] < 0.65;
 
-        if (highMatch && lowMatch) {        
+        if (highMatch && lowMatch) {
             return `✅ Strong Jung model alignment - Your ${jungColor} personality shows expected pattern: high ${pattern.high} (${(leadRatios[pattern.high] * 100).toFixed(0)}%), lower ${pattern.low} (${(leadRatios[pattern.low] * 100).toFixed(0)}%). This consistency suggests you're playing to natural strengths but may be over-indexed on comfort zone.`;
         } else if (highMatch) {
             return `⚠️ Partial Jung alignment - Strong ${pattern.high} matches ${jungColor} profile, but ${pattern.low} higher than expected. You may have developed beyond natural temperament or assessment captured atypical performance. Consider: Is this your authentic style or adapting to role demands?`;
@@ -927,7 +927,7 @@ class ExecutiveSummaryGenerator {
         } else if (selfPct >= 25) {
             return `⚠️ Moderate self-awareness gap - You identified as ${this.gameState.selfIdentifiedStyle} (${selfPct}% usage) but your dominant style was actually ${actualDominant} (${actual[actualDominant]}%). Small gap suggests minor blind spot - you may not fully recognize your behavioral patterns. Recommend 360° feedback to calibrate self-perception.`;
         } else {
-            return `❌ Significant self-awareness gap - You identified as ${this.gameState.selfIdentifiedStyle} but only used it ${selfPct}% of the time. Actual dominant style: ${actualDominant} (${actual[actualDominant]}%). This suggests you don't recognize how others experience your leadership. CRITICAL: lack of self-awareness is #1 predictor of derailment in senior leaders. URGENTLY recommend 360° feedback and executive coaching.`;
+            return `❌ Significant self-awareness gap - You identified as ${this.gameState.selfIdentifiedStyle} but only used it ${selfPct}% of the time. Actual dominant style: ${actualDominant} (${actual[actualDominant]}%). This suggests you don't recognize how others experience your leadership. CRITICAL: Lack of self-awareness is #1 predictor of derailment in senior leaders. URGENTLY recommend 360° feedback and executive coaching.`;
         }
     }
 
@@ -937,7 +937,7 @@ class ExecutiveSummaryGenerator {
         return `
     <div class="section">
         <div class="section-title">COMPARISON TO BENCHMARKS</div>
-  
+
         <table>
             <tr>
                 <th>Metric</th>
@@ -975,7 +975,7 @@ class ExecutiveSummaryGenerator {
                 <td>35% max</td>
             </tr>
         </table>
-  
+
         <p style="font-size: 9pt; color: #666; margin-top: 10px;"><em>* Benchmarks based on aggregated simulation data and leadership research. Industry benchmarks from Goleman (2000), CCL (2022), and DDI Global Leadership Forecast (2023).</em></p>
     </div>
         `;
@@ -987,7 +987,7 @@ class ExecutiveSummaryGenerator {
         return `
     <div class="section">
         <div class="section-title">DETAILED 90-DAY DEVELOPMENT PLAN</div>
-  
+
         ${actions.map((action, idx) => `
             <div style="margin: 15px 0; page-break-inside: avoid;">
                 <p style="font-weight: bold; margin-bottom: 5px;">${idx + 1}. ${action.action}</p>

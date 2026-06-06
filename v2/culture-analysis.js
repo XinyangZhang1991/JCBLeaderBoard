@@ -186,16 +186,16 @@ class CultureAnalysis {
 
         data.forEach(player => {
             if (!player.decisions) return;
-      
+
             player.decisions.forEach(decision => {
                 // Count aggressive decisions
                 if (decision.stylesUsed) {
-                    if (decision.stylesUsed.includes('pacesetting') || 
+                    if (decision.stylesUsed.includes('pacesetting') ||
                         decision.stylesUsed.includes('coercive')) {
                         totalAggressiveDecisions++;
                     }
-                    if (decision.stylesUsed.includes('democratic') || 
-                        decision.stylesUsed.includes('coaching') || 
+                    if (decision.stylesUsed.includes('democratic') ||
+                        decision.stylesUsed.includes('coaching') ||
                         decision.stylesUsed.includes('affiliative')) {
                         totalCollaborativeDecisions++;
                     }
@@ -548,13 +548,13 @@ class CultureAnalysis {
                 priority: 3,
                 title: 'Strengthen Commercial Acumen',
                 actions: [
-                    'Implement strategic decision-making training (e.g., "Playing to win" framework)',
+                    'Implement strategic decision-making training (e.g., "Playing to Win" framework)',
                     'Create cross-functional teams to break down silos',
                     'Establish quarterly "strategic choices" reviews - force hard decisions',
                     'Bring in external business coach to work with underperforming leaders'
                 ],
                 timeline: 'Q2-Q3 (6-9 months)',
-                expectedImpact: 'Close ' + (20 - metrics.avgGrowth).toFixed(1) + '% growth gap, improve strategic confidence' 
+                expectedImpact: 'Close ' + (20 - metrics.avgGrowth).toFixed(1) + '% growth gap, improve strategic confidence'
             });
         }
 
@@ -592,7 +592,7 @@ class CultureAnalysis {
 
         // Sort by priority
         analysis.recommendations.sort((a, b) => a.priority - b.priority);
-    }    
+    }
 }
 
 // Make available to game engine

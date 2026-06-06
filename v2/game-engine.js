@@ -12,8 +12,8 @@ class GameEngine {
             // Visible metrics
             growth: 0,
             profitMargin: 20,
-            morale: 65, // UPDATED 2026-05-17: Reduced from 75 to 65 (inherited team with challenges)
-            attrition: 10, // UPDATED 2026-05-17: Increased from 5 to 10 (realistic industry baseline)
+            morale: 65,  // UPDATED 2026-05-17: Reduced from 75 to 65 (inherited team with challenges)
+            attrition: 10,  // UPDATED 2026-05-17: Increased from 5 to 10 (realistic industry baseline)
 
             // Hidden tracking
             leadershipStyles: {
@@ -84,7 +84,7 @@ class GameEngine {
 
             // LEAD total
             const leadTotal = (player.leadership || 0) + (player.excellence || 0) +
-                              (player.agility || 0) + (player.determination || 0);
+                             (player.agility || 0) + (player.determination || 0);
 
             return `
             <div class="leaderboard-item leaderboard-item-compact">
@@ -189,29 +189,29 @@ class GameEngine {
     }
 
     validateAndStartBriefing() {
-    const nameInput = document.getElementById('player-name');
-    const consentCheckbox = document.getElementById('consent-checkbox');
+        const nameInput = document.getElementById('player-name');
+        const consentCheckbox = document.getElementById('consent-checkbox');
 
-    if (!nameInput.value.trim()) {
-        alert('Please enter your name');
-        return;
+        if (!nameInput.value.trim()) {
+            alert('Please enter your name');
+            return;
+        }
+
+        if (!this.state.selfIdentifiedStyle) {
+            alert('Please select your primary leadership style');
+            return;
+        }
+
+        if (!consentCheckbox.checked) {
+            alert('Please consent to public results display');
+            return;
+        }
+
+        this.state.playerName = nameInput.value.trim();
+        this.state.consentGiven = true;
+
+        this.startBriefing();
     }
-
-    if (!this.state.selfIdentifiedStyle) {
-        alert('Please select your primary leadership style');
-        return;
-    }
-
-    if (!consentCheckbox.checked) {
-        alert('Please consent to public results display');
-        return;
-    }
-
-    this.state.playerName = nameInput.value.trim();
-    this.state.consentGiven = true;
-
-    this.startBriefing();
-}
 
     startBriefing() {
         this.showScreen('briefing-screen');
@@ -236,7 +236,7 @@ class GameEngine {
                 this.startGameplay();
             }
         }, 1000);
-    
+
         // Store interval for skip function
         this.briefingInterval = countdownInterval;
     }
@@ -324,13 +324,13 @@ class GameEngine {
 
                 // Adjust root cause options
                 scenario.decisions[0].options = [
-                    { text: 'Proactive career development conversations with key performers', impact: 'external', style: 'coaching', color: 'GREEN' },
-                    { text: 'Review compensation to ensure competitiveness', impact: 'compensation', style: 'authoritative', color: 'BLUE' },
+                    { text: 'Proactive career development conversations with key performers', impact: 'development', style: 'coaching', color: 'GREEN' },
+                    { text: 'Review compensation to ensure competitiveness', impact: 'external', style: 'authoritative', color: 'BLUE' },
                     { text: 'Create more stretch assignments and growth opportunities', impact: 'development', style: 'coaching', color: 'GREEN' }
                 ];
             } else if (state.morale < moraleThreshold && state.attrition >= attritionThreshold) {
                 // Poor performance - keep original crisis scenario but make it clear
-                scenario.description = `Your top-performing regional sales manager just resigned, citing "unsustainable pressure and lack of support." Two other high-performers are rumored to be interviewing elsewhere. Team attrition is now at ${Math.round(state.attrition)}% (healthy is <10%) and morale is ${Math.round(state.morale)}%) (concerning). You've hit ${state.growth.toFixed(1)}% growth but at what cost? An anonymous employee survey reveals burnout and feeling undervalued.`;
+                scenario.description = `Your top-performing regional sales manager just resigned, citing "unsustainable pressure and lack of support." Two other high-performers are rumored to be interviewing elsewhere. Team attrition is now at ${Math.round(state.attrition)}% (healthy is <10%) and morale is ${Math.round(state.morale)}% (concerning). You've hit ${state.growth.toFixed(1)}% growth but at what cost? An anonymous employee survey reveals burnout and feeling undervalued.`;
             } else {
                 // Mixed performance - moderate scenario
                 scenario.description = `A valued regional sales manager has resigned, citing work-life balance concerns. While team morale (${Math.round(state.morale)}%) and attrition (${Math.round(state.attrition)}%) are in acceptable ranges, this departure has raised questions about your leadership approach. How do you respond?`;
@@ -559,19 +559,19 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                         </span>
                     </div>
                     <input type="range"
-                            class="slider"
-                            min="0"
-                            max="${slider.max * 10}"
-                            value="0"
-                            data-decision="${decisionIndex}"
-                            data-slider="${i}"
-                            oninput="game.updateSlider(${decisionIndex}, ${i}, this.value)">
+                           class="slider"
+                           min="0"
+                           max="${slider.max * 10}"
+                           value="0"
+                           data-decision="${decisionIndex}"
+                           data-slider="${i}"
+                           oninput="game.updateSlider(${decisionIndex}, ${i}, this.value)">
                 </div>
             `;
         });
-  
+
         if (sliders[0].budgetConstraint) {
-            html += ` <div class="budget-remaining" id="budget-remaining-${decisionIndex}">
+            html += `<div class="budget-remaining" id="budget-remaining-${decisionIndex}">
                 Budget Remaining: £${sliders[0].budgetConstraint}M
             </div>`;
         }
@@ -606,12 +606,12 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 </div>
                 <div class="timeline-track">
                     <input type="range"
-                            class="slider"
-                            min="0"
-                            max="${options.length - 1}"
-                            value="0"
-                            data-decision="${decisionIndex}"
-                            oninput="game.updateTimeline(${decisionIndex}, this.value, ${options.length})">
+                           class="slider"
+                           min="0"
+                           max="${options.length - 1}"
+                           value="0"
+                           data-decision="${decisionIndex}"
+                           oninput="game.updateTimeline(${decisionIndex}, this.value, ${options.length})">
                 </div>
             </div>
         `;
@@ -664,7 +664,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
         const actualValue = (value / 10).toFixed(1);
         document.getElementById(`slider-value-${decisionIndex}-${sliderIndex}`).textContent =
-            `£${actualValue}M` ;
+            `£${actualValue}M`;
 
         // Update budget if constraint exists
         this.updateBudgetRemaining(decisionIndex);
@@ -719,7 +719,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         return false;
     }
 
-    handleDrop(e) { 
+    handleDrop(e) {
         e.stopPropagation();
         e.preventDefault();
 
@@ -760,7 +760,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         if (!scenario.additionalInfo) return;
 
         const modal = document.getElementById('info-modal');
-        
+
         // Reset modal to original structure
         const modalContent = modal.querySelector('.modal-content');
         modalContent.innerHTML = `
@@ -1051,7 +1051,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
             scenario.decisions.forEach((decisionDef, index) => {
                 const choice = decision.choices[index];
-            
+
                 if (decisionDef.type === 'choice' && choice.index >= 0) {
                     const option = decisionDef.options[choice.index];
                     if (option) {
@@ -1165,8 +1165,8 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             // Profit margin should have reasonable bounds (can't be <0 or >100)
             this.state.profitMargin = Math.max(0, Math.min(100, this.state.profitMargin));
         }
-    }    
-     
+    }
+
     applyLEADMultipliers() {
         // CRITICAL FIX: LEAD competencies should amplify business outcomes
         // AND poor LEAD competencies should penalize outcomes (unsustainable approaches)
@@ -1175,10 +1175,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         // BENCHMARKS UPDATED 2026-05-16: Set to realistic values based on actual maximum achievable points
         // These represent "good but not perfect" performance (~70% of maximum per scenario)
         const benchmarks = {
-            leadership: 25,  // Max ~35 per scenario, benchmark = 70% of max
-            excellence: 35,   // Max ~50 per scenario, benchmark = 70% of max
-            agility: 15,     // Max ~22 per scenario, benchmark = 70% of max
-            determination: 20 // Max ~28 per scenario, benchmark = 70% of max
+            leadership: 25,    // Max ~35 per scenario, benchmark = 70% of max
+            excellence: 35,    // Max ~50 per scenario, benchmark = 70% of max
+            agility: 15,       // Max ~22 per scenario, benchmark = 70% of max
+            determination: 20  // Max ~28 per scenario, benchmark = 70% of max
         };
         const avgScenarios = 6;
 
@@ -1296,7 +1296,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             const growthBefore = this.state.growth;
             this.state.growth = this.state.growth * teamHealthMultiplier;
             console.log(`✅ EXCEPTIONAL TEAM HEALTH: ${teamHealthMultiplier}x growth multiplier (+${(this.state.growth - growthBefore).toFixed(1)}% growth)`);
-            console.log(` Morale: ${cappedMorale}% (≥85%), Attrition: ${cappedAttrition.toFixed(1)}% (<8%)`);
+            console.log(`   Morale: ${cappedMorale}% (≥85%), Attrition: ${cappedAttrition.toFixed(1)}% (<8%)`);
         } else if (cappedMorale >= 75 && cappedAttrition < 12) {
             // Healthy teams deliver 15% more results
             const teamHealthMultiplier = 1.15;
@@ -1328,7 +1328,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             const growthBefore = this.state.growth;
             this.state.growth = this.state.growth * crisisMultiplier;
             console.log(`❌ TEAM COLLAPSE: ${crisisMultiplier}x growth multiplier (-${(growthBefore - this.state.growth).toFixed(1)}% growth)`);
-            console.log(` Morale: ${cappedMorale}% (<40%), Attrition: ${cappedAttrition.toFixed(1)}% (>40%)`);
+            console.log(`   Morale: ${cappedMorale}% (<40%), Attrition: ${cappedAttrition.toFixed(1)}% (>40%)`);
         }
 
         // CRITICAL FIX #3: Morale Cap Waste → Productivity Bonus
@@ -1533,7 +1533,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 <h4>YOUR LEADERSHIP COLOR: ${results.personalityColor}</h4>
                 <p>${results.personalityDescription}</p>
             </div>
-       </div>`;
+        </div>`;
 
         return html;
     }
@@ -1549,12 +1549,12 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     showFeedback(results) {
         const feedbackContainer = document.getElementById('results-feedback');
 
-         // Extract critical improvement
+        // Extract critical improvement
         const criticalImprovement = this.extractCriticalImprovement(results);
 
         feedbackContainer.innerHTML = `
             <div class="most-important-improvement-highlight" style="background: linear-gradient(135deg, rgba(255, 203, 0, 0.2) 0%, rgba(255, 203, 0, 0.05) 100%); border: 3px solid var(--jcb-yellow); border-radius: 12px; padding: 25px; margin-bottom: 30px; text-align: center;">
-                <div style="font-size: 14px; color: rgba(255, 255, 255, 0.7); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">Your #1 Development Priority:</div>
+                <div style="font-size: 14px; color: rgba(255, 255, 255, 0.7); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">Your #1 Development Priority</div>
                 <h2 style="color: var(--jcb-yellow); margin: 0 0 15px 0; font-size: 24px;">🎯 MOST IMPORTANT IMPROVEMENT</h2>
                 <div style="font-size: 18px; line-height: 1.6; color: white;">${criticalImprovement}</div>
             </div>
@@ -1630,9 +1630,9 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         // (495 assumed requesting ALL info in ALL scenarios, which is analysis paralysis)
         const maximums = {
             leadership: 267,      // True maximum from optimal choices across 6 scenarios
-            excellence: 300,       // Recalibrated - realistic info requests (not exhaustive)
-            agility: 155,          // True maximum from optimal choices across 6 scenarios
-            determination: 212     // True maximum from optimal choices across 6 scenarios
+            excellence: 300,      // Recalibrated - realistic info requests (not exhaustive)
+            agility: 155,         // True maximum from optimal choices across 6 scenarios
+            determination: 212    // True maximum from optimal choices across 6 scenarios
         };
 
         // Track cumulative totals
@@ -1666,7 +1666,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             `;
         });
 
-        html +='</div>';
+        html += '</div>';
 
         // Overall assessment
         const totalScore = Object.values(cumulativeScores).reduce((a, b) => a + b, 0);
@@ -1678,7 +1678,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         html += `<span style="color: #00D084;">${overallPercentage}% of maximum achievable</span>`;
         html += '</div>';
 
-        html += `</div>`;
+        html += '</div>';
         return html;
     }
 
@@ -1688,7 +1688,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         const feedbackHTML = results.feedback;
 
         // Look for the Most Important Improvement section
-        const improvementMatch = feedbackHTML.match(/🎯 Most Important Improvement:<\/h4>[\s\S]*?<p[^>]*>(.*?)<\/p>/i);
+        const improvementMatch = feedbackHTML.match(/🎯 Most Important Improvement:<\/h4>[\s\S]*?<p[^>]*>(.*?)<\/p>/);
 
         if (improvementMatch && improvementMatch[1]) {
             // Remove HTML tags and get first sentence
@@ -1698,8 +1698,8 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 .trim();
 
             // BUGFIX 2026-05-17: Get first sentence (period not followed by digit to avoid truncating decimals like "11.2%")
-            // Old regex /^[^.]+\./` would match "but 11." and cut off at decimal point
-            // New regex /^.+?\.(?!\d)/` uses negative lookahead to skip decimals
+            // Old regex /^[^.]+\./ would match "but 11." and cut off at decimal point
+            // New regex /^.+?\.(?!\d)/ uses negative lookahead to skip decimals
             const firstSentence = improvement.match(/^.+?\.(?!\d)/);
             if (firstSentence) {
                 return firstSentence[0];
@@ -1793,7 +1793,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         // Build comprehensive detailed view
         let detailedView = '<h3>COMPREHENSIVE LEADERSHIP ANALYSIS</h3>';
         detailedView += '<div style="text-align: left; max-height: 70vh; overflow-y: auto;">';
-        
+
         // Decision-by-Decision Breakdown
         detailedView += '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.15); border-left: 4px solid var(--jcb-yellow);">';
         detailedView += '<h4 style="color: var(--jcb-yellow); margin-bottom: 20px;">DECISION-BY-DECISION ANALYSIS</h4>';
@@ -1835,7 +1835,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 }
 
                 detailedView += '</ul>';
-                
+
                 // Show LEAD framework impacts
                 const leadImpacts = [];
                 if (impact.leadership) leadImpacts.push(`Leadership: +${impact.leadership}`);
@@ -1969,7 +1969,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 alert('Player data not found.');
                 return;
             }
-  
+
             // Reconstruct finalResults from stored player data
             const reconstructedResults = {
                 escaped: player.escaped,
@@ -2018,7 +2018,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             console.error('Error in viewPlayerFeedback:', error);
             alert('An error occurred while loading player feedback. Error: ' + error.message);
         }
-}
+    }
 
     getColorLabel(color) {
         const labels = {
@@ -2095,7 +2095,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     renderCultureDashboard(analysis) {
         const container = document.getElementById('culture-content');
-  
+
         let html = '';
 
         // Executive Summary Card
@@ -2106,7 +2106,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         html += `<div class="culture-stat"><span class="culture-stat-label">Players Analyzed:</span><span class="culture-stat-value">${analysis.playerCount}</span></div>`;
         html += `<div class="culture-stat"><span class="culture-stat-label">Success Rate:</span><span class="culture-stat-value">${analysis.metrics.successRate.toFixed(0)}%</span></div>`;
         html += `<div class="culture-stat"><span class="culture-stat-label">Performance Level:</span><span class="culture-stat-value">${analysis.comparisonToHighPerformance.performanceLevel}</span></div>`;
-        html += `<div class="culture-stat"><span class="culture-stat-label">Estimated Percentile:</span><span class="culture-stat-value" title="Estimated ranking compared to other companies (50th = average, 90th = top 10%)">Estimated Percentile:</span><span class="culture-stat-value">${analysis.comparisonToHighPerformance.percentileEstimate}th</span></div>`;
+        html += `<div class="culture-stat"><span class="culture-stat-label">Estimated Percentile:</span><span class="culture-stat-value" title="Estimated ranking compared to other companies (50th = average, 90th = top 10%)">${analysis.comparisonToHighPerformance.percentileEstimate}th</span></div>`;
         html += `</div>`;
         html += '</div>';
 
@@ -2141,8 +2141,8 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         html += '<div class="culture-section">';
         html += '<h2>👥 Leadership Style Distribution</h2>';
         html += `<div class="culture-diversity-score ${analysis.leadership.balanced ? 'success' : 'warning'}">`;
-        html += `<strong>Diversity Index:</strong> ${(analysis.leadership.diversity * 100).toFixed(0)} %`;
-        html += ` (${analysis.leadership.balanced ? 'BALANCED ✓' : 'NEEDS IMPROVEMENT'})`;
+        html += `<strong>Diversity Index:</strong> ${(analysis.leadership.diversity * 100).toFixed(0)}%`;
+        html += `(${analysis.leadership.balanced ? 'BALANCED ✓' : 'NEEDS IMPROVEMENT'})`;
         html += `</div>`;
         html += '<div class="culture-style-bars">';
 
@@ -2154,7 +2154,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             html += `<div class="culture-style-fill ${warning ? 'warning' : ''}" style="width: ${percentage}%"></div>`;
             html += `</div>`;
             html += `<div class="culture-style-percentage">${percentage.toFixed(0)}%</div>`;
-            html += '</div>';
+            html += `</div>`;
         });
 
         html += '</div>';
