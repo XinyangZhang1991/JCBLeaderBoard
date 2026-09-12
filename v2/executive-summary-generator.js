@@ -570,7 +570,9 @@ class ExecutiveSummaryGenerator {
         if (escaped || avgLEAD >= 0.50) {
             return {
                 status: 'NOT READY - DEVELOPMENT REQUIRED',
-                rationale: 'Needs significant development before promotion consideration. ${careerRisks.length > 0 ? "Has identified career risks that must be addressed." : "Gap between current capability and next-level requirements is substantial."} Focus on current role excellence and targeted development for 18-24 months before reassessment.',
+                // BUGFIX #7: Was a single-quoted string, so the ${...} placeholder was
+                // rendered literally. Converted to a template literal so it interpolates.
+                rationale: `Needs significant development before promotion consideration. ${careerRisks.length > 0 ? "Has identified career risks that must be addressed." : "Gap between current capability and next-level requirements is substantial."} Focus on current role excellence and targeted development for 18-24 months before reassessment.`,
                 conditions: 'Complete development plan, demonstrate sustained improvement, retake assessment'
             };
         }
@@ -829,14 +831,22 @@ class ExecutiveSummaryGenerator {
     <div class="section">
         <div class="section-title">DECISION HISTORY (Scenario-by-Scenario)</div>
 
-        ${decisions.map((decision, idx) => `
+        ${decisions.map((decision, idx) => {
+            // BUGFIX #8: The decision object stores `scenarioTitle`, `stylesUsed` (array)
+            // and `impact` (object), not `scenario`/`style`/`*Impact`. Read the real fields.
+            const impact = decision.impact || {};
+            const styles = (decision.stylesUsed && decision.stylesUsed.length > 0)
+                ? [...new Set(decision.stylesUsed)].join(', ')
+                : 'Unknown';
+            return `
             <div class="decision-card">
-                <div class="decision-title">Scenario ${idx + 1}: ${decision.scenario || 'Unknown'}</div>
-                <p style="margin: 5px 0;"><strong>Leadership Style Used:</strong> ${decision.style || 'Unknown'}</p>
+                <div class="decision-title">Scenario ${idx + 1}: ${decision.scenarioTitle || 'Unknown'}</div>
+                <p style="margin: 5px 0;"><strong>Leadership Style Used:</strong> ${styles}</p>
                 <p style="margin: 5px 0;"><strong>Information Requested:</strong> ${decision.infoRequested ? 'Yes' : 'No'}</p>
-                <p style="margin: 5px 0; font-size: 9pt; color: #666;"><em>LEAD Impact: L+${decision.leadershipImpact || 0}, E+${decision.excellenceImpact || 0}, A+${decision.agilityImpact || 0}, D+${decision.determinationImpact || 0}</em></p>
+                <p style="margin: 5px 0; font-size: 9pt; color: #666;"><em>LEAD Impact: L+${impact.leadership || 0}, E+${impact.excellence || 0}, A+${impact.agility || 0}, D+${impact.determination || 0}</em></p>
             </div>
-        `).join('')}
+        `;
+        }).join('')}
     </div>
         `;
     }

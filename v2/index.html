@@ -37,7 +37,17 @@
 
                 <div class="form-group">
                     <label>Enter Your Name:</label>
-                    <input type="text" id="player-name" class="input-large" placeholder="Your full name">
+                    <input 
+                        type="text" 
+                        id="player-name" 
+                        class="input-large" 
+                        placeholder="Your full name"
+                        ontouchstart="this.focus();"
+                        onfocus="this.select();"
+                        autocomplete="off"
+                        autocorrect="off"
+                        autocapitalize="words"
+                    >
                 </div>
 
                 <div class="form-group">
@@ -108,16 +118,15 @@
                     <div class="briefing-narrative">
                         <p><strong>Congratulations on your appointment as Business Unit Director for JCB's European Division.</strong></p>
 
-                        <p>The Board has high expectations. Your predecessor achieved steady 8-10% annual growth, but market conditions demand more. The Board has set an ambitious target: <strong>20% revenue growth in your first 12 months</strong>.</p>
+                        <p>The Exec has high expectations. Your predecessor achieved steady 8-10% annual growth, but market conditions demand more. The Exec has set an ambitious target of 20% revenue growth, though the CEO has privately indicated that he cares more about <strong>how you lead than hitting an arbitrary number</strong>.</p>
 
-                        <p><strong class="warning-text">Critical:</strong> Growth alone is not success. The Board expects <em>sustainable</em> performance. Excessive team attrition or low morale will be viewed as indicators of poor leadership. You must deliver results while maintaining organizational health and team engagement.</p>
+                        <p><strong class="warning-text">Critical:</strong> The Exec's Expectations: </p><strong> Deliver strong business results while maintaining organizational health. They value leaders who acheive results sustainably, develop their teams, and demonstrate sound judgement. They will evaluate you on <em>balanced leadership excellence</em>, not growth alone. Demonstrate strong performance across revenue, organizational capability, team health, and the LEAD framework.</p>
 
                         <p>You have full operational authority over the division, including:</p>
                         <ul>
                             <li>Complete product portfolio: Loadalls, Backhoe Loaders, Excavators, and Loading Shovels</li>
-                            <li>Budget authority: £12M operational budget, plus £5M discretionary for strategic initiatives</li>
-                            <li>Leadership team: 87 staff across sales, operations, and service functions</li>
-                            <li>Regional network: 45 dealers across 12 European markets</li>
+                            <li>Leadership team: 87 staff across sales, operations, purchasing, engineering and service functions</li>
+                            <li>Regional network: 250 dealers across 12 European markets</li>
                         </ul>
 
                         <p><strong>Your Mission:</strong> Demonstrate the JCB LEAD framework in action - Leadership, Excellence, Agility, and Determination - as you navigate the challenges ahead.</p>
@@ -132,10 +141,9 @@
                     <div class="brief-details">
                         <p><strong>Role:</strong> Business Unit Director</p>
                         <p><strong>Region:</strong> European Division</p>
-                        <p><strong>Team Size:</strong> 87 staff across sales, operations, service</p>
-                        <p><strong>Budget Authority:</strong> £12M operational, £5M discretionary</p>
+                        <p><strong>Team Size:</strong> 87 staff across sales, operations, purchasing, engineering and service</p>
                         <p><strong>Timeline:</strong> 12 Months</p>
-                        <p><strong>Success Threshold:</strong> 20% Revenue Growth</p>
+                        <p><strong>Success Criteria</strong> Balanced Excellence (Growth + Team Health + Lead Framework)</p>
                     </div>
                     <div class="countdown" id="briefing-countdown">Your journey begins in <span>90</span>s...</div>
                     <button class="btn-secondary" onclick="game.skipBriefing()">SKIP BRIEFING</button>
@@ -262,39 +270,13 @@
     <script src="scoring.js"></script>
     <script src="executive-summary-generator.js"></script>
     <script src="culture-analysis.js"></script>
-    <script src="game-simulator.js"></script>
+    <!-- BUGFIX #13: Removed <script src="game-simulator.js"></script> — the file does not exist. -->
     <script src="app.js"></script>
 
     <script>
-        // Diagnostic: Check what element is at the button position
-        window.addEventListener('load', () => {
-            const button = document.getElementById('start-btn');
-            if (button) {
-                const rect = button.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                const elementAtPoint = document.elementFromPoint(centerX, centerY);
-
-                console.log('=== BUTTON DIAGNOSTIC ===');
-                console.log('Button element:', button);
-                console.log('Button position:', rect);
-                console.log('Element at button center:', elementAtPoint);
-                console.log('Is element the button?', elementAtPoint === button);
-                console.log('Element blocking:', elementAtPoint.tagName, elementAtPoint.className, elementAtPoint.id);
-                console.log('Button z-index:', window.getComputedStyle(button).zIndex);
-                console.log('Button pointer-events:', window.getComputedStyle(button).pointerEvents);
-                console.log('Blocking element z-index:', window.getComputedStyle(elementAtPoint).zIndex);
-                console.log('========================');
-            }
-        });
-
-        // Global error handler to catch and display errors (DISABLED FOR DEBUGGING)
-        window.onerror = function(message, source, lineno, colno, error) {
-            console.error('Global error caught:', message, 'at', source, 'line', lineno);
-            console.error('Full error object:', error);
-            // alert('JavaScript Error:\n' + message + '\n\nAt: ' + source + ':' + lineno + '\n\nPlease check the browser console (F12) for details.');
-            return true; // Prevent default error handling
-        };
+        // BUGFIX #14: Removed the leftover button-diagnostic block and the disabled
+        // global error handler that silently swallowed all errors (return true).
+        // A lightweight error logger is retained for production diagnostics.
 
         // Log when page is fully loaded
         window.addEventListener('load', () => {
