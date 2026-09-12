@@ -8,69 +8,58 @@ const round1Scenarios = [
     subtitle: "Week 3 - Q1",
     month: 1,
     quarter: 1,
-    description: `**WEEK 3 IN ROLE:** Your predecessor promised the Exec three Q1 initiatives:
+    description: `**WEEK 3:** Your predecessor promised three Q1 initiatives: a Loadall campaign, staff training and a dealer overhaul. You can fund only TWO.
 
-• Aggressive marketing campaign for a new Loadall
-• Comprehensive staff training program
-• Dealer network overhaul
-
-**The Problem:** Capacity exists for only TWO. Resources are stretched, timelines conflict, and the Exec expects all three.
-
-**The Politics:**
-• Marketing Director (close to CEO): "Marketing is non-negotiable"
-• HR Director (your ally): "Training is essential - we're hemorrhaging talent"
-• Sales Director (skeptical of you): "Dealer relationships are deteriorating"
-
-**The Complication:** Exec update in 2 weeks. Which do you cut, and how do you explain it?`,
+Marketing, HR and Sales each insist theirs is essential. Exec update in 2 weeks. Which do you cut?`,
 
     decisions: [
       {
-        title: "Part 1: Which initiative do you CUT? (Select ONE to eliminate)",
+        title: "Part 1: Which initiative do you cut?",
         type: "choice",
         options: [
           {
-            text: "A) Cut the Marketing Campaign (keep Training + Dealer relationships)",
+            text: "A) Cut marketing (keep training and dealers)",
             style: "coaching",
             color: "GREEN",
           },
           {
-            text: "B) Cut the Training Program (keep Marketing + Dealer relationships)",
+            text: "B) Cut training (keep marketing and dealers)",
             style: "pacesetting",
             color: "RED",
           },
           {
-            text: "C) Cut the Dealer Network Overhaul (keep Marketing + Training)",
+            text: "C) Cut the dealer overhaul (keep marketing and training)",
             style: "pacesetting",
             color: "BLUE",
           },
           {
-            text: "D) Try to partially fund all three (£8M split 3 ways = £2.67M each)",
+            text: "D) Part-fund all three (£2M split 3 ways = £667K each)",
             style: "affiliative",
             color: "YELLOW",
           },
           {
-            text: "E) Request additional budget approval from CFO",
+            text: "E) Ask the CFO for more budget",
             style: "democratic",
             color: "YELLOW",
           },
         ],
       },
       {
-        title: "Part 2: Communication Approach",
+        title: "Part 2: How do you communicate it?",
         type: "choice",
         options: [
           {
-            text: 'A) "I know this is hard - let\'s support each other through it"',
+            text: 'A) "This is hard - let\'s support each other"',
             style: "affiliative",
             color: "BLUE",
           },
           {
-            text: 'B) "This is what we\'re doing - I need 100% commitment"',
+            text: 'B) "This is the plan - I need full commitment"',
             style: "coercive",
             color: "YELLOW",
           },
           {
-            text: 'C) "This is the decision - execute it immediately"',
+            text: 'C) "Decision made - execute it now"',
             style: "coercive",
             color: "RED",
           },
@@ -80,14 +69,14 @@ const round1Scenarios = [
             color: "RED",
           },
           {
-            text: 'E) "I trust you all - you know what\'s best for your areas"',
+            text: 'E) "I trust you - you know your areas best"',
             style: "affiliative",
             color: "YELLOW",
           },
         ],
       },
       {
-        title: "Part 3: How do you announce these priorities to the team?",
+        title: "Part 3: How do you announce the priorities?",
         type: "choice",
         options: [
           {
@@ -96,17 +85,17 @@ const round1Scenarios = [
             color: "BLUE",
           },
           {
-            text: "Open forum discussion on implementation",
+            text: "Open forum on how to implement",
             style: "democratic",
             color: "YELLOW",
           },
           {
-            text: 'Direct mandate - "These are your assignments, get started now"',
+            text: 'Direct mandate - "Here are your assignments, start now"',
             style: "coercive",
             color: "RED",
           },
           {
-            text: "Individual check-ins to ensure everyone feels supported",
+            text: "Individual check-ins to keep everyone supported",
             style: "affiliative",
             color: "YELLOW",
           },
@@ -118,22 +107,20 @@ const round1Scenarios = [
       {
         label: "Last year's performance data",
         type: "useful",
-        content:
-          "Shows marketing had poor ROI last year (8% return vs 35% from training, 42% from dealer relationships). Training and dealer relationships yielded significantly better results.",
+        content: "ROI: marketing 8%, training 35%, dealers 42%.",
         validatesDecision: [0], // Validates cutting marketing (choice A in Part 1)
       },
       {
         label: "Marketing Director's track record",
         type: "trap",
-        content:
-          "Shows impressive campaign metrics but fails to mention that last year's campaign didn't translate to sales growth. Designed to make you think marketing is essential.",
+        content: "Strong campaign metrics, but no sales growth.",
         validatesDecision: null, // Trap - misleads into keeping marketing
       },
       {
         label: "Attrition data by department",
         type: "useful",
         content:
-          "22% attrition in sales (highest in division), 18% in operations, 12% in marketing. HR warns that without training investment, attrition could reach 30%+.",
+          "Attrition: sales 22%, operations 18%, marketing 12%. Could hit 30%+.",
         validatesDecision: [1], // Shows you should NOT cut training (avoid choice B in Part 1)
       },
     ],
@@ -164,35 +151,32 @@ const round1Scenarios = [
     subtitle: "Month 2 - Q1",
     month: 2,
     quarter: 1,
-    description: `Two reports land on your desk with contradictory conclusions:
+    description: `Two reports contradict each other. Marketing: satisfaction at an all-time high (92% positive). Operations: complaints up 35%, response times worsening.
 
-**Marketing:** "Customer satisfaction at all-time high (92% positive sentiment)"
-**Operations:** "Service complaints up 35%, response times deteriorating"
-
-Both teams defend their methodology. Your CFO is confused. The Exec wants clarity on customer health in 48 hours.`,
+Both defend their methods. The Exec wants clarity on customer health within 48 hours.`,
 
     decisions: [
       {
-        title: "Part 1: How do you reconcile these contradictory findings?",
+        title: "Part 1: How do you reconcile the findings?",
         type: "choice",
         options: [
           {
-            text: "Deep dive into both methodologies to find the disconnect",
+            text: "Deep dive into both methods to find the disconnect",
             style: "pacesetting",
             color: "BLUE",
           },
           {
-            text: "Make immediate decision based on business priorities - no time for debate",
+            text: "Decide now on business priorities - no time to debate",
             style: "coercive",
             color: "YELLOW",
           },
           {
-            text: "Convene joint meeting with both teams to debate findings",
+            text: "Hold a joint meeting so both teams debate",
             style: "democratic",
             color: "YELLOW",
           },
           {
-            text: "Trust the metric most aligned to business outcomes (satisfaction)",
+            text: "Trust the metric closest to business outcomes (satisfaction)",
             style: "coercive",
             color: "RED",
           },
@@ -200,26 +184,26 @@ Both teams defend their methodology. Your CFO is confused. The Exec wants clarit
       },
       {
         title:
-          "Part 2: You discover both are technically correct - Marketing surveys loyal customers, Operations tracks all complaints including new segments. How do you present to the Exec?",
+          "Part 2: Both are right - Marketing surveys loyal customers, Operations tracks all complaints. How do you present to the Exec?",
         type: "choice",
         options: [
           {
-            text: "Acknowledge complexity and present both viewpoints honestly",
+            text: "Acknowledge complexity and present both views honestly",
             style: "affiliative",
             color: "GREEN",
           },
           {
-            text: 'Synthesize into single narrative: "Core customers happy, growth segments need attention"',
+            text: 'One story: "Core customers happy, growth segments need work"',
             style: "pacesetting",
             color: "BLUE",
           },
           {
-            text: "Frame as strategic opportunity: satisfaction high + complaints rising = growth opportunity",
+            text: "Frame as opportunity: high satisfaction plus rising complaints equals growth",
             style: "authoritative",
             color: "BLUE",
           },
           {
-            text: "Request more time to investigate fully before presenting",
+            text: "Ask for more time to investigate before presenting",
             style: "affiliative",
             color: "YELLOW",
           },
@@ -232,18 +216,18 @@ Both teams defend their methodology. Your CFO is confused. The Exec wants clarit
         label: "Marketing survey methodology",
         type: "useful",
         content:
-          "Surveys sent to customers who purchased in last 12 months - skews to loyal base",
+          "Surveys only go to customers who bought in the last 12 months.",
       },
       {
         label: "Operations complaint data",
         type: "useful",
         content:
-          "Tracks all inquiries including new customer segments with different expectations",
+          "Tracks all inquiries, including new segments with different expectations.",
       },
       {
         label: "CFO perspective",
         type: "trap",
-        content: "Wants simple answer for Exec, encourages oversimplification",
+        content: "Wants a simple answer for the Exec - risks oversimplifying.",
       },
     ],
 
@@ -258,29 +242,22 @@ Both teams defend their methodology. Your CFO is confused. The Exec wants clarit
     subtitle: "Month 3 - Q1",
     month: 3,
     quarter: 1,
-    description: `A near-miss incident at your main distribution facility involving a Telescopic Handler. No injuries, but HSE regulations were nearly breached.
+    description: `A near-miss with a Telescopic Handler at your main distribution site. No injuries, but HSE rules were nearly breached.
 
-**The Finger-Pointing:**
-• Operations Director: "Suspend the employee - protect the company from liability"
-• HR Director: "This is a training gap - immediate retraining (2 days downtime)"
-• Safety Officer: "Facility-wide safety audit before resuming (1 week downtime)"
-
-**The Pressure:** An HSE inspector visits next week. Doing nothing risks severe regulatory consequences; overreacting damages morale and delays Q1 targets.
-
-**What do you do?**`,
+Operations wants suspension, HR retraining (2 days), Safety a full audit (1 week). An HSE inspector visits next week. What now?`,
 
     decisions: [
       {
-        title: "Part 1: Immediate Response - What action do you take TODAY?",
+        title: "Part 1: What action do you take today?",
         type: "choice",
         options: [
           {
-            text: "A) Suspend employee pending investigation (HR recommendation)",
+            text: "A) Suspend the employee pending investigation",
             style: "coercive",
             color: "RED",
           },
           {
-            text: "B) Immediate retraining for employee and team (£15k, 2 days)",
+            text: "B) Retrain the employee and team (£15k, 2 days)",
             style: "coaching",
             color: "GREEN",
           },
@@ -290,43 +267,43 @@ Both teams defend their methodology. Your CFO is confused. The Exec wants clarit
             color: "BLUE",
           },
           {
-            text: "D) Issue safety reminder and continue operations (zero cost)",
+            text: "D) Issue a safety reminder and carry on (zero cost)",
             style: "affiliative",
             color: "YELLOW",
           },
           {
-            text: "E) Investigate root cause first, then decide (1 week)",
+            text: "E) Find the root cause first, then decide (1 week)",
             style: "democratic",
             color: "YELLOW",
           },
         ],
       },
       {
-        title: "Part 2: How do you communicate this to the broader team?",
+        title: "Part 2: How do you tell the wider team?",
         type: "choice",
         options: [
           {
-            text: "A) Firm warning about safety standards and consequences",
+            text: "A) Firm warning on safety standards and consequences",
             style: "coercive",
             color: "RED",
           },
           {
-            text: 'B) Frame as learning opportunity - "Let\'s use this to improve"',
+            text: 'B) Learning opportunity - "Let\'s use this to improve"',
             style: "coaching",
             color: "GREEN",
           },
           {
-            text: 'C) Empathetic approach - "We\'re all in this together"',
+            text: 'C) Empathetic - "We\'re all in this together"',
             style: "affiliative",
             color: "YELLOW",
           },
           {
-            text: 'D) Set clear expectations - "Excellence in safety is non-negotiable"',
+            text: 'D) Clear expectations - "Safety excellence is non-negotiable"',
             style: "pacesetting",
             color: "RED",
           },
           {
-            text: 'E) Facilitated discussion - "What can WE do to prevent this?"',
+            text: 'E) Open discussion - "What can we do to prevent this?"',
             style: "democratic",
             color: "YELLOW",
           },
@@ -339,21 +316,21 @@ Both teams defend their methodology. Your CFO is confused. The Exec wants clarit
         label: "Previous safety record data",
         type: "useful",
         content:
-          "This is the first incident in 3 years - suggests systemic issue, not individual fault. Strong safety culture historically.",
+          "First incident in 3 years - points to a system issue, not an individual.",
         validatesDecision: [1, 4], // Validates retraining or investigation (choices B, E)
       },
       {
         label: "Speak with employee involved",
         type: "useful",
         content:
-          "Reveals training gap in new equipment protocols introduced 2 months ago. Employee had only 1 day training vs recommended 3 days.",
+          "New equipment protocols: employee had 1 day of training, not the recommended 3.",
         validatesDecision: [1], // Validates retraining (choice B)
       },
       {
         label: "Legal team memo on liability",
         type: "trap",
         content:
-          'Emphasizes CYA discipline approach, creates fear culture. Recommends immediate suspension to "protect the company."',
+          'Pushes a blame-first approach and immediate suspension to "protect the company."',
         validatesDecision: null, // Trap - misleads into suspension
       },
     ],
@@ -375,44 +352,39 @@ Both teams defend their methodology. Your CFO is confused. The Exec wants clarit
     subtitle: "Month 5 - Q2",
     month: 5,
     quarter: 2,
-    description: `Customer sentiment is "changing" but nobody can pinpoint why. Sales velocity has slowed 8% month-over-month. Three conflicting theories:
+    description: `Sales velocity has slowed 8% month-over-month and nobody knows why. Three theories: a competitor's new hydraulic feature, economic uncertainty, or our team losing its customer focus.
 
-**Sales Director:** "Competitor launched a new hydraulic feature we don't have"
-**Finance Director:** "Economic uncertainty is making buyers delay"
-**Your gut:** "Our team's approach has gone stale - we're not listening to customers"
-
-Data is incomplete and contradictory. Your CFO demands immediate action; your strategy lead wants 3 weeks to research.`,
+Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.`,
 
     decisions: [
       {
-        title: "Part 1: How do you interpret this incomplete information?",
+        title: "Part 1: How do you read the incomplete picture?",
         type: "choice",
         options: [
           {
-            text: "Make reasonable assumptions based on experience and act decisively",
+            text: "Assume based on experience and act decisively",
             style: "authoritative",
             color: "RED",
           },
           {
-            text: "Invest time to gather comprehensive data systematically",
+            text: "Invest time to gather comprehensive data",
             style: "authoritative",
             color: "BLUE",
           },
           {
-            text: "Consult with wider stakeholder group (dealers, customers, team)",
+            text: "Consult dealers, customers and the team",
             style: "democratic",
             color: "YELLOW",
           },
           {
-            text: "Run small experiments in different regions to test theories",
+            text: "Run small regional experiments to test the theories",
             style: "democratic",
             color: "GREEN",
           },
         ],
       },
       {
-        title:
-          "Part 2: After investigation, you discover ALL THREE theories are partially true. What's your approach?",
+        title: "Part 2: All three theories turn out partly true. What now?",
         type: "choice",
         options: [
           {
@@ -421,17 +393,17 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
             color: "BLUE",
           },
           {
-            text: "Address all three simultaneously with integrated strategy",
+            text: "Address all three at once with one strategy",
             style: "democratic",
             color: "YELLOW",
           },
           {
-            text: "Test different approaches in different regions to learn",
+            text: "Test different approaches in different regions",
             style: "democratic",
             color: "GREEN",
           },
           {
-            text: "Make decisive call on root cause based on judgment",
+            text: "Make a decisive call on the root cause",
             style: "pacesetting",
             color: "RED",
           },
@@ -439,21 +411,21 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
       },
       {
         title:
-          "Part 3: The situation remains ambiguous even after analysis. How do you move forward?",
+          "Part 3: It's still ambiguous after analysis. How do you move forward?",
         type: "choice",
         options: [
           {
-            text: "Make executive decision and commit to it fully",
+            text: "Make the call and commit fully",
             style: "authoritative",
             color: "GREEN",
           },
           {
-            text: "Commit to a direction and give it 90 days before reassessing",
+            text: "Commit to a direction, reassess in 90 days",
             style: "authoritative",
             color: "BLUE",
           },
           {
-            text: "Continue gathering data until picture is clearer",
+            text: "Keep gathering data until the picture clears",
             style: "affiliative",
             color: "YELLOW",
           },
@@ -471,19 +443,19 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
         label: "Customer interviews (sample of 12)",
         type: "useful",
         content:
-          'Mixed signals - some mention competitor, some mention economy, some say "you stopped asking us what we need"',
+          'Mixed: some cite the competitor, some the economy, some say "you stopped asking us."',
       },
       {
         label: "Competitor intelligence report",
         type: "trap",
         content:
-          "Exaggerates competitor threat, creates pressure to react hastily",
+          "Exaggerates the competitor threat and pressures a hasty reaction.",
       },
       {
         label: "Your team's perspective",
         type: "useful",
         content:
-          "Frontline staff notice customers feel rushed, less consultative conversations",
+          "Frontline staff say customers feel rushed and conversations are less consultative.",
       },
     ],
 
@@ -498,36 +470,36 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
     subtitle: "Month 6 - Q2",
     month: 6,
     quarter: 2,
-    description: `Major competitor just launched a Backhoe with features that match your flagship model at 15% lower price. Three key dealers are threatening to reduce JCB shelf space. Market share is slipping (-2.3% this month). You have £3M emergency budget to respond.`,
+    description: `A major competitor launched a Backhoe matching your flagship at 15% lower price. Three key dealers may cut JCB shelf space. Market share is slipping (-2.3% this month). You have a £400K emergency budget.`,
 
     decisions: [
       {
-        title: "Part 1: Resource Allocation - Distribute £3M",
+        title: "Part 1: How do you allocate the £400K?",
         type: "slider",
         sliders: [
           {
             label: "Price matching / discounts",
-            max: 1.5,
-            budgetConstraint: 3.0,
+            max: 0.2,
+            budgetConstraint: 0.4,
             color: "RED",
           },
           {
             label: "Accelerated R&D for next-gen features",
-            max: 2.0,
+            max: 0.3,
             color: "BLUE",
           },
-          { label: "Dealer incentive program", max: 1.5, color: "YELLOW" },
-          { label: "Marketing counteroffensive", max: 1.2, color: "RED" },
-          { label: "Customer loyalty program", max: 0.8, color: "YELLOW" },
+          { label: "Dealer incentive program", max: 0.2, color: "YELLOW" },
+          { label: "Marketing counteroffensive", max: 0.2, color: "RED" },
+          { label: "Customer loyalty program", max: 0.1, color: "YELLOW" },
           {
             label: "Dealer partnership strengthening (relationship-first)",
-            max: 1.0,
+            max: 0.1,
             color: "GREEN",
           },
         ],
       },
       {
-        title: "Part 2: Dealer Negotiation Approach",
+        title: "Part 2: Your dealer negotiation approach",
         type: "timeline",
         options: [
           "Aggressive",
@@ -544,7 +516,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
         colorMapping: ["RED", "BLUE", "YELLOW", "YELLOW"],
       },
       {
-        title: "Part 3: Team Mobilization",
+        title: "Part 3: How do you mobilise the team?",
         type: "choice",
         options: [
           {
@@ -568,7 +540,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
             color: "GREEN",
           },
           {
-            text: "\"We're strongest when we support each other - let's unite as one team\"",
+            text: "\"We're strongest together - let's unite as one team\"",
             style: "affiliative",
             color: "YELLOW",
           },
@@ -581,23 +553,23 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
         label: "Competitor intelligence report",
         type: "trap",
         content:
-          "Exaggerates competitor threat, encourages panic spending on price matching",
+          "Exaggerates the threat and encourages panic spending on price matching.",
       },
       {
         label: "Customer feedback on what they truly value",
         type: "useful",
-        content: "Reveals features matter less than service and relationships",
+        content: "Features matter less than service and relationships.",
       },
       {
         label: "CFO perspective on margin protection",
         type: "useful",
         content:
-          "Shows long-term danger of price wars, recommends value differentiation",
+          "Warns of long-term price wars; recommends value differentiation.",
       },
       {
         label: "Sales team sentiment survey",
         type: "red_herring",
-        content: "They want aggressive discounts, but it's short-sighted",
+        content: "They want aggressive discounts - short-sighted.",
       },
     ],
 
@@ -623,35 +595,35 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
     subtitle: "Month 8 - Q3",
     month: 8,
     quarter: 3,
-    description: `Your top regional sales manager just resigned, citing "unsustainable pressure and lack of support." Two other high-performers are rumoured to be interviewing elsewhere. An anonymous survey reveals: "unrealistic targets without resources", "no work-life balance", "feeling like a number, not a person." HR warns that losing all three would trigger a crisis of confidence.
+    description: `Your top regional sales manager resigned, citing unsustainable pressure and no support. Two more high-performers may follow. Staff cite unrealistic targets, no work-life balance and feeling like a number.
 
-**What do you do?**`,
+HR warns losing all three would trigger a confidence crisis.`,
 
     decisions: [
       {
-        title: "Part 1: Root Cause Assessment",
+        title: "Part 1: What's the root cause?",
         type: "choice",
         options: [
           {
-            text: "Review external factors (compensation, market conditions, etc.)",
+            text: "Review external factors (pay, market conditions)",
             impact: "external",
             style: "authoritative",
             color: "BLUE",
           },
           {
-            text: "Assess leadership approach and what isn't working - I need to change",
+            text: "Assess my own leadership - what must I change?",
             impact: "selfaware",
             style: "coaching",
             color: "GREEN",
           },
           {
-            text: "Increase team support and development opportunities",
+            text: "Increase team support and development",
             impact: "development",
             style: "coaching",
             color: "GREEN",
           },
           {
-            text: "Headhunt for high flyers at competition, prepare replacements",
+            text: "Headhunt rivals' high flyers as replacements",
             impact: "harsh",
             style: "coercive",
             color: "RED",
@@ -659,7 +631,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
         ],
       },
       {
-        title: "Part 2: Immediate Response",
+        title: "Part 2: Your immediate response",
         type: "choice",
         options: [
           {
@@ -668,12 +640,12 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
             color: "YELLOW",
           },
           {
-            text: "Individual performance warnings for underperformers",
+            text: "Performance warnings for underperformers",
             style: "coercive",
             color: "GREEN",
           },
           {
-            text: "Announce new retention program and benefits",
+            text: "Announce a new retention programme and benefits",
             style: "affiliative",
             color: "YELLOW",
           },
@@ -683,14 +655,14 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
             color: "RED",
           },
           {
-            text: "Reset vision and reconnect to purpose",
+            text: "Reset the vision and reconnect to purpose",
             style: "authoritative",
             color: "BLUE",
           },
         ],
       },
       {
-        title: "Part 3: Q4 Targets Adjustment",
+        title: "Part 3: How do you adjust Q4 targets?",
         type: "timeline",
         options: [
           "Maintain aggressive targets",
@@ -708,24 +680,24 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
         label: "Exit interview data from departed employees",
         type: "useful",
         content:
-          'Confirms pace and pressure issues - "felt like numbers, not people"',
+          'Confirms pace and pressure issues - "felt like numbers, not people."',
       },
       {
         label: "Industry salary benchmarking",
         type: "trap",
-        content: "Suggests money is the answer - but culture is the real issue",
+        content:
+          "Suggests money is the answer - but culture is the real issue.",
       },
       {
         label: "HR recommendation memo",
         type: "useful",
         content:
-          "Identifies specific leadership behaviors causing issues: lack of recognition, unrealistic deadlines",
+          "Names the causes: little recognition and unrealistic deadlines.",
       },
       {
         label: "Retention case studies from other divisions",
         type: "red_herring",
-        content:
-          "Different contexts, not directly applicable to your situation",
+        content: "Different contexts - not directly applicable to you.",
       },
     ],
 
@@ -748,25 +720,25 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
     subtitle: "Month 9 - Q3",
     month: 9,
     quarter: 3,
-    description: `Your most senior team member (20 years at JCB) is underperforming - 25% below target for two quarters. They're defensive to feedback and resistant to change, but widely respected and well-liked. Their team's morale is starting to drop. This must be addressed.`,
+    description: `Your most senior team member (20 years at JCB) is 25% below target for two quarters. They resist feedback but are widely respected, and their team's morale is dropping. This must be addressed.`,
 
     decisions: [
       {
-        title: "Part 1: How do you prepare for this conversation?",
+        title: "Part 1: How do you prepare?",
         type: "choice",
         options: [
           {
-            text: "Document performance issues formally with HR",
+            text: "Document the issues formally with HR",
             style: "authoritative",
             color: "BLUE",
           },
           {
-            text: "Seek to understand their perspective first",
+            text: "Understand their perspective first",
             style: "coaching",
             color: "GREEN",
           },
           {
-            text: "Practice the difficult conversation with a trusted advisor",
+            text: "Rehearse the conversation with a trusted advisor",
             style: "democratic",
             color: "YELLOW",
           },
@@ -778,8 +750,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
         ],
       },
       {
-        title:
-          "Part 2: During the conversation, they become emotional and defensive. You:",
+        title: "Part 2: They become emotional and defensive. You:",
         type: "choice",
         options: [
           {
@@ -793,33 +764,33 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
             color: "GREEN",
           },
           {
-            text: "Explore what's really going on beneath the defensiveness",
+            text: "Explore what's beneath the defensiveness",
             style: "coaching",
             color: "YELLOW",
           },
           {
-            text: "Suggest taking a break to cool down and reschedule",
+            text: "Take a break and reschedule",
             style: "affiliative",
             color: "BLUE",
           },
         ],
       },
       {
-        title: "Part 3: They reveal personal issues affecting work. You:",
+        title: "Part 3: They reveal personal issues. You:",
         type: "choice",
         options: [
           {
-            text: "Offer support but maintain performance expectations",
+            text: "Offer support but keep performance expectations",
             style: "democratic",
             color: "YELLOW",
           },
           {
-            text: "Give them 6 weeks grace period to address personal issues",
+            text: "Give 6 weeks' grace to address personal issues",
             style: "affiliative",
             color: "GREEN",
           },
           {
-            text: "Refer to HR/EAP, keep performance discussion separate",
+            text: "Refer to HR/EAP, keep performance separate",
             style: "authoritative",
             color: "BLUE",
           },
@@ -836,18 +807,17 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
       {
         label: "Performance data",
         type: "useful",
-        content: "25% below target, declining trend over 6 months",
+        content: "25% below target, declining over 6 months.",
       },
       {
         label: "Team feedback",
         type: "useful",
-        content: "Team respects them but frustrated with lack of direction",
+        content: "Team respects them but wants more direction.",
       },
       {
         label: "HR guidance",
         type: "trap",
-        content:
-          "Suggests formal PIP process - may damage relationship unnecessarily",
+        content: "Suggests a formal PIP - may damage the relationship.",
       },
     ],
 
@@ -862,11 +832,11 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
     subtitle: "Month 10 - Q3/Q4",
     month: 10,
     quarter: 3,
-    description: `Your R&D team presents a breakthrough: a hybrid-electric Loadall prototype 8 months ahead of schedule. Early customer feedback is phenomenal. Rush to market in Q4 (risky, game-changing) or wait for Q1 (safer, proven)? Marketing wants £1.2M for launch; Operations warns rushing could compromise quality.`,
+    description: `R&D has a hybrid-electric Loadall prototype 8 months early, with excellent customer feedback. Launch in Q4 (risky, game-changing) or Q1 (safer, proven)? Marketing wants £350K; Operations warns rushing risks quality.`,
 
     decisions: [
       {
-        title: "Part 1: Launch Timeline",
+        title: "Part 1: When do you launch?",
         type: "choice",
         options: [
           {
@@ -888,7 +858,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
             color: "GREEN",
           },
           {
-            text: "Pilot program first (8 weeks pilot + delayed launch)",
+            text: "Pilot first (8 weeks, then delayed launch)",
             timing: "pilot",
             style: "democratic",
             color: "YELLOW",
@@ -896,7 +866,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
         ],
       },
       {
-        title: "Part 2: Decision-Making Process",
+        title: "Part 2: How do you decide?",
         type: "choice",
         options: [
           {
@@ -905,7 +875,7 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
             color: "BLUE",
           },
           {
-            text: "Convene cross-functional team vote",
+            text: "Hold a cross-functional team vote",
             style: "democratic",
             color: "YELLOW",
           },
@@ -915,31 +885,31 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
             color: "GREEN",
           },
           {
-            text: "Set the target and let teams figure it out",
+            text: "Set the target and let teams work it out",
             style: "pacesetting",
             color: "RED",
           },
           {
-            text: "Team workshop - collaboratively decide launch readiness",
+            text: "Team workshop to decide launch readiness",
             style: "affiliative",
             color: "YELLOW",
           },
         ],
       },
       {
-        title: "Part 3: Risk Mitigation - Allocate £1.5M",
+        title: "Part 3: How do you allocate £500K?",
         type: "slider",
         sliders: [
           {
             label: "Quality assurance testing",
-            max: 0.6,
-            budgetConstraint: 1.5,
+            max: 0.2,
+            budgetConstraint: 0.5,
             color: "BLUE",
           },
-          { label: "Customer pilot program", max: 0.5, color: "YELLOW" },
-          { label: "Warranty reserves", max: 0.4, color: "GREEN" },
-          { label: "Marketing push", max: 0.8, color: "RED" },
-          { label: "Operational contingency", max: 0.3, color: "BLUE" },
+          { label: "Customer pilot program", max: 0.2, color: "YELLOW" },
+          { label: "Warranty reserves", max: 0.1, color: "GREEN" },
+          { label: "Marketing push", max: 0.3, color: "RED" },
+          { label: "Operational contingency", max: 0.1, color: "BLUE" },
         ],
       },
     ],
@@ -949,24 +919,22 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
         label: "Customer pilot feedback verbatims",
         type: "useful",
         content:
-          "Reveals specific concerns about battery life in cold weather - addressable with testing",
+          "Concerns about cold-weather battery life - fixable with testing.",
       },
       {
         label: "Competitor timeline intelligence",
         type: "trap",
-        content:
-          "Suggests competitor is 6 months away - creates false urgency to rush",
+        content: "Claims the competitor is 6 months away - false urgency.",
       },
       {
         label: "Technical risk assessment",
         type: "useful",
-        content:
-          "Identifies specific failure modes that need attention before full launch",
+        content: "Flags failure modes to fix before full launch.",
       },
       {
         label: "Exec pressure memo",
         type: "trap",
-        content: "Emphasizes year-end politics over sound decision-making",
+        content: "Puts year-end politics above sound decisions.",
       },
     ],
 
@@ -987,12 +955,11 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
     subtitle: "Month 12 - Q4",
     month: 12,
     quarter: 4,
-    description: `It's December. Exec meeting in 3 weeks. Three simultaneous challenges: (1) a major customer (15% of revenue) threatening to leave over service issues, (2) your exhausted team needs direction for next year, (3) the Exec want your Year 2 strategic plan.`,
+    description: `December. Exec meeting in 3 weeks. Three challenges: a major customer (15% of revenue) may leave over service issues, your exhausted team needs direction, and the Exec want your Year 2 plan.`,
 
     decisions: [
       {
-        title:
-          "Part 0: Reflecting on Your Year - What was your most important learning?",
+        title: "Part 0: What was your most important learning?",
         type: "choice",
         options: [
           {
@@ -1011,36 +978,36 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
             color: "RED",
           },
           {
-            text: "I learned to adapt my approach based on what each situation needed",
+            text: "I learned to adapt my approach to each situation",
             style: "coaching",
             color: "GREEN",
           },
         ],
       },
       {
-        title: "Part 1: Customer Crisis",
+        title: "Part 1: The customer crisis",
         type: "choice",
         options: [
           {
-            text: "Assign your best people to fix it (risks burning them out)",
+            text: "Assign your best people (risks burnout)",
             impact: "burnout",
             style: "pacesetting",
             color: "RED",
           },
           {
-            text: "Personally lead the customer recovery (time away from other priorities)",
+            text: "Lead the recovery yourself (time away from priorities)",
             impact: "personal",
             style: "coaching",
             color: "GREEN",
           },
           {
-            text: "Empower regional team with resources (trust them)",
+            text: "Empower the regional team with resources",
             impact: "empower",
             style: "democratic",
             color: "YELLOW",
           },
           {
-            text: "Negotiate compromise solution (reduce scope, preserve relationship)",
+            text: "Negotiate a compromise (reduce scope, keep the relationship)",
             impact: "compromise",
             style: "affiliative",
             color: "YELLOW",
@@ -1048,13 +1015,13 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
         ],
       },
       {
-        title: "Part 2: Team Investment - Allocate £800K remaining budget",
+        title: "Part 2: How do you allocate £250K?",
         type: "slider",
         sliders: [
           {
             label: "Year-end bonuses for performance",
-            max: 0.8,
-            budgetConstraint: 0.8,
+            max: 0.2,
+            budgetConstraint: 0.25,
             color: "RED",
           },
           {
@@ -1064,40 +1031,40 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
           },
           {
             label: "Year 2 capability investment (training, tools)",
-            max: 0.7,
+            max: 0.2,
             color: "GREEN",
           },
           {
             label: "Roll budget to Year 2 targets (save money)",
-            max: 0.8,
+            max: 0.2,
             color: "BLUE",
           },
         ],
       },
       {
-        title: "Part 3: Exec Strategy - Year 2 Proposal",
+        title: "Part 3: Your Year 2 proposal",
         type: "choice",
         options: [
           {
-            text: "Aggressive growth continuation (30%+ target)",
+            text: "Aggressive growth (30%+ target)",
             impact: "aggressive",
             style: "pacesetting",
             color: "RED",
           },
           {
-            text: "Consolidation and sustainability (15% growth, build culture)",
+            text: "Consolidate (15% growth, build culture)",
             impact: "consolidate",
             style: "coaching",
             color: "GREEN",
           },
           {
-            text: "Innovation leadership (new products, market disruption)",
+            text: "Innovation leadership (new products, disruption)",
             impact: "innovation",
             style: "authoritative",
             color: "BLUE",
           },
           {
-            text: "Balanced growth with team development (20% growth, capabilities)",
+            text: "Balanced growth (20% growth, build capabilities)",
             impact: "balanced",
             style: "democratic",
             color: "YELLOW",
@@ -1110,23 +1077,22 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
       {
         label: "Customer account history",
         type: "useful",
-        content: "Shows specific service gaps - solvable with right resources",
+        content: "Shows specific service gaps - solvable with resources.",
       },
       {
         label: "Team sentiment in final month",
         type: "useful",
-        content:
-          "Reveals energy levels - some recharged, others at breaking point depending on your leadership",
+        content: "Some are recharged, others near breaking point.",
       },
       {
         label: "Exec member individual priorities",
         type: "trap",
-        content: "Encourages political maneuvering instead of sound strategy",
+        content: "Encourages politics over sound strategy.",
       },
       {
         label: "Year 2 market forecast",
         type: "red_herring",
-        content: "Macro trends less important than internal capability",
+        content: "Macro trends matter less than internal capability.",
       },
     ],
 
@@ -1144,14 +1110,688 @@ Data is incomplete and contradictory. Your CFO demands immediate action; your st
   },
 ];
 
+// ============================================
+// ROUND 2 SCENARIOS - THE ADVANCED ROUND
+// ============================================
+// A returning player (same name) reaches these harder, more strategic
+// dilemmas. Figures stay on the £2M engineering budget scale (£100K-£500K
+// per scenario). Each scenario's decision shape is matched exactly to the
+// corresponding Round 2 scoring method in scoring.js.
+const round2Scenarios = [
+  // ROUND 2 SCENARIO 1: THE MERGER
+  {
+    id: "merger_integration",
+    title: "THE MERGER",
+    subtitle: "Month 2 - Q1",
+    month: 2,
+    quarter: 1,
+    description: `JCB has acquired a rival compact-equipment maker. Two cultures, two product lines and 400 nervous staff must become one company. The board wants integration complete within 12 months.`,
+
+    decisions: [
+      {
+        title: "Part 1: What integration philosophy do you lead with?",
+        type: "choice",
+        options: [
+          {
+            text: "Impose our systems fast - one company, one way",
+            style: "coercive",
+            color: "RED",
+          },
+          {
+            text: "Co-design the new operating model with both leadership teams",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Invest in coaching both teams through the change",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "Keep both cultures running separately for now",
+            style: "affiliative",
+            color: "BLUE",
+          },
+        ],
+      },
+      {
+        title: "Part 2: Both product lines overlap. What do you do?",
+        type: "choice",
+        options: [
+          {
+            text: "Keep our flagship line, phase out theirs",
+            style: "coercive",
+            color: "RED",
+          },
+          {
+            text: "Keep their line, migrate our customers onto it",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Combine the best features of both into one platform",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Run a customer pilot to decide the winning platform",
+            style: "coaching",
+            color: "GREEN",
+          },
+        ],
+      },
+      {
+        title: "Part 3: Allocate the £500K cultural integration budget",
+        type: "slider",
+        sliders: [
+          {
+            label: "Joint team-building programme",
+            max: 0.2,
+            budgetConstraint: 0.5,
+            color: "GREEN",
+          },
+          { label: "Leadership alignment workshops", max: 0.15, color: "BLUE" },
+          {
+            label: "Retention packages for key talent",
+            max: 0.3,
+            color: "YELLOW",
+          },
+          { label: "Internal communications", max: 0.1, color: "BLUE" },
+          {
+            label: "Cross-skilling and training",
+            max: 0.25,
+            color: "GREEN",
+          },
+        ],
+      },
+    ],
+
+    additionalInfo: [
+      {
+        label: "Acquired company culture audit",
+        type: "useful",
+        content: "Their engineers fear losing autonomy and being absorbed.",
+      },
+      {
+        label: "Customer overlap analysis",
+        type: "useful",
+        content:
+          "70% of their customers also buy from us - consolidation risk.",
+      },
+      {
+        label: "Investment bank integration memo",
+        type: "trap",
+        content: "Pushes rapid cost-cutting to hit short-term synergy targets.",
+      },
+      {
+        label: "Key talent flight risk list",
+        type: "useful",
+        content: "12 senior engineers are actively interviewing elsewhere.",
+      },
+    ],
+
+    consequenceText:
+      "Integration begins. How you blend the two cultures will define the next decade...",
+  },
+
+  // ROUND 2 SCENARIO 2: THE ETHICAL LINE
+  {
+    id: "ethical_dilemma",
+    title: "THE ETHICAL LINE",
+    subtitle: "Month 4 - Q2",
+    month: 4,
+    quarter: 2,
+    description: `A lucrative £500K export order hinges on a local agent's payment to an overseas official. Legal flags it as a likely bribe. The order would hit this year's target; refusing may cost the region.`,
+
+    decisions: [
+      {
+        title: "Part 1: What do you do about the payment?",
+        type: "choice",
+        options: [
+          {
+            text: "Walk away from the deal on principle",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Escalate to the board and legal immediately",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Find a compliant route to win the order",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "Approve it - the agent handles local customs",
+            style: "coercive",
+            color: "RED",
+          },
+        ],
+      },
+      {
+        title: "Part 2: How do you brief your team?",
+        type: "choice",
+        options: [
+          {
+            text: "State our standards clearly - no grey areas",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Coach the team through the dilemma and lessons",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "Keep it confidential to protect the deal",
+            style: "coercive",
+            color: "RED",
+          },
+          {
+            text: "Open forum on how we compete ethically",
+            style: "democratic",
+            color: "YELLOW",
+          },
+        ],
+      },
+      {
+        title: "Part 3: How do you prevent this recurring?",
+        type: "choice",
+        options: [
+          {
+            text: "Commission an independent anti-bribery audit",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Train all regional agents on our code of conduct",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "Tighten approval thresholds for agent payments",
+            style: "pacesetting",
+            color: "RED",
+          },
+          {
+            text: "Build an ethics hotline and speak-up culture",
+            style: "democratic",
+            color: "YELLOW",
+          },
+        ],
+      },
+    ],
+
+    additionalInfo: [
+      {
+        label: "Legal counsel opinion",
+        type: "useful",
+        content:
+          "The payment breaches the Bribery Act - personal liability risk.",
+      },
+      {
+        label: "Regional sales director's view",
+        type: "trap",
+        content: '"Everyone does it here - we will lose the region."',
+      },
+      {
+        label: "Compliance precedent from a peer firm",
+        type: "useful",
+        content:
+          "A rival refused a similar deal and won a larger contract later.",
+      },
+    ],
+
+    consequenceText:
+      "Your integrity is being tested. The market and your people are watching...",
+  },
+
+  // ROUND 2 SCENARIO 3: THE REMOTE WORK REVOLT
+  {
+    id: "remote_work_debate",
+    title: "THE REMOTE WORK REVOLT",
+    subtitle: "Month 6 - Q2",
+    month: 6,
+    quarter: 2,
+    description: `The board mandates three days a week in the office. Your engineering team threatens resignations, citing a 90-minute commute and lost focus time. Two senior engineers have already quit.`,
+
+    decisions: [
+      {
+        title: "Part 1: How do you respond to the mandate?",
+        type: "choice",
+        options: [
+          {
+            text: "Enforce the policy - the board has decided",
+            style: "coercive",
+            color: "RED",
+          },
+          {
+            text: "Fight for your team - propose a flexible exception",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Design a hybrid workaround that meets both needs",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Let teams self-organise their office days",
+            style: "coaching",
+            color: "GREEN",
+          },
+        ],
+      },
+      {
+        title: "Part 2: Two engineers resign over it. What now?",
+        type: "choice",
+        options: [
+          {
+            text: "Hold exit conversations and coach them to stay",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "Accept the resignations - no exceptions",
+            style: "coercive",
+            color: "RED",
+          },
+          {
+            text: "Offer tailored retention deals to key people",
+            style: "affiliative",
+            color: "YELLOW",
+          },
+          {
+            text: "Escalate the retention risk to the board",
+            style: "authoritative",
+            color: "BLUE",
+          },
+        ],
+      },
+      {
+        title: "Part 3: How do you communicate the outcome?",
+        type: "choice",
+        options: [
+          {
+            text: "Explain the business rationale honestly to everyone",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Co-create the final policy with team representatives",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Coach managers to handle concerns one-to-one",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "Announce it firmly and move on",
+            style: "coercive",
+            color: "RED",
+          },
+        ],
+      },
+    ],
+
+    additionalInfo: [
+      {
+        label: "Productivity data by location",
+        type: "useful",
+        content: "Remote engineers ship 15% more code with fewer defects.",
+      },
+      {
+        label: "HR legal advice on policy change",
+        type: "useful",
+        content: "Contract changes need consultation to avoid tribunal risk.",
+      },
+      {
+        label: "Board member's private view",
+        type: "trap",
+        content: '"Presence equals performance - hold the line."',
+      },
+      {
+        label: "Competitor hiring activity",
+        type: "useful",
+        content: "Rivals are actively targeting our remote-first engineers.",
+      },
+    ],
+
+    consequenceText:
+      "Your team is watching whether you back them or the mandate...",
+  },
+
+  // ROUND 2 SCENARIO 4: THE SUCCESSION CRISIS
+  {
+    id: "succession_crisis",
+    title: "THE SUCCESSION CRISIS",
+    subtitle: "Month 8 - Q3",
+    month: 8,
+    quarter: 3,
+    description: `Your operations director suffers a sudden illness and will be out for six months. There is no named successor. Three internal candidates and one external option are on the table.`,
+
+    decisions: [
+      {
+        title: "Part 1: Rank the criteria for choosing a successor",
+        type: "ranking",
+        items: [
+          "Proven people development and team building",
+          "Operational excellence and delivery track record",
+          "Strategic thinking and long-term vision",
+          "Cultural fit and loyalty to JCB",
+        ],
+      },
+      {
+        title: "Part 2: How do you run the selection?",
+        type: "choice",
+        options: [
+          {
+            text: "Open, transparent process with the leadership team",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Coach the strongest candidate into the role",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "Make the call yourself and announce it",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Bring in an external interim to steady the ship",
+            style: "coercive",
+            color: "RED",
+          },
+        ],
+      },
+      {
+        title: "Part 3: How do you support the unsuccessful candidates?",
+        type: "choice",
+        options: [
+          {
+            text: "Coach them on a development plan for next time",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "Give them a stretch project to prove themselves",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Tell them clearly where they fell short",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Reassure them their future is secure here",
+            style: "affiliative",
+            color: "YELLOW",
+          },
+        ],
+      },
+    ],
+
+    additionalInfo: [
+      {
+        label: "Internal candidate assessments",
+        type: "useful",
+        content: "One candidate develops people brilliantly but lacks scale.",
+      },
+      {
+        label: "External headhunter shortlist",
+        type: "trap",
+        content: "Impressive CVs, but each would need 12 months to learn JCB.",
+      },
+      {
+        label: "Team sentiment survey",
+        type: "useful",
+        content: "Staff want a leader who invests in their development.",
+      },
+      {
+        label: "Operations director's own recommendation",
+        type: "useful",
+        content: "Backs the candidate with the strongest people skills.",
+      },
+    ],
+
+    consequenceText:
+      "Your succession decision will shape the bench strength for years...",
+  },
+
+  // ROUND 2 SCENARIO 5: THE MARKET DISRUPTION
+  {
+    id: "market_disruption",
+    title: "THE MARKET DISRUPTION",
+    subtitle: "Month 10 - Q3/Q4",
+    month: 10,
+    quarter: 3,
+    description: `A tech start-up launches an electric compact loader at 30% below your cost base. Analysts call it a category killer. You have one year and a £500K war chest to respond.`,
+
+    decisions: [
+      {
+        title: "Part 1: What is your immediate response?",
+        type: "choice",
+        options: [
+          {
+            text: "Cut prices to defend market share now",
+            style: "pacesetting",
+            color: "RED",
+          },
+          {
+            text: "Accelerate our next-generation electric programme",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Partner with or acquire the start-up",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Differentiate on service, support and uptime",
+            style: "coaching",
+            color: "GREEN",
+          },
+        ],
+      },
+      {
+        title: "Part 2: Allocate the £500K response budget",
+        type: "slider",
+        sliders: [
+          {
+            label: "R&D acceleration for next-gen electric",
+            max: 0.3,
+            budgetConstraint: 0.5,
+            color: "BLUE",
+          },
+          { label: "Price defence and discounts", max: 0.2, color: "RED" },
+          { label: "Dealer and channel support", max: 0.15, color: "YELLOW" },
+          {
+            label: "Innovation lab and rapid prototyping",
+            max: 0.2,
+            color: "GREEN",
+          },
+          {
+            label: "Talent acquisition and upskilling",
+            max: 0.2,
+            color: "GREEN",
+          },
+        ],
+      },
+      {
+        title: "Part 3: How do you reflect on the disruption?",
+        type: "choice",
+        options: [
+          {
+            text: "Run a post-mortem on why we missed the shift",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Move on fast - focus on winning the next year",
+            style: "pacesetting",
+            color: "RED",
+          },
+          {
+            text: "Restructure how we make innovation decisions",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Coach the leadership team on disruptive thinking",
+            style: "coaching",
+            color: "GREEN",
+          },
+        ],
+      },
+    ],
+
+    additionalInfo: [
+      {
+        label: "Start-up funding and burn rate",
+        type: "useful",
+        content: "Burning cash fast - likely to need a partner within a year.",
+      },
+      {
+        label: "Customer willingness-to-pay study",
+        type: "useful",
+        content: "Buyers value uptime and service over the lowest price.",
+      },
+      {
+        label: "Analyst hype report",
+        type: "trap",
+        content:
+          "Predicts total market takeover - overstates the near-term threat.",
+      },
+      {
+        label: "Internal R&D capability review",
+        type: "useful",
+        content: "Our electric prototype is 9 months from production-ready.",
+      },
+    ],
+
+    consequenceText:
+      "The market is shifting under your feet. Your response defines the next chapter...",
+  },
+
+  // ROUND 2 SCENARIO 6: THE YEAR-END RECKONING (ROUND 2)
+  {
+    id: "year_end_round2",
+    title: "THE SECOND RECKONING",
+    subtitle: "Month 12 - Q4",
+    month: 12,
+    quarter: 4,
+    description: `Year two closes. The board reviews your leadership of the advanced agenda: merger, ethics, people and disruption. They want your honest reflection and your Year 3 priorities.`,
+
+    decisions: [
+      {
+        title: "Part 1: What did this year teach you about yourself?",
+        type: "choice",
+        options: [
+          {
+            text: "I grew most by adapting fast to constant change",
+            impact: "agility",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "I grew most by holding firm on what matters",
+            impact: "determination",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "I grew most by investing in the people around me",
+            impact: "leadership",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "I grew most by raising the standard of our delivery",
+            impact: "excellence",
+            style: "pacesetting",
+            color: "RED",
+          },
+        ],
+      },
+      {
+        title: "Part 2: What is the biggest lesson you will carry forward?",
+        type: "choice",
+        options: [
+          {
+            text: "Develop people relentlessly - they deliver the results",
+            style: "coaching",
+            color: "GREEN",
+          },
+          {
+            text: "Decide faster and trust the team to execute",
+            style: "democratic",
+            color: "YELLOW",
+          },
+          {
+            text: "Set a clear standard and hold everyone to it",
+            style: "authoritative",
+            color: "BLUE",
+          },
+          {
+            text: "Protect the culture above short-term wins",
+            style: "affiliative",
+            color: "YELLOW",
+          },
+        ],
+      },
+      {
+        title: "Part 3: Rank your Year 3 strategic priorities",
+        type: "ranking",
+        items: [
+          "Developing our leadership bench and talent",
+          "Driving innovation and new product leadership",
+          "Strengthening culture and engagement",
+          "Driving commercial growth and market expansion",
+        ],
+      },
+    ],
+
+    additionalInfo: [
+      {
+        label: "Year 2 performance scorecard",
+        type: "useful",
+        content: "Strong on delivery, mixed on culture and retention.",
+      },
+      {
+        label: "Board's private succession concerns",
+        type: "useful",
+        content: "They want a deeper bench behind you for Year 3.",
+      },
+      {
+        label: "Executive coach's debrief notes",
+        type: "useful",
+        content: "Highlights your growth in balancing pace with people.",
+      },
+      {
+        label: "Rival's Year 3 strategy leak",
+        type: "trap",
+        content: "Tempts a reactive plan rather than your own priorities.",
+      },
+    ],
+
+    consequenceText:
+      "Final calculations underway. Your second year of leadership is being evaluated...",
+  },
+];
+
 // Make scenarios available to game engine
 if (typeof window !== "undefined") {
   window.scenarios = {
     round1: round1Scenarios,
-    // BUGFIX #9: Round 2 scenarios are not defined in this build. Export an empty
-    // array so `window.scenarios.round2` is always defined and the Round 2 code
-    // paths (scoring.js, game-engine.js) degrade gracefully instead of hitting
-    // `undefined`. Add the real Round 2 scenarios here when they are authored.
-    round2: [],
+    round2: round2Scenarios,
   };
 }

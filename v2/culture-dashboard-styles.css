@@ -1,483 +1,527 @@
-
 /* ============================================
    COMPANY CULTURE ANALYSIS DASHBOARD STYLES
    ============================================ */
 
 .btn-culture-analysis {
-    display: block;
-    width: 100%;
-    margin-top: 20px;
-    padding: 15px 20px;
-    background: linear-gradient(135deg, rgba(255, 203, 0, 0.2) 0%, rgba(255, 203, 0, 0.1) 100%);
-    border: 2px solid var(--jcb-yellow);
-    border-radius: 8px;
-    color: var(--jcb-yellow);
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.3s ease;
+  display: block;
+  width: 100%;
+  margin-top: 20px;
+  padding: 15px 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 203, 0, 0.2) 0%,
+    rgba(255, 203, 0, 0.1) 100%
+  );
+  border: 2px solid var(--jcb-yellow);
+  border-radius: 8px;
+  color: var(--jcb-yellow);
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
 .btn-culture-analysis:hover {
-    background: linear-gradient(135deg, rgba(255, 203, 0, 0.3) 0%, rgba(255, 203, 0, 0.2) 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(255, 203, 0, 0.3);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 203, 0, 0.3) 0%,
+    rgba(255, 203, 0, 0.2) 100%
+  );
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 203, 0, 0.3);
 }
 
 .btn-culture-analysis .btn-subtitle {
-    display: block;
-    font-size: 12px;
-    font-weight: normal;
-    margin-top: 5px;
-    opacity: 0.7;
+  display: block;
+  font-size: 12px;
+  font-weight: normal;
+  margin-top: 5px;
+  opacity: 0.7;
 }
 
 .culture-dashboard-container {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 40px 20px;
-    max-height: 100vh;
-    overflow-y: auto;
-    overflow-x: hidden;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Ensure smooth scrolling */
 .culture-dashboard-container {
-    scroll-behavior: smooth;
+  scroll-behavior: smooth;
 }
 
 /* Scrollbar styling for better UX */
 .culture-dashboard-container::-webkit-scrollbar {
-    width: 12px;
+  width: 12px;
 }
 
 .culture-dashboard-container::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
 }
 
 .culture-dashboard-container::-webkit-scrollbar-thumb {
-    background: var(--jcb-yellow);
-    border-radius: 6px;
+  background: var(--jcb-yellow);
+  border-radius: 6px;
 }
 
 .culture-dashboard-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 203, 0, 0.8);
+  background: rgba(255, 203, 0, 0.8);
 }
 
 /* For Firefox */
 .culture-dashboard-container {
-    scrollbar-width: thin;
-    scrollbar-color: var(--jcb-yellow) rgba(0, 0, 0, 0.3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--jcb-yellow) rgba(0, 0, 0, 0.3);
 }
 
 .culture-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 40px;
-    padding-bottom: 20px;
-    border-bottom: 2px solid var(--jcb-yellow);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--jcb-yellow);
+}
+
+.culture-header-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .culture-header h1 {
-    color: var(--jcb-yellow);
-    font-size: 36px;
-    margin: 0;
+  color: var(--jcb-yellow);
+  font-size: 36px;
+  margin: 0;
 }
 
 .btn-back {
-    padding: 12px 24px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 6px;
-    color: white;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.3s ease;
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
 .btn-back:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: var(--jcb-yellow);
-    color: var(--jcb-yellow);
+  background: rgba(255, 255, 255, 0.2);
+  border-color: var(--jcb-yellow);
+  color: var(--jcb-yellow);
 }
 
 /* Executive Summary Card */
 .culture-summary-card {
-    background: linear-gradient(135deg, rgba(255, 203, 0, 0.15) 0%, rgba(0, 0, 0, 0.3) 100%);
-    border: 2px solid var(--jcb-yellow);
-    border-radius: 12px;
-    padding: 30px;
-    margin-bottom: 30px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 203, 0, 0.15) 0%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+  border: 2px solid var(--jcb-yellow);
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 30px;
 }
 
 .culture-summary-card h2 {
-    color: var(--jcb-yellow);
-    margin-top: 0;
-    margin-bottom: 20px;
+  color: var(--jcb-yellow);
+  margin-top: 0;
+  margin-bottom: 20px;
 }
 
 .culture-stat-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
 }
 
 .culture-stat {
-    display: flex;
-    flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
 
 .culture-stat-label {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 8px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
 }
 
 .culture-stat-value {
-    font-size: 28px;
-    font-weight: bold;
-    color: var(--jcb-yellow);
+  font-size: 28px;
+  font-weight: bold;
+  color: var(--jcb-yellow);
 }
 
 /* Culture Sections */
 .culture-section {
-    margin-bottom: 40px;
-    padding: 25px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 12px;
-    border-left: 4px solid var(--jcb-yellow);
+  margin-bottom: 40px;
+  padding: 25px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  border-left: 4px solid var(--jcb-yellow);
 }
 
 .culture-section h2 {
-    color: var(--jcb-yellow);
-    margin-top: 0;
-    margin-bottom: 20px;
-    font-size: 24px;
+  color: var(--jcb-yellow);
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 24px;
 }
 
 /* Metrics Grid */
 .culture-metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
 }
 
 .culture-metric-card {
-    background: rgba(255, 255, 255, 0.05);
-    padding: 20px;
-    border-radius: 8px;
-    text-align: center;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .culture-metric-label {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 10px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 10px;
 }
 
 .culture-metric-value {
-    font-size: 36px;
-    font-weight: bold;
-    margin: 10px 0;
+  font-size: 36px;
+  font-weight: bold;
+  margin: 10px 0;
 }
 
 .culture-metric-value.success {
-    color: #00D084;
+  color: #00d084;
 }
 
 .culture-metric-value.warning {
-    color: #FFA500;
+  color: #ffa500;
 }
 
 .culture-metric-target {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 /* Leadership Style Bars */
 .culture-diversity-score {
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-    margin-bottom: 20px;
-    text-align: center;
-    font-size: 18px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 18px;
 }
 
 .culture-diversity-score.success {
-    border: 2px solid #00D084;
-    color: #00D084;
+  border: 2px solid #00d084;
+  color: #00d084;
 }
 
 .culture-diversity-score.warning {
-    border: 2px solid #FFA500;
-    color: #FFA500;
+  border: 2px solid #ffa500;
+  color: #ffa500;
 }
 
 .culture-style-bars {
-    margin-bottom: 15px;
+  margin-bottom: 15px;
 }
 
 .culture-style-bar {
-    display: grid;
-    grid-template-columns: 150px 1fr 80px;
-    align-items: center;
-    gap: 15px;
-    margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: 150px 1fr 80px;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 12px;
 }
 
 .culture-style-label {
-    font-weight: 500;
-    color: white;
+  font-weight: 500;
+  color: white;
 }
 
 .culture-style-track {
-    height: 24px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    overflow: hidden;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .culture-style-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--jcb-yellow) 0%, rgba(255, 203, 0, 0.6) 100%);
-    transition: width 0.5s ease;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--jcb-yellow) 0%,
+    rgba(255, 203, 0, 0.6) 100%
+  );
+  transition: width 0.5s ease;
 }
 
 .culture-style-fill.warning {
-    background: linear-gradient(90deg, #FFA500 0%, rgba(255, 165, 0, 0.6) 100%);
+  background: linear-gradient(90deg, #ffa500 0%, rgba(255, 165, 0, 0.6) 100%);
 }
 
 .culture-style-percentage {
-    text-align: right;
-    font-weight: bold;
-    color: var(--jcb-yellow);
+  text-align: right;
+  font-weight: bold;
+  color: var(--jcb-yellow);
 }
 
 .culture-insight {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.8);
-    margin-top: 15px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-top: 15px;
 }
 
 /* LEAD Grid */
 .culture-lead-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
 }
 
 .culture-lead-card {
-    background: rgba(255, 255, 255, 0.05);
-    padding: 20px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .culture-lead-dimension {
-    font-size: 18px;
-    font-weight: bold;
-    color: var(--jcb-yellow);
-    margin-bottom: 15px;
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--jcb-yellow);
+  margin-bottom: 15px;
 }
 
 .culture-lead-scores {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 15px;
-    margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 10px;
 }
 
 .culture-lead-current {
-    font-size: 32px;
-    font-weight: bold;
-    color: white;
+  font-size: 32px;
+  font-weight: bold;
+  color: white;
 }
 
 .culture-lead-vs {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .culture-lead-benchmark {
-    font-size: 24px;
-    color: rgba(255, 255, 255, 0.6);
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .culture-lead-gap {
-    text-align: center;
-    font-size: 16px;
-    font-weight: bold;
+  text-align: center;
+  font-size: 16px;
+  font-weight: bold;
 }
 
 .culture-lead-gap.positive {
-    color: #00D084;
+  color: #00d084;
 }
 
 .culture-lead-gap.negative {
-    color: #FFA500;
+  color: #ffa500;
 }
 
 /* Strength Cards */
 .culture-strengths .culture-strength-card {
-    background: linear-gradient(135deg, rgba(0, 208, 132, 0.1) 0%, rgba(0, 0, 0, 0.2) 100%);
-    border: 2px solid rgba(0, 208, 132, 0.3);
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 15px;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 208, 132, 0.1) 0%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  border: 2px solid rgba(0, 208, 132, 0.3);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 15px;
 }
 
 .culture-strength-card h3 {
-    color: #00D084;
-    margin-top: 0;
-    margin-bottom: 10px;
+  color: #00d084;
+  margin-top: 0;
+  margin-bottom: 10px;
 }
 
 .culture-strength-score {
-    font-size: 24px;
-    font-weight: bold;
-    color: #00D084;
-    margin-bottom: 10px;
+  font-size: 24px;
+  font-weight: bold;
+  color: #00d084;
+  margin-bottom: 10px;
 }
 
 /* Weakness Cards */
 .culture-weaknesses .culture-weakness-card {
-    background: linear-gradient(135deg, rgba(255, 165, 0, 0.1) 0%, rgba(0, 0, 0, 0.2) 100%);
-    border: 2px solid rgba(255, 165, 0, 0.3);
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 15px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 165, 0, 0.1) 0%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  border: 2px solid rgba(255, 165, 0, 0.3);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 15px;
 }
 
 .culture-weakness-card h3 {
-    color: #FFA500;
-    margin-top: 0;
-    margin-bottom: 10px;
+  color: #ffa500;
+  margin-top: 0;
+  margin-bottom: 10px;
 }
 
 .culture-weakness-score {
-    font-size: 20px;
-    font-weight: bold;
-    color: #FFA500;
-    margin-bottom: 10px;
+  font-size: 20px;
+  font-weight: bold;
+  color: #ffa500;
+  margin-bottom: 10px;
 }
 
 .culture-gap {
-    font-size: 14px;
-    color: rgba(255, 165, 0, 0.7);
-    font-weight: normal;
+  font-size: 14px;
+  color: rgba(255, 165, 0, 0.7);
+  font-weight: normal;
 }
 
 /* Risk Cards */
 .culture-risks .culture-risk-card {
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 15px;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 15px;
 }
 
 .culture-risk-card.critical {
-    background: linear-gradient(135deg, rgba(227, 28, 35, 0.15) 0%, rgba(0, 0, 0, 0.3) 100%);
-    border: 2px solid rgba(227, 28, 35, 0.5);
+  background: linear-gradient(
+    135deg,
+    rgba(227, 28, 35, 0.15) 0%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+  border: 2px solid rgba(227, 28, 35, 0.5);
 }
 
 .culture-risk-card.high {
-    background: linear-gradient(135deg, rgba(255, 100, 0, 0.15) 0%, rgba(0, 0, 0, 0.3) 100%);
-    border: 2px solid rgba(255, 100, 0, 0.5);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 100, 0, 0.15) 0%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+  border: 2px solid rgba(255, 100, 0, 0.5);
 }
 
 .culture-risk-card.medium {
-    background: linear-gradient(135deg, rgba(255, 165, 0, 0.15) 0%, rgba(0, 0, 0, 0.3) 100%);
-    border: 2px solid rgba(255, 165, 0, 0.5);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 165, 0, 0.15) 0%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+  border: 2px solid rgba(255, 165, 0, 0.5);
 }
 
 .culture-risk-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
 }
 
 .culture-risk-header h3 {
-    margin: 0;
-    color: white;
+  margin: 0;
+  color: white;
 }
 
 .culture-risk-severity {
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: bold;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .culture-risk-card.critical .culture-risk-severity {
-    color: #E31C23;
+  color: #e31c23;
 }
 
 .culture-risk-card.high .culture-risk-severity {
-    color: #FF6400;
+  color: #ff6400;
 }
 
 .culture-risk-card.medium .culture-risk-severity {
-    color: #FFA500;
+  color: #ffa500;
 }
 
 /* Recommendation Cards */
 .culture-recommendations .culture-rec-card {
-    background: linear-gradient(135deg, rgba(255, 203, 0, 0.1) 0%, rgba(0, 0, 0, 0.2) 100%);
-    border: 2px solid rgba(255, 203, 0, 0.3);
-    border-radius: 8px;
-    padding: 25px;
-    margin-bottom: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 203, 0, 0.1) 0%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  border: 2px solid rgba(255, 203, 0, 0.3);
+  border-radius: 8px;
+  padding: 25px;
+  margin-bottom: 20px;
 }
 
 .culture-rec-card.priority-1 {
-    border-color: #E31C23;
-    border-width: 3px;
+  border-color: #e31c23;
+  border-width: 3px;
 }
 
 .culture-rec-header h3 {
-    color: var(--jcb-yellow);
-    margin: 0;
-    font-size: 20px;
+  color: var(--jcb-yellow);
+  margin: 0;
+  font-size: 20px;
 }
 
 .culture-rec-number {
-    display: inline-block;
-    padding: 4px 10px;
-    background: var(--jcb-yellow);
-    color: black;
-    border-radius: 4px;
-    font-size: 14px;
-    margin-right: 10px;
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--jcb-yellow);
+  color: black;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-right: 10px;
 }
 
 .culture-rec-body {
-    margin-top: 15px;
+  margin-top: 15px;
 }
 
 .culture-rec-body h4 {
-    color: rgba(255, 255, 255, 0.9);
-    margin-top: 15px;
-    margin-bottom: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-top: 15px;
+  margin-bottom: 10px;
 }
 
 .culture-rec-body ul {
-    margin: 0;
-    padding-left: 25px;
+  margin: 0;
+  padding-left: 25px;
 }
 
 .culture-rec-body li {
-    margin-bottom: 8px;
-    line-height: 1.6;
-    color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 8px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .culture-rec-body p {
-    margin: 10px 0;
-    color: rgba(255, 255, 255, 0.8);
+  margin: 10px 0;
+  color: rgba(255, 255, 255, 0.8);
 }

@@ -1,9 +1,17 @@
 // Game Engine - Core game logic and state management
 
+// Granularity of the budget sliders. Slider <input> values are integers, so
+// the £M value is multiplied by this scale for the DOM and divided back out
+// when read. 20 gives 0.05 £M steps, which divides evenly into every budget
+// in use (0.4, 0.5, 0.25) so the full allocation is always reachable.
+const SLIDER_SCALE = 20;
+
 class GameEngine {
   constructor() {
     this.state = {
       playerName: "",
+      jobFunction: "",
+      seniority: "",
       selfIdentifiedStyle: "",
       consentGiven: false,
       currentScenario: 0,
@@ -45,11 +53,18 @@ class GameEngine {
 
       // Timing
       startTime: null,
-      timeRemaining: 900, // 15 minutes in seconds
+      timeRemaining: 600, // 10 minutes in seconds (9 scenarios, ~60s each)
       timerInterval: null,
 
       // Submission control
       isSubmitting: false,
+
+      // End-of-game guard (prevents double results / double leaderboard writes)
+      gameEnded: false,
+
+      // Leaderboard idempotency guard (prevents duplicate rows for one run)
+      savedToLeaderboard: false,
+      runId: null,
     };
 
     this.scenarios = null; // Will be loaded from scenarios.js
@@ -105,6 +120,9 @@ class GameEngine {
                         <button class="btn-secondary" style="padding: 4px 12px; font-size: 11px;" onclick="game.viewPlayerFeedback(${index})">
                             📊 VIEW FEEDBACK
                         </button>
+                        <button class="btn-secondary" style="padding: 4px 12px; font-size: 11px;" onclick="game.downloadPlayerFeedbackPdf(${index})">
+                            📄 PDF
+                        </button>
                     </div>
                 </div>
                 <div class="leaderboard-metrics">
@@ -148,20 +166,156 @@ class GameEngine {
     }
   }
 
+  // Full cohort of every player who has completed the game.
+  // Kept separate from the top-10 display leaderboard so the culture
+  // analysis reflects ALL players, not just the highest performers.
+  //
+  // BUGFIX (culture count): the two stores (jcb_culture_data and
+  // jcb_leaderboard) can drift apart - e.g. a row written by an earlier
+  // build that only touched the leaderboard, or a partially-failed write.
+  // We reconcile on read so a stale culture store is back-filled from the
+  // leaderboard before it is used for analysis.
+  getCultureData() {
+    try {
+      this.reconcileCultureData();
+      const data = localStorage.getItem("jcb_culture_data");
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      console.error("Error loading culture data:", e);
+      return [];
+    }
+  }
+
+  // Back-fill jcb_culture_data from jcb_leaderboard so the two stores agree.
+  //
+  // The culture store is the authoritative FULL cohort; the leaderboard is a
+  // top-10 display slice. Any leaderboard record whose run is missing from the
+  // culture store is appended (and persisted). Matching is by `runId` when
+  // present, falling back to `timestamp` + `name` for legacy rows that predate
+  // runId. Idempotent: running twice never duplicates a record. Never throws.
+  reconcileCultureData() {
+    try {
+      const rawCulture = localStorage.getItem("jcb_culture_data");
+      const rawLeaderboard = localStorage.getItem("jcb_leaderboard");
+
+      const culture = rawCulture ? JSON.parse(rawCulture) : [];
+      const leaderboard = rawLeaderboard ? JSON.parse(rawLeaderboard) : [];
+
+      if (!Array.isArray(culture) || !Array.isArray(leaderboard)) {
+        return culture;
+      }
+      if (leaderboard.length === 0) {
+        return culture;
+      }
+
+      // Index existing culture records for O(1) membership checks.
+      const cultureRunIds = new Set(
+        culture.filter((p) => p && p.runId).map((p) => p.runId),
+      );
+      const cultureLegacyKeys = new Set(
+        culture
+          .filter((p) => p && !p.runId)
+          .map((p) => this.legacyRecordKey(p)),
+      );
+
+      let changed = false;
+      leaderboard.forEach((record) => {
+        if (!record) return;
+
+        // Prefer the stable runId; fall back to timestamp+name for legacy rows.
+        const isDuplicate = record.runId
+          ? cultureRunIds.has(record.runId)
+          : cultureLegacyKeys.has(this.legacyRecordKey(record));
+
+        if (isDuplicate) return;
+
+        culture.push(record);
+        changed = true;
+
+        if (record.runId) {
+          cultureRunIds.add(record.runId);
+        } else {
+          cultureLegacyKeys.add(this.legacyRecordKey(record));
+        }
+      });
+
+      if (changed) {
+        localStorage.setItem("jcb_culture_data", JSON.stringify(culture));
+      }
+
+      return culture;
+    } catch (e) {
+      console.error("Error reconciling culture data:", e);
+      return [];
+    }
+  }
+
+  // Stable identity for legacy records that have no runId.
+  legacyRecordKey(record) {
+    if (!record) return "";
+    return String(record.timestamp || "") + "|" + String(record.name || "");
+  }
+
   saveToLeaderboard(playerData) {
     try {
+      // BUGFIX (audit): Give every run a UNIQUE id. Previously the only key was
+      // `timestamp: Date.now()`, which can collide when two saves happen in the
+      // same millisecond - the rank lookup then matched the wrong entry, which is
+      // how a player could see "1 of 1" on the podium while TWO identical rows
+      // appeared on the leaderboard.
+      if (!playerData.runId) {
+        playerData.runId =
+          "run_" +
+          Date.now().toString(36) +
+          "_" +
+          Math.random().toString(36).slice(2, 10);
+      }
+
+      // BUGFIX (culture count): persist the run's stable identity back onto
+      // this.state so the idempotency guard in showFeedback() can key on it.
+      // Previously this.state.runId stayed null forever, so the guard compared
+      // against a fresh unique id every call and never suppressed a duplicate.
+      if (this.state && !this.state.runId) {
+        this.state.runId = playerData.runId;
+      }
+
+      // 1. Persist the FULL cohort for culture analysis (no truncation).
+      //    Idempotent: if this exact run was already saved, do not duplicate it.
+      const cohort = this.getCultureData();
+      const alreadySaved = cohort.some((p) => p.runId === playerData.runId);
+      if (!alreadySaved) {
+        cohort.push(playerData);
+        localStorage.setItem("jcb_culture_data", JSON.stringify(cohort));
+      }
+
+      // 2. Maintain the top-10 display leaderboard (also idempotent)
       const leaderboard = this.getLeaderboardData();
-      leaderboard.push(playerData);
+      if (!leaderboard.some((p) => p.runId === playerData.runId)) {
+        leaderboard.push(playerData);
+      }
 
       // Sort by growth percentage (descending)
       leaderboard.sort((a, b) => b.growth - a.growth);
 
-      // Keep only top 10
+      // Keep only top 10 for display
       const top10 = leaderboard.slice(0, 10);
 
       localStorage.setItem("jcb_leaderboard", JSON.stringify(top10));
+
+      // 3. Report the player's placement for the results-screen reveal.
+      //    Rank is computed against the FULL cohort so it is always truthful,
+      //    even when the player falls outside the displayed top 10.
+      const sortedCohort = [...cohort].sort((a, b) => b.growth - a.growth);
+      const rank =
+        sortedCohort.findIndex((p) => p.runId === playerData.runId) + 1;
+      return {
+        rank: rank > 0 ? rank : null,
+        total: cohort.length,
+        inTop10: rank > 0 && rank <= 10,
+      };
     } catch (e) {
       console.error("Error saving to leaderboard:", e);
+      return null;
     }
   }
 
@@ -203,10 +357,22 @@ class GameEngine {
 
   validateAndStartBriefing() {
     const nameInput = document.getElementById("player-name");
+    const functionInput = document.getElementById("player-function");
+    const seniorityInput = document.getElementById("player-seniority");
     const consentCheckbox = document.getElementById("consent-checkbox");
 
     if (!nameInput.value.trim()) {
       alert("Please enter your name");
+      return;
+    }
+
+    if (!functionInput.value) {
+      alert("Please select your business function");
+      return;
+    }
+
+    if (!seniorityInput.value) {
+      alert("Please select your seniority");
       return;
     }
 
@@ -221,8 +387,212 @@ class GameEngine {
     }
 
     this.state.playerName = nameInput.value.trim();
+    this.state.jobFunction = functionInput.value;
+    this.state.seniority = seniorityInput.value;
     this.state.consentGiven = true;
 
+    // Returning-player detection: if this name matches a previous completed
+    // run, offer the choice of replaying Round 1 or advancing to Round 2.
+    // New players are completely unaffected and go straight to the briefing.
+    const returning = this.findReturningPlayer(this.state.playerName);
+    if (returning) {
+      this.returningPlayer = returning;
+      this.showRoundChoice(returning);
+      return;
+    }
+
+    // New player: default to Round 1 and proceed exactly as before.
+    // BUGFIX (culture count): this path calls startBriefing() directly and
+    // never went through startRound(), so the previous run's save guard could
+    // leak into the new run and suppress its leaderboard write. Reset it here.
+    this.resetSaveGuard();
+    this.state.round = 1;
+    this.scenarios = window.scenarios
+      ? window.scenarios.round1
+      : this.scenarios;
+    this.startBriefing();
+  }
+
+  // Reset the per-run leaderboard save guard. Called from startRound() and the
+  // new-player path in validateAndStartBriefing(). The guard lives on
+  // `this._savedRunIds` (NOT on the swappable this.state) so it survives
+  // viewPlayerFeedback()'s state swap; we also clear the legacy boolean flag.
+  resetSaveGuard() {
+    this._savedRunIds = new Set();
+    if (this.state) {
+      this.state.savedToLeaderboard = false;
+      this.state.runId = null;
+    }
+  }
+
+  // Search the full cohort (jcb_culture_data) for a prior completed run whose
+  // name matches the entered name case-insensitively and trimmed.
+  // Returns the most recent match (by timestamp), preferring a Round 1 record
+  // when one exists because Round 2 is the "learned from feedback" follow-up.
+  findReturningPlayer(name) {
+    if (!name || !name.trim()) return null;
+
+    const target = name.trim().toLowerCase();
+    const cohort = this.getCultureData();
+
+    const matches = cohort.filter(
+      (p) =>
+        p &&
+        typeof p.name === "string" &&
+        p.name.trim().toLowerCase() === target,
+    );
+
+    if (matches.length === 0) return null;
+
+    // Prefer a Round 1 record if one exists (Round 2 builds on Round 1 feedback).
+    const round1Matches = matches.filter((p) => (p.round || 1) === 1);
+    const pool = round1Matches.length > 0 ? round1Matches : matches;
+
+    // Most recent match by timestamp.
+    return pool.reduce((latest, current) => {
+      const latestTs = latest.timestamp || 0;
+      const currentTs = current.timestamp || 0;
+      return currentTs > latestTs ? current : latest;
+    });
+  }
+
+  // Present the returning player with a choice: replay Round 1 or play Round 2.
+  showRoundChoice(returning) {
+    const nameEl = document.getElementById("round-choice-name");
+    if (nameEl) {
+      nameEl.textContent = this.state.playerName;
+    }
+
+    const detailEl = document.getElementById("round-choice-detail");
+    if (detailEl && returning) {
+      const growth =
+        typeof returning.growth === "number"
+          ? returning.growth.toFixed(1)
+          : "0.0";
+      const status = returning.optimal
+        ? "Optimal"
+        : returning.escaped
+          ? "Target met"
+          : "Target missed";
+      detailEl.textContent = `We found your previous run: ${growth}% growth (${status}).`;
+    }
+
+    this.showScreen("round-choice-screen");
+  }
+
+  // Route the chosen round. Resets all per-run state to the constructor
+  // defaults so nothing leaks between rounds, then proceeds to the briefing.
+  startRound(roundNumber) {
+    const round = roundNumber === 2 ? 2 : 1;
+
+    // Reset per-run state to the exact constructor starting values.
+    this.state.currentScenario = 0;
+    this.state.round = round;
+
+    // Visible metrics
+    this.state.growth = 0;
+    this.state.profitMargin = 28;
+    this.state.morale = 65;
+    this.state.attrition = 10;
+
+    // Hidden tracking
+    this.state.leadershipStyles = {
+      coercive: 0,
+      authoritative: 0,
+      affiliative: 0,
+      democratic: 0,
+      pacesetting: 0,
+      coaching: 0,
+    };
+
+    // Quality metrics
+    this.state.leadership = 0;
+    this.state.excellence = 0;
+    this.state.agility = 0;
+    this.state.determination = 0;
+    this.state.organizationalCapability = 75;
+
+    this.state.criticalThinking = 0;
+    this.state.teamImpact = 0;
+
+    // Decision tracking
+    this.state.decisions = [];
+    this.state.infoRequests = [];
+
+    // Delayed payoffs
+    this.state.delayedGrowthPayoffs = [];
+
+    // Timing
+    this.state.startTime = null;
+    this.state.timeRemaining = 600;
+    if (this.state.timerInterval) {
+      clearInterval(this.state.timerInterval);
+      this.state.timerInterval = null;
+    }
+
+    // Submission control
+    this.state.isSubmitting = false;
+
+    // End-of-game guard
+    this.state.gameEnded = false;
+
+    // Leaderboard idempotency guard
+    this.resetSaveGuard();
+
+    // Select the scenario set for the chosen round.
+    this.scenarios =
+      round === 2
+        ? window.scenarios && window.scenarios.round2
+        : window.scenarios && window.scenarios.round1;
+
+    // Round 2 gets a welcome-back message before the briefing.
+    if (round === 2 && this.returningPlayer) {
+      this.showWelcomeBack(this.returningPlayer);
+      return;
+    }
+
+    this.startBriefing();
+  }
+
+  // Welcome-back message for a returning player choosing Round 2. References
+  // their previous result and their criticalImprovement to set up the
+  // "learned from feedback" theme.
+  showWelcomeBack(returning) {
+    const nameEl = document.getElementById("welcome-back-name");
+    if (nameEl) {
+      nameEl.textContent = this.state.playerName;
+    }
+
+    const summaryEl = document.getElementById("welcome-back-summary");
+    if (summaryEl && returning) {
+      const growth =
+        typeof returning.growth === "number"
+          ? returning.growth.toFixed(1)
+          : "0.0";
+      const status = returning.optimal
+        ? "Optimal"
+        : returning.escaped
+          ? "Target met"
+          : "Target missed";
+      const leadTotal =
+        (returning.leadership || 0) +
+        (returning.excellence || 0) +
+        (returning.agility || 0) +
+        (returning.determination || 0);
+
+      summaryEl.innerHTML = `
+        <p>Last time you delivered <strong>${growth}% growth</strong> (${status}) with a LEAD total of <strong>${leadTotal}</strong>.</p>
+        <p>Your #1 development priority was:</p>
+        <p class="welcome-back-improvement">${returning.criticalImprovement || "Continue developing leadership skills"}</p>
+        <p>Round 2 picks up where you left off — the challenges are harder, and the feedback you received is your edge. Apply what you learned.</p>
+      `;
+    }
+
+    this.showScreen("welcome-back-screen");
+  }
+
+  // Called from the welcome-back screen to proceed into the Round 2 briefing.
+  proceedFromWelcomeBack() {
     this.startBriefing();
   }
 
@@ -269,11 +639,21 @@ class GameEngine {
   }
 
   startTimer() {
+    // Guard against stacking intervals if startTimer is ever called twice
+    if (this.state.timerInterval) {
+      clearInterval(this.state.timerInterval);
+    }
+
+    this.updateTimerDisplay();
+
     this.state.timerInterval = setInterval(() => {
       this.state.timeRemaining--;
       this.updateTimerDisplay();
 
       if (this.state.timeRemaining <= 0) {
+        // Clear the interval BEFORE ending the game so it cannot keep firing
+        clearInterval(this.state.timerInterval);
+        this.state.timerInterval = null;
         this.endGame();
       }
     }, 1000);
@@ -283,14 +663,20 @@ class GameEngine {
     const minutes = Math.floor(this.state.timeRemaining / 60);
     const seconds = this.state.timeRemaining % 60;
     const timerEl = document.getElementById("game-timer");
+    if (!timerEl) return;
     timerEl.textContent = `Time: ${minutes}:${seconds.toString().padStart(2, "0")}`;
 
+    // Reset to default colour first, then apply the warning colour only
+    // when the clock is genuinely low. Without the reset the timer stayed
+    // red forever once it dipped below 60s (e.g. after a restart).
     if (this.state.timeRemaining < 60) {
       timerEl.style.color = "var(--jcb-red)";
+    } else {
+      timerEl.style.color = "";
     }
   }
 
-  updateHUD() {
+  updateHUD(deltas) {
     // Update visible metrics
     document.getElementById("metric-growth").textContent =
       `+${this.state.growth.toFixed(1)}%`;
@@ -318,6 +704,74 @@ class GameEngine {
       moraleFill.style.background =
         "linear-gradient(to right, orange, var(--jcb-red))";
     }
+
+    // Animated deltas: flash each metric that moved and show a +/- chip
+    if (deltas) {
+      this.animateMetricDelta("metric-growth", deltas.growth, "%", 1);
+      this.animateMetricDelta("metric-profit", deltas.profitMargin, "%", 0);
+      this.animateMetricDelta("metric-attrition", deltas.attrition, "%", 0);
+      this.animateMetricDelta(
+        "metric-capability",
+        deltas.organizationalCapability,
+        " pts",
+        0,
+      );
+      this.animateMoraleDelta(deltas.morale);
+    }
+  }
+
+  // Flash a metric value and show a floating +/- delta chip.
+  // For attrition, a decrease is good (green) and an increase is bad (red).
+  animateMetricDelta(elementId, delta, unit, decimals) {
+    if (!delta || Math.abs(delta) < 0.05) return;
+
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    const isAttrition = elementId === "metric-attrition";
+    const isGood = isAttrition ? delta < 0 : delta > 0;
+    const cls = isGood ? "delta-good" : "delta-bad";
+    const sign = delta > 0 ? "+" : "";
+
+    // Pulse the value itself
+    el.classList.remove("delta-good", "delta-bad");
+    // Force reflow so the animation can restart
+    void el.offsetWidth;
+    el.classList.add(cls);
+
+    // Floating chip
+    const chip = document.createElement("span");
+    chip.className = `metric-delta-chip ${cls}`;
+    chip.textContent = `${sign}${delta.toFixed(decimals)}${unit}`;
+    el.parentElement.style.position = "relative";
+    el.parentElement.appendChild(chip);
+
+    setTimeout(() => chip.remove(), 1600);
+    setTimeout(() => el.classList.remove("delta-good", "delta-bad"), 1200);
+  }
+
+  animateMoraleDelta(delta) {
+    if (!delta || Math.abs(delta) < 0.5) return;
+
+    const bar = document.getElementById("morale-bar");
+    if (!bar) return;
+
+    const isGood = delta > 0;
+    const cls = isGood ? "delta-good" : "delta-bad";
+    const sign = delta > 0 ? "+" : "";
+
+    bar.classList.remove("delta-good", "delta-bad");
+    void bar.offsetWidth;
+    bar.classList.add(cls);
+
+    const chip = document.createElement("span");
+    chip.className = `metric-delta-chip ${cls}`;
+    chip.textContent = `${sign}${delta.toFixed(0)}%`;
+    bar.parentElement.style.position = "relative";
+    bar.parentElement.appendChild(chip);
+
+    setTimeout(() => chip.remove(), 1600);
+    setTimeout(() => bar.classList.remove("delta-good", "delta-bad"), 1200);
   }
 
   updatePeriod(month, quarter) {
@@ -414,12 +868,12 @@ Data is incomplete. Every week of delay costs £50K in lost sales. What do you d
         // Strong growth - competitor targets YOUR success
         scenario.description = `You've achieved strong ${state.growth.toFixed(1)}% growth, which has drawn competitive attention. A major competitor just announced aggressive price cuts (15% below JCB) and exclusive dealer incentives. They're specifically targeting YOUR top accounts.
 
-Your Board wants immediate response. You have £2.5M to allocate. How do you defend your position?`;
+Your Board wants immediate response. You have £400K to allocate. How do you defend your position?`;
       } else if (state.growth < 10) {
         // Poor growth - you're already vulnerable
         scenario.description = `Your growth is struggling at ${state.growth.toFixed(1)}%, and now a major competitor announces aggressive price cuts (15% below JCB) and exclusive dealer incentives. You're already behind - this could be devastating.
 
-Your Board is concerned. You have £2.5M to allocate. How do you respond?`;
+Your Board is concerned. You have £400K to allocate. How do you respond?`;
       }
     }
 
@@ -432,7 +886,7 @@ Your Board is concerned. You have £2.5M to allocate. How do you respond?`;
 **Engineering:** "Ready now - we've tested it thoroughly"
 **Sales:** "Dealers want it immediately"
 **Manufacturing:** "12-week delay gives us time to scale properly"
-**CFO:** "Early launch = £8M revenue this year, delayed launch = £2M risk if competitor beats us"
+**CFO:** "Early launch = £500K revenue this year, delayed launch = £250K risk if competitor beats us"
 
 Your team has the energy for a sprint. When do you launch?`;
       } else if (state.morale < 65 || state.attrition > 15) {
@@ -442,7 +896,7 @@ Your team has the energy for a sprint. When do you launch?`;
 **Engineering:** "We can rush it, but we're stretched thin"
 **Sales:** "Dealers want it, but honestly, our team needs a break"
 **Manufacturing:** "We NEED 12 weeks to do this right and not kill our people"
-**CFO:** "Early launch = £8M revenue this year, but if we break the team, what's next year worth?"
+**CFO:** "Early launch = £500K revenue this year, but if we break the team, what's next year worth?"
 
 Your team is fragile. When do you launch?`;
       }
@@ -587,6 +1041,18 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     return html;
   }
 
+  // Format a monetary amount expressed in £ millions for display.
+  // Sub-£1M amounts are shown in £K (e.g. 0.25 -> "£250K") so that the
+  // rescale to a £2M engineering budget reads credibly to executives
+  // instead of rounding £250K up to a misleading "£0.3M".
+  formatMoney(millions) {
+    const value = Number(millions) || 0;
+    if (value > 0 && value < 1) {
+      return `£${Math.round(value * 1000)}K`;
+    }
+    return `£${value.toFixed(1)}M`;
+  }
+
   renderSliders(sliders, decisionIndex) {
     let html = '<div class="slider-container">';
     sliders.forEach((slider, i) => {
@@ -601,7 +1067,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                     <input type="range"
                            class="slider"
                            min="0"
-                           max="${slider.max * 10}"
+                           max="${slider.max * SLIDER_SCALE}"
                            value="0"
                            data-decision="${decisionIndex}"
                            data-slider="${i}"
@@ -612,7 +1078,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     if (sliders[0].budgetConstraint) {
       html += `<div class="budget-remaining" id="budget-remaining-${decisionIndex}">
-                Budget Remaining: £${sliders[0].budgetConstraint}M
+                Budget Remaining: ${this.formatMoney(sliders[0].budgetConstraint)}
             </div>`;
     }
 
@@ -705,23 +1171,31 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       let total = 0;
 
       sliders.forEach((slider) => {
-        total += parseFloat(slider.value) / 10;
+        total += parseFloat(slider.value) / SLIDER_SCALE;
       });
 
-      // If this change would exceed the budget, prevent it
-      if (total > budgetLimit + 0.01) {
-        // Revert the slider to its previous value
+      // If this change would exceed the budget, prevent it. The tolerance is
+      // half a slider step so floating-point noise never blocks a legal move,
+      // while still rejecting any genuine overspend.
+      const tolerance = 0.5 / SLIDER_SCALE;
+      if (total > budgetLimit + tolerance) {
+        // Clamp the moved slider to the exact maximum allowed at this
+        // granularity. Because SLIDER_SCALE divides every budget evenly,
+        // Math.floor lands exactly on a reachable step (e.g. 0.05) instead of
+        // stranding the final increment of headroom.
         const currentSlider = sliders[sliderIndex];
-        const maxAllowed = budgetLimit - (total - parseFloat(value) / 10);
-        currentSlider.value = Math.floor(maxAllowed * 10);
+        const maxAllowed =
+          budgetLimit - (total - parseFloat(value) / SLIDER_SCALE);
+        // The tiny epsilon absorbs floating-point error (e.g. 0.5 - 0.3)
+        // so a legal step is never floored away.
+        currentSlider.value = Math.floor(maxAllowed * SLIDER_SCALE + 1e-9);
         value = currentSlider.value;
       }
     }
 
-    const actualValue = (value / 10).toFixed(1);
     document.getElementById(
       `slider-value-${decisionIndex}-${sliderIndex}`,
-    ).textContent = `£${actualValue}M`;
+    ).textContent = this.formatMoney(value / SLIDER_SCALE);
 
     // Update budget if constraint exists
     this.updateBudgetRemaining(decisionIndex);
@@ -738,17 +1212,29 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       let total = 0;
 
       sliders.forEach((slider) => {
-        total += parseFloat(slider.value) / 10;
+        total += parseFloat(slider.value) / SLIDER_SCALE;
       });
 
       const remaining = decision.sliders[0].budgetConstraint - total;
       const budgetEl = document.getElementById(
         `budget-remaining-${decisionIndex}`,
       );
-      budgetEl.textContent = `Budget Remaining: £${remaining.toFixed(1)}M`;
 
-      if (remaining < 0) {
+      // Treat anything within half a step of zero as fully allocated, so
+      // floating-point noise never shows a phantom "£0K" underspend.
+      const fullyAllocated = Math.abs(remaining) < 0.5 / SLIDER_SCALE;
+      if (fullyAllocated) {
+        budgetEl.textContent = "Budget Remaining: £0K (Fully allocated)";
+      } else if (remaining > 0) {
+        budgetEl.textContent = `Budget Remaining: ${this.formatMoney(remaining)} (unallocated)`;
+      } else {
+        budgetEl.textContent = `Budget Remaining: ${this.formatMoney(remaining)}`;
+      }
+
+      if (remaining < -0.5 / SLIDER_SCALE) {
         budgetEl.style.color = "var(--jcb-red)";
+      } else if (fullyAllocated) {
+        budgetEl.style.color = "var(--jcb-green, #2e7d32)";
       } else {
         budgetEl.style.color = "var(--jcb-yellow)";
       }
@@ -955,6 +1441,21 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     console.log("Budget constraints validated successfully");
 
+    // Underspend feedback: never block submission, but let the player know
+    // money is still on the table so they can choose to allocate it.
+    const underspend = this.getUnallocatedBudget(scenario);
+    if (underspend > 0) {
+      const proceed = confirm(
+        `You have ${this.formatMoney(underspend)} unallocated. Submit anyway?`,
+      );
+      if (!proceed) {
+        console.log(
+          "Submission cancelled: player chose to allocate remaining budget",
+        );
+        return;
+      }
+    }
+
     // Set submitting flag to prevent duplicate submissions
     this.state.isSubmitting = true;
 
@@ -963,14 +1464,33 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // Store decision
     this.state.decisions.push(decision);
 
+    // Snapshot metrics BEFORE applying impact so we can show the deltas
+    const before = {
+      growth: this.state.growth,
+      profitMargin: this.state.profitMargin,
+      morale: this.state.morale,
+      attrition: this.state.attrition,
+      organizationalCapability: this.state.organizationalCapability,
+    };
+
     // Calculate impacts
     this.applyDecisionImpact(scenario, decision);
 
-    // Update HUD
-    this.updateHUD();
+    // Compute the deltas this decision produced
+    const deltas = {
+      growth: this.state.growth - before.growth,
+      profitMargin: this.state.profitMargin - before.profitMargin,
+      morale: this.state.morale - before.morale,
+      attrition: this.state.attrition - before.attrition,
+      organizationalCapability:
+        this.state.organizationalCapability - before.organizationalCapability,
+    };
 
-    // Show consequence
-    this.showConsequence(scenario, decision);
+    // Update HUD with animated deltas
+    this.updateHUD(deltas);
+
+    // Show consequence with the impact card
+    this.showConsequence(scenario, decision, deltas);
   }
 
   validateAllDecisionsMade(scenario) {
@@ -1020,6 +1540,39 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     return true;
   }
 
+  // Returns the total unallocated budget (in £M) across all slider decisions
+  // in the scenario. Used purely for non-blocking underspend feedback.
+  getUnallocatedBudget(scenario) {
+    let unallocated = 0;
+
+    for (
+      let decisionIndex = 0;
+      decisionIndex < scenario.decisions.length;
+      decisionIndex++
+    ) {
+      const decision = scenario.decisions[decisionIndex];
+
+      if (decision.type === "slider" && decision.sliders[0].budgetConstraint) {
+        const sliders = document.querySelectorAll(
+          `input.slider[data-decision="${decisionIndex}"]`,
+        );
+        let total = 0;
+
+        sliders.forEach((slider) => {
+          total += parseFloat(slider.value) / SLIDER_SCALE;
+        });
+
+        const remaining = decision.sliders[0].budgetConstraint - total;
+        // Ignore sub-step floating-point noise.
+        if (remaining > 0.5 / SLIDER_SCALE) {
+          unallocated += remaining;
+        }
+      }
+    }
+
+    return unallocated;
+  }
+
   validateBudgetConstraints(scenario) {
     // Check all slider-based decisions for budget constraints
     for (
@@ -1036,7 +1589,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         let total = 0;
 
         sliders.forEach((slider) => {
-          total += parseFloat(slider.value) / 10;
+          total += parseFloat(slider.value) / SLIDER_SCALE;
         });
 
         const budgetLimit = decision.sliders[0].budgetConstraint;
@@ -1045,8 +1598,9 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
           `Budget validation - Decision ${decisionIndex}: total = ${total.toFixed(2)}, limit = ${budgetLimit}`,
         );
 
-        // Allow a tiny margin for floating point errors
-        if (total > budgetLimit + 0.01) {
+        // Allow half a slider step of margin for floating point errors.
+        // Overspend beyond that is still rejected.
+        if (total > budgetLimit + 0.5 / SLIDER_SCALE) {
           return false;
         }
       }
@@ -1093,7 +1647,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             `input.slider[data-decision="${index}"]`,
           );
           const values = Array.from(sliders).map(
-            (s) => parseFloat(s.value) / 10,
+            (s) => parseFloat(s.value) / SLIDER_SCALE,
           );
           data.choices.push({
             type: "slider",
@@ -1239,9 +1793,13 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       // Without this, morale only ever ratchets upward (positive impacts outnumber and
       // outweigh negative ones), which is why morale previously stayed pinned near 100.
       // A neutral team drifts toward 60; a strong culture (high capability) drifts toward 70.
-      const moraleBaseline = this.state.organizationalCapability >= 150 ? 70 : 60;
+      const moraleBaseline =
+        this.state.organizationalCapability >= 150 ? 70 : 60;
       if (this.state.morale > moraleBaseline) {
-        const drift = Math.max(1, Math.round((this.state.morale - moraleBaseline) * 0.08));
+        const drift = Math.max(
+          1,
+          Math.round((this.state.morale - moraleBaseline) * 0.08),
+        );
         this.state.morale -= drift;
         console.log(
           `Morale drift toward baseline ${moraleBaseline}: -${drift} (now ${this.state.morale.toFixed(0)})`,
@@ -1393,13 +1951,22 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // Calculate LEAD performance ratios vs benchmarks
     // BENCHMARKS UPDATED 2026-05-16: Set to realistic values based on actual maximum achievable points
     // These represent "good but not perfect" performance (~70% of maximum per scenario)
+    // BUGFIX (audit): These benchmarks MUST match calculateFinalScore() exactly.
+    // The game plays 9 scenarios, and calculateFinalScore() uses per-scenario
+    // benchmarks of 19/19/19/19. Previously this method used avgScenarios = 6 and
+    // benchmarks of 25/35/15/20, which inflated every LEAD ratio by ~1.5x. That made
+    // the "poor LEAD" penalties almost unreachable and the bonuses fire too easily,
+    // so the in-game multipliers disagreed with the win conditions.
     const benchmarks = {
-      leadership: 25, // Max ~35 per scenario, benchmark = 70% of max
-      excellence: 35, // Max ~50 per scenario, benchmark = 70% of max
-      agility: 15, // Max ~22 per scenario, benchmark = 70% of max
-      determination: 20, // Max ~28 per scenario, benchmark = 70% of max
+      leadership: 19,
+      excellence: 19,
+      agility: 19,
+      determination: 19,
     };
-    const avgScenarios = 6;
+    // Round-aware divisor: Round 1 plays 9 scenarios, Round 2 plays 6. Using 9
+    // for a Round 2 run would deflate every LEAD ratio by ~33% and mis-fire the
+    // in-game multipliers (and disagree with calculateFinalScore's win checks).
+    const avgScenarios = this.state && this.state.round === 2 ? 6 : 9;
 
     const leadRatios = {
       leadership: this.state.leadership / avgScenarios / benchmarks.leadership,
@@ -1629,7 +2196,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     console.log(`Profit Margin: ${this.state.profitMargin.toFixed(1)}%`);
   }
 
-  showConsequence(scenario, decision) {
+  showConsequence(scenario, decision, deltas) {
     const modal = document.getElementById("consequence-modal");
     const textEl = document.getElementById("consequence-text");
 
@@ -1638,12 +2205,69 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       scenario.consequenceText ||
       "Your decision has been recorded. The situation evolves...";
 
-    textEl.textContent = consequenceText;
+    // Build the cinematic impact strip from the deltas.
+    // BUGFIX (audit): previously any delta below 0.05 was silently DROPPED, so a
+    // decision that moved growth by a small amount (or where two effects cancelled)
+    // appeared to have "no growth impact" - which players found disjointed and
+    // untrustworthy. We now ALWAYS render all five metrics, showing "0" with a
+    // neutral style when there is no meaningful change, so the full picture is
+    // visible at a glance.
+    const impactItems = [];
+    const pushImpact = (label, value, unit, decimals, invert) => {
+      const v = typeof value === "number" && isFinite(value) ? value : 0;
+      const negligible = Math.abs(v) < 0.05;
+      const isGood = invert ? v < 0 : v > 0;
+      const cls = negligible ? "neutral" : isGood ? "good" : "bad";
+      const sign = v > 0 ? "+" : "";
+      const shown = negligible ? "0" : `${sign}${v.toFixed(decimals)}`;
+      impactItems.push(
+        `<div class="impact-chip ${cls}">
+                    <span class="impact-label">${label}</span>
+                    <span class="impact-value">${shown}${unit}</span>
+                </div>`,
+      );
+    };
+
+    if (deltas) {
+      pushImpact("Growth", deltas.growth, "%", 1, false);
+      pushImpact("Profit", deltas.profitMargin, "%", 0, false);
+      pushImpact("Morale", deltas.morale, "%", 0, false);
+      pushImpact("Attrition", deltas.attrition, "%", 0, true);
+      pushImpact(
+        "Capability",
+        deltas.organizationalCapability,
+        " pts",
+        0,
+        false,
+      );
+    }
+
+    const impactStrip =
+      impactItems.length > 0
+        ? `<div class="impact-strip">${impactItems.join("")}</div>`
+        : "";
+
+    // Render the impact card into the modal body
+    const bodyEl = document.getElementById("consequence-body");
+    if (bodyEl) {
+      bodyEl.innerHTML = `
+                <div class="impact-card">
+                    <div class="impact-card-header">DECISION RECORDED</div>
+                    <p class="impact-consequence">${consequenceText}</p>
+                    ${impactStrip}
+                </div>
+            `;
+    } else {
+      // Fallback to the plain text element if the body container is absent
+      textEl.textContent = consequenceText;
+    }
+
     modal.classList.add("active");
 
     // Auto-continue after 5 seconds
     let countdown = 5;
     const timerEl = document.getElementById("consequence-timer");
+    timerEl.textContent = countdown;
 
     const countdownInterval = setInterval(() => {
       countdown--;
@@ -1659,8 +2283,16 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   }
 
   skipConsequence() {
+    // If the game already ended (e.g. the timer expired while this modal was
+    // open), do nothing - advancing the scenario counter now would corrupt the
+    // finished game state.
+    if (this.state.gameEnded) {
+      return;
+    }
+
     if (this.consequenceInterval) {
       clearInterval(this.consequenceInterval);
+      this.consequenceInterval = null;
     }
 
     document.getElementById("consequence-modal").classList.remove("active");
@@ -1679,8 +2311,30 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   }
 
   endGame() {
+    // Re-entrancy guard: endGame() can be reached from BOTH the timer expiring
+    // AND the final scenario completing. Without this guard the results screen
+    // (and the leaderboard write in showFeedback) could run twice.
+    if (this.state.gameEnded) {
+      return;
+    }
+    this.state.gameEnded = true;
+
     if (this.state.timerInterval) {
       clearInterval(this.state.timerInterval);
+      this.state.timerInterval = null;
+    }
+
+    // If the timer expired while the consequence modal was open, tear it down.
+    // Otherwise the modal would sit on top of the results screen and its
+    // 5-second countdown would later call skipConsequence(), advancing the
+    // scenario counter and corrupting the finished game state.
+    if (this.consequenceInterval) {
+      clearInterval(this.consequenceInterval);
+      this.consequenceInterval = null;
+    }
+    const consequenceModal = document.getElementById("consequence-modal");
+    if (consequenceModal) {
+      consequenceModal.classList.remove("active");
     }
 
     this.showResults();
@@ -1697,7 +2351,12 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     if (window.scoringEngine) {
       console.log("Calculating final results...");
       try {
-        const results = scoringEngine.calculateFinalScore(this.state);
+        // Pass the Round 1 record (if any) so the scoring engine can compute
+        // the Round 2 adaptation bonus. Round 1 runs pass null and are unaffected.
+        const results = scoringEngine.calculateFinalScore(
+          this.state,
+          this.returningPlayer || null,
+        );
         console.log("Results calculated:", results);
         this.finalResults = results; // Store for detailed feedback view
         console.log("this.finalResults set to:", this.finalResults);
@@ -1715,10 +2374,543 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   }
 
   displayResults(results) {
-    // Animate metrics counting up
+    // Reveal the executive-summary download button now that results exist.
+    const execBtn = document.getElementById("download-exec-summary-btn");
+    if (execBtn) execBtn.style.display = "";
+
+    // Reveal the individual-feedback PDF button for consistency.
+    const feedbackPdfBtn = document.getElementById("download-feedback-pdf-btn");
+    if (feedbackPdfBtn) feedbackPdfBtn.style.display = "";
+
+    // Animate metrics counting up (tightened for the time constraint)
     setTimeout(() => {
       this.animateResultsReveal(results);
-    }, 2000);
+    }, 900);
+  }
+
+  /**
+   * Build and download the round-aware executive summary for the current run.
+   *
+   * Instantiates ExecutiveSummaryGenerator, passes the current player data,
+   * game state and results (plus the round and the prior Round 1 record so the
+   * Round 1 vs Round 2 awareness-change section can be produced), then triggers
+   * a browser download of the generated HTML via a Blob + temporary anchor.
+   *
+   * Safe to call for Round 1 runs, Round 2 runs with a prior Round 1 record,
+   * and Round 2 runs without one.
+   */
+  downloadExecutiveSummary() {
+    try {
+      if (!this.finalResults) {
+        alert("No results available yet. Complete the simulation first.");
+        return;
+      }
+      if (typeof ExecutiveSummaryGenerator === "undefined") {
+        alert("Executive summary generator is not loaded.");
+        return;
+      }
+
+      const generator = new ExecutiveSummaryGenerator();
+
+      // Round 2 runs pass the prior Round 1 record (already resolved by
+      // findReturningPlayer during startRound) so the awareness-change section
+      // can be built. Round 1 runs pass null.
+      const priorRound1Record =
+        this.state && this.state.round === 2
+          ? this.returningPlayer || null
+          : null;
+
+      const report = generator.generateSummary(
+        {
+          name: this.state.playerName,
+          jobFunction: this.state.jobFunction,
+          seniority: this.state.seniority,
+        },
+        this.state,
+        this.finalResults,
+        {
+          round: this.state.round,
+          priorRound1Record: priorRound1Record,
+          // Reuse the engine's cohort store rather than inventing a new one.
+          cultureDataProvider: () => this.getCultureData(),
+        },
+      );
+
+      // Trigger a browser download of the combined report.
+      const html = report.combined || report.summary || "";
+      const baseFilename = report.filename || "JCB_Leadership_Assessment.pdf";
+
+      // Prefer a real PDF when the offline SimplePDF writer is available.
+      // Fall back to the original HTML download so the button never breaks.
+      let blob;
+      let downloadName;
+      if (window.SimplePDF && typeof window.SimplePDF.fromHTML === "function") {
+        blob = window.SimplePDF.fromHTML(html, {
+          title: "JCB Leadership Assessment",
+          subtitle:
+            "Executive Summary — Round " +
+            ((this.state && this.state.round) || 1),
+        });
+        downloadName = baseFilename.replace(/\.html?$/i, ".pdf");
+      } else {
+        blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        downloadName = baseFilename;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = downloadName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      // Release the object URL on the next tick so the download can start.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (e) {
+      console.error("Error generating executive summary:", e);
+      alert("Could not generate the executive summary: " + e.message);
+    }
+  }
+
+  /**
+   * Build the shared JCB branded header block used at the top of every PDF
+   * report. Uses only semantic tags and inline styles because the offline PDF
+   * writer strips CSS classes. The wordmark line ("JCB LEADERSHIP IN ACTION")
+   * is followed by an <h1> title, a subtitle line, optional meta lines and a
+   * horizontal rule.
+   *
+   * @param {string} title     Report title (rendered as <h1>)
+   * @param {string} subtitle  Report subtitle line
+   * @param {Array<string>} metaLines Optional meta lines (date, identifiers)
+   * @returns {string} HTML fragment
+   */
+  _buildReportHeaderBlock(title, subtitle, metaLines) {
+    const esc = (v) =>
+      String(v === undefined || v === null ? "" : v)
+        .replace(/&/g, "&")
+        .replace(/</g, "<")
+        .replace(/>/g, ">");
+    const lines = Array.isArray(metaLines) ? metaLines : [];
+    const metaHtml = lines
+      .filter((l) => l)
+      .map((l) => "<p style='margin:2px 0;'>" + esc(l) + "</p>")
+      .join("");
+    return (
+      "<div>" +
+      "<p style='margin:0 0 4px 0;'><strong>JCB</strong> LEADERSHIP IN ACTION</p>" +
+      "<h1 style='margin:0 0 4px 0;'>" +
+      esc(title) +
+      "</h1>" +
+      "<p style='margin:0 0 4px 0;color:#333;'>" +
+      esc(subtitle) +
+      "</p>" +
+      metaHtml +
+      "<hr/>" +
+      "</div>"
+    );
+  }
+
+  /**
+   * Sanitise text destined for the PDF writer: replace emoji/arrows with
+   * plain-ASCII equivalents so the WinAnsi encoder never drops or mangles
+   * them. Keeps the degree sign and pound sign, which the writer supports.
+   *
+   * @param {string} text Raw text (may contain emoji/arrows)
+   * @returns {string} Sanitised text
+   */
+  _sanitisePdfText(text) {
+    return String(text === undefined || text === null ? "" : text)
+      .replace(/⚠️/g, "WARNING:")
+      .replace(/⚠/g, "WARNING:")
+      .replace(/✅/g, "OK:")
+      .replace(/❌/g, "GAP:")
+      .replace(/←/g, "<-")
+      .replace(/→/g, "->")
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, "");
+  }
+
+  /**
+   * Build a self-contained, print-friendly HTML document for an individual
+   * player's feedback. Shared by downloadFeedbackPdf() (current run) and
+   * downloadPlayerFeedbackPdf() (leaderboard player).
+   *
+   * @param {Object} state   Player state (metrics, LEAD scores, round, etc.)
+   * @param {Object} results Final results (profile, colour, feedback, recs)
+   * @param {string} name    Player display name
+   * @returns {string} Complete HTML document string
+   */
+  _buildFeedbackReportHtml(state, results, name) {
+    const safeName = name || "Player";
+    const s = state || {};
+    const r = results || {};
+
+    const esc = (v) =>
+      String(v === undefined || v === null ? "" : v)
+        .replace(/&/g, "&")
+        .replace(/</g, "<")
+        .replace(/>/g, ">");
+
+    const num = (v, digits) =>
+      typeof v === "number" && isFinite(v) ? v.toFixed(digits) : "0";
+
+    // PERCENTAGE ACCURACY FIX: clamp conceptually bounded percentages (style
+    // shares, retention) to 0-100 and guard non-finite input. Raw game metrics
+    // (growth, morale, attrition, profitMargin) are left unclamped because they
+    // are meaningful above 100 / below 0 - only their finiteness is enforced.
+    const pct = (v, digits) => {
+      const d = typeof digits === "number" ? digits : 0;
+      if (typeof v !== "number" || !isFinite(v)) return "0";
+      return Math.max(0, Math.min(100, v)).toFixed(d);
+    };
+
+    const colorLabel = this.getColorLabel(r.personalityColor);
+    const colorHex = this.getColorHex(r.personalityColor);
+
+    // Outcome line
+    let outcome = "Target not met";
+    if (r.optimal) outcome = "Optimal outcome achieved";
+    else if (r.escaped) outcome = "Target met";
+
+    // Leadership profile rows
+    let profileRows = "";
+    const profile = r.leadershipProfile || {};
+    Object.keys(profile).forEach((style) => {
+      const rawPct = profile[style];
+      // Style shares are conceptually bounded 0-100; clamp for display.
+      const safePct =
+        typeof rawPct === "number" && isFinite(rawPct)
+          ? Math.max(0, Math.min(100, rawPct))
+          : 0;
+      let annotation = "";
+      if (safePct >= 60) annotation = " (Overused)";
+      else if (safePct >= 40) annotation = " (Primary)";
+      else if (safePct >= 30) annotation = " (Secondary)";
+      else if (safePct <= 20) annotation = " (Underused)";
+      profileRows +=
+        "<tr><td>" +
+        esc(style.charAt(0).toUpperCase() + style.slice(1)) +
+        "</td><td>" +
+        esc(safePct) +
+        "%" +
+        esc(annotation) +
+        "</td></tr>";
+    });
+
+    // Recommendations
+    let recsHtml = "";
+    if (r.recommendations && r.recommendations.length > 0) {
+      recsHtml += "<h2>Development Recommendations</h2><ol>";
+      r.recommendations.forEach((rec) => {
+        recsHtml +=
+          "<li><strong>" +
+          esc(rec.title) +
+          "</strong><br/>" +
+          esc(rec.description) +
+          "</li>";
+      });
+      recsHtml += "</ol>";
+    }
+
+    // Plain-language opening summary (2-3 sentences) so the report leads with
+    // meaning rather than raw tables.
+    const openingSummary =
+      "<p>" +
+      esc(safeName) +
+      " completed Round " +
+      esc(s.round || 1) +
+      " of the JCB Leadership Assessment with the outcome: " +
+      esc(outcome) +
+      ". This report summarises the final performance metrics, LEAD framework " +
+      "scores, leadership style profile and personalised development feedback " +
+      "generated from the decisions made during the simulation.</p>";
+
+    const html =
+      "<!DOCTYPE html><html><head><meta charset='utf-8'/>" +
+      "<title>JCB Leadership Assessment — Individual Feedback</title>" +
+      "<style>" +
+      "body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:24px;line-height:1.5;}" +
+      "h1{font-size:22px;margin:0 0 4px 0;}" +
+      "h2{font-size:16px;margin:22px 0 8px 0;border-bottom:2px solid #FFCB00;padding-bottom:4px;}" +
+      "p{margin:4px 0;}" +
+      "table{border-collapse:collapse;width:100%;margin:8px 0;}" +
+      "td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:13px;}" +
+      "th{background:#f4f4f4;}" +
+      ".meta{color:#555;font-size:13px;margin-bottom:12px;}" +
+      ".color-swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:middle;}" +
+      "</style></head><body>" +
+      this._buildReportHeaderBlock(
+        "Individual Feedback",
+        "JCB Leadership Assessment — " + safeName,
+        [
+          "Player: " + safeName,
+          "Function: " +
+            (s.jobFunction || "—") +
+            "  |  Seniority: " +
+            (s.seniority || "—") +
+            "  |  Round: " +
+            (s.round || 1),
+          "Outcome: " + outcome,
+          "Generated: " + new Date().toLocaleDateString("en-GB"),
+        ],
+      ) +
+      openingSummary +
+      "<h2>Final Performance Metrics</h2>" +
+      "<table><tr><th>Metric</th><th>Value</th></tr>" +
+      // Growth / attrition / profitMargin are the game's own metrics and are
+      // meaningful above 100 / below 0, so they are only finiteness-guarded
+      // (via num). Morale is conceptually a percentage of a maximum, so it is
+      // clamped to 0-100 to avoid a confusing "morale 180%".
+      "<tr><td>Revenue Growth</td><td>" +
+      num(s.growth, 1) +
+      "%</td></tr>" +
+      "<tr><td>Team Morale</td><td>" +
+      pct(s.morale, 0) +
+      "%</td></tr>" +
+      "<tr><td>Staff Attrition</td><td>" +
+      num(s.attrition, 1) +
+      "%</td></tr>" +
+      "<tr><td>Profit Margin</td><td>" +
+      num(s.profitMargin, 1) +
+      "%</td></tr>" +
+      "<tr><td>Organizational Capability</td><td>" +
+      num(s.organizationalCapability, 0) +
+      "</td></tr></table>" +
+      "<h2>JCB LEAD Framework Performance</h2>" +
+      "<table><tr><th>Dimension</th><th>Score</th></tr>" +
+      "<tr><td>Leadership Quality</td><td>" +
+      esc(s.leadership || 0) +
+      "</td></tr>" +
+      "<tr><td>Excellence Standards</td><td>" +
+      esc(s.excellence || 0) +
+      "</td></tr>" +
+      "<tr><td>Agility & Adaptability</td><td>" +
+      esc(s.agility || 0) +
+      "</td></tr>" +
+      "<tr><td>Determination to Succeed</td><td>" +
+      esc(s.determination || 0) +
+      "</td></tr></table>" +
+      "<h2>Leadership Profile (Goleman Framework)</h2>" +
+      "<table><tr><th>Style</th><th>Share</th></tr>" +
+      (profileRows || "<tr><td colspan='2'>No profile data</td></tr>") +
+      "</table>" +
+      "<h2>Personality Colour</h2>" +
+      "<p><span class='color-swatch' style='background:" +
+      esc(colorHex) +
+      ";'></span><strong>" +
+      esc(r.personalityColor || "BALANCED") +
+      "</strong> — " +
+      esc(colorLabel) +
+      "</p>" +
+      "<p>" +
+      esc(r.personalityDescription || "") +
+      "</p>" +
+      "<h2>Detailed Feedback</h2>" +
+      "<div>" +
+      this._sanitisePdfText(r.feedback || "") +
+      "</div>" +
+      recsHtml +
+      "</body></html>";
+
+    return html;
+  }
+
+  /**
+   * Trigger a browser download for a Blob using an object URL + anchor click,
+   * revoking the URL on the next tick. Shared download plumbing.
+   */
+  _downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  /**
+   * Build and download a PDF of the current player's individual feedback.
+   * Falls back to an HTML download when the SimplePDF writer is unavailable.
+   */
+  downloadFeedbackPdf() {
+    try {
+      if (!this.finalResults) {
+        alert("No feedback available to download yet.");
+        return;
+      }
+
+      const name = (this.state && this.state.playerName) || "Player";
+      const html = this._buildFeedbackReportHtml(
+        this.state,
+        this.finalResults,
+        name,
+      );
+
+      const cleanName =
+        String(name)
+          .replace(/[^a-z0-9]+/gi, "_")
+          .replace(/^_+|_+$/g, "")
+          .slice(0, 40) || "Player";
+      const round = (this.state && this.state.round) || 1;
+      const timestamp = Date.now();
+
+      let blob;
+      let downloadName;
+      if (window.SimplePDF && typeof window.SimplePDF.fromHTML === "function") {
+        blob = window.SimplePDF.fromHTML(html, {
+          title: "JCB Leadership Assessment",
+          subtitle: "Individual Feedback — " + name,
+        });
+        downloadName =
+          "JCB_Feedback_" +
+          cleanName +
+          "_round" +
+          round +
+          "_" +
+          timestamp +
+          ".pdf";
+      } else {
+        blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        downloadName =
+          "JCB_Feedback_" +
+          cleanName +
+          "_round" +
+          round +
+          "_" +
+          timestamp +
+          ".html";
+      }
+
+      this._downloadBlob(blob, downloadName);
+    } catch (e) {
+      console.error("Error generating feedback PDF:", e);
+      alert("Could not generate the feedback PDF: " + e.message);
+    }
+  }
+
+  /**
+   * Reconstruct a leaderboard player's state/results from stored data.
+   * Shared by viewPlayerFeedback() and downloadPlayerFeedbackPdf() so the
+   * reconstruction logic lives in exactly one place.
+   *
+   * @param {number} playerIndex Index into the leaderboard array
+   * @returns {{state: Object, results: Object, name: string}|null}
+   */
+  _reconstructPlayerState(playerIndex) {
+    const leaderboardData = this.getLeaderboardData();
+    const player = leaderboardData[playerIndex];
+
+    if (!player) return null;
+
+    const results = {
+      escaped: player.escaped,
+      optimal: player.optimal,
+      leadershipProfile: player.leadershipProfile || {},
+      personalityColor: player.personalityColor,
+      personalityDescription: player.personalityDescription,
+      feedback: player.feedback || "",
+      recommendations: player.recommendations || [],
+      leadRatios: player.leadRatios || {},
+    };
+
+    const state = {
+      growth: player.growth,
+      morale: player.morale,
+      attrition: player.attrition,
+      profitMargin: player.profitMargin,
+      leadership: player.leadership,
+      excellence: player.excellence,
+      agility: player.agility,
+      determination: player.determination,
+      organizationalCapability: player.organizationalCapability || 0,
+      infoRequests: player.infoRequests || [],
+      decisions: player.decisions || [],
+      leadershipStyles: player.leadershipStyles || {},
+      round: player.round || 1,
+      playerName: player.name,
+      jobFunction: player.jobFunction,
+      seniority: player.seniority,
+    };
+
+    return { state: state, results: results, name: player.name };
+  }
+
+  /**
+   * Build and download a PDF of a leaderboard player's individual feedback.
+   * Temporarily swaps in the reconstructed state/results, reuses the shared
+   * report builder, then restores the original state/results.
+   */
+  downloadPlayerFeedbackPdf(playerIndex) {
+    try {
+      const reconstructed = this._reconstructPlayerState(playerIndex);
+      if (!reconstructed) {
+        alert("Player data not found.");
+        return;
+      }
+
+      const originalState = this.state;
+      const originalResults = this.finalResults;
+
+      this.state = reconstructed.state;
+      this.finalResults = reconstructed.results;
+
+      try {
+        const name = reconstructed.name || "Player";
+        const html = this._buildFeedbackReportHtml(
+          this.state,
+          this.finalResults,
+          name,
+        );
+
+        const cleanName =
+          String(name)
+            .replace(/[^a-z0-9]+/gi, "_")
+            .replace(/^_+|_+$/g, "")
+            .slice(0, 40) || "Player";
+        const round = (this.state && this.state.round) || 1;
+        const timestamp = Date.now();
+
+        let blob;
+        let downloadName;
+        if (
+          window.SimplePDF &&
+          typeof window.SimplePDF.fromHTML === "function"
+        ) {
+          blob = window.SimplePDF.fromHTML(html, {
+            title: "JCB Leadership Assessment",
+            subtitle: "Individual Feedback — " + name,
+          });
+          downloadName =
+            "JCB_Feedback_" +
+            cleanName +
+            "_round" +
+            round +
+            "_" +
+            timestamp +
+            ".pdf";
+        } else {
+          blob = new Blob([html], { type: "text/html;charset=utf-8" });
+          downloadName =
+            "JCB_Feedback_" +
+            cleanName +
+            "_round" +
+            round +
+            "_" +
+            timestamp +
+            ".html";
+        }
+
+        this._downloadBlob(blob, downloadName);
+      } finally {
+        // Always restore the original state/results.
+        this.state = originalState;
+        this.finalResults = originalResults;
+      }
+    } catch (e) {
+      console.error("Error generating player feedback PDF:", e);
+      alert("Could not generate the player feedback PDF: " + e.message);
+    }
   }
 
   animateResultsReveal(results) {
@@ -1748,7 +2940,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     setTimeout(() => {
       this.showOutcome(results);
-    }, 1500);
+    }, 900);
   }
 
   showOutcome(results) {
@@ -1763,14 +2955,14 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 ${
                   success
                     ? `You achieved ${this.state.growth.toFixed(1)}% growth and met your target!`
-                    : `You achieved ${this.state.growth.toFixed(1)}% growth. Target was 20%.`
+                    : `You achieved ${this.state.growth.toFixed(1)}% growth. Target was 15%.`
                 }
             </div>
         `;
 
     setTimeout(() => {
       this.showLeadershipBreakdown(results);
-    }, 1500);
+    }, 900);
   }
 
   showLeadershipBreakdown(results) {
@@ -1779,7 +2971,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     setTimeout(() => {
       this.showFeedback(results);
-    }, 2000);
+    }, 900);
   }
 
   renderLeadershipChart(results) {
@@ -1824,6 +3016,79 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     return "";
   }
 
+  // Render the Round 2 "Adaptation" section. Returns an empty string for
+  // Round 1 runs (or when there is no adaptation data), so Round 1 players
+  // never see it. Reuses existing feedback/impact styling rather than adding
+  // new CSS classes.
+  renderAdaptationSection(results) {
+    // Only Round 2 runs with a prior record get an adaptation section.
+    if (!this.state || this.state.round !== 2) return "";
+    const adaptation = results && results.adaptation;
+    if (!adaptation) return "";
+
+    const earned = adaptation.bonus > 0;
+    const accent = earned ? "#00D084" : "var(--jcb-yellow)";
+    const border = earned ? "#00D084" : "var(--jcb-yellow)";
+    const bg = earned
+      ? "linear-gradient(135deg, rgba(0, 208, 132, 0.18) 0%, rgba(0, 208, 132, 0.04) 100%)"
+      : "linear-gradient(135deg, rgba(255, 203, 0, 0.12) 0%, rgba(255, 203, 0, 0.03) 100%)";
+
+    // What Round 1 flagged.
+    let flagged = "";
+    if (adaptation.weakestDimension) {
+      flagged = `Your Round 1 feedback flagged <strong>${adaptation.weakestDimension}</strong> as your weakest LEAD dimension`;
+      if (typeof adaptation.round1WeakestRatio === "number") {
+        flagged += ` (${(adaptation.round1WeakestRatio * 100).toFixed(0)}% of benchmark)`;
+      }
+      flagged += ".";
+    } else {
+      flagged = "Your Round 1 feedback highlighted areas for development.";
+    }
+    if (
+      adaptation.round1MaxStyleName &&
+      typeof adaptation.round1MaxStyle === "number" &&
+      adaptation.round1MaxStyle > 60
+    ) {
+      flagged += ` It also noted over-reliance on the <strong>${adaptation.round1MaxStyleName}</strong> style (${adaptation.round1MaxStyle.toFixed(0)}%).`;
+    }
+
+    // What the player did in Round 2.
+    let did = "";
+    if (
+      adaptation.weakestDimension &&
+      typeof adaptation.round2WeakestRatio === "number"
+    ) {
+      did += `In Round 2 your ${adaptation.weakestDimension} moved to <strong>${(adaptation.round2WeakestRatio * 100).toFixed(0)}%</strong> of benchmark. `;
+    }
+    if (
+      adaptation.round2MaxStyleName &&
+      typeof adaptation.round2MaxStyle === "number"
+    ) {
+      did += `Your most-used style was <strong>${adaptation.round2MaxStyleName}</strong> at ${adaptation.round2MaxStyle.toFixed(0)}%. `;
+    }
+    if (!did)
+      did =
+        "Your Round 2 approach has been compared against your Round 1 record. ";
+
+    // Bonus line.
+    let bonusLine = "";
+    if (earned) {
+      bonusLine = `<div style="margin-top: 12px; font-size: 20px; font-weight: bold; color: ${accent};">✅ ADAPTATION BONUS: +${adaptation.bonus} points</div>`;
+    } else {
+      bonusLine = `<div style="margin-top: 12px; font-size: 16px; color: rgba(255, 255, 255, 0.8);">No adaptation bonus this round — but no penalty either. Keep working the areas your feedback flagged.</div>`;
+    }
+
+    return `
+            <div class="feedback-section" style="background: ${bg}; border: 2px solid ${border}; border-radius: 12px; padding: 25px; margin-bottom: 30px;">
+                <div style="font-size: 14px; color: rgba(255, 255, 255, 0.7); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">Round 2 — Learned From Feedback</div>
+                <h2 style="color: ${accent}; margin: 0 0 15px 0; font-size: 24px;">🔄 ADAPTATION</h2>
+                <p style="font-size: 16px; line-height: 1.6; color: white; margin: 0 0 10px 0;"><strong>What Round 1 flagged:</strong> ${flagged}</p>
+                <p style="font-size: 16px; line-height: 1.6; color: white; margin: 0;"><strong>What you did in Round 2:</strong> ${did}${adaptation.summary}</p>
+                ${bonusLine}
+            </div>
+        `;
+  }
+
   showFeedback(results) {
     const feedbackContainer = document.getElementById("results-feedback");
 
@@ -1836,15 +3101,56 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 <h2 style="color: var(--jcb-yellow); margin: 0 0 15px 0; font-size: 24px;">🎯 MOST IMPORTANT IMPROVEMENT</h2>
                 <div style="font-size: 18px; line-height: 1.6; color: white;">${criticalImprovement}</div>
             </div>
+            ${this.renderAdaptationSection(results)}
             <h3>RADICAL CANDOR FEEDBACK</h3>
             ${results.feedback}
             ${this.renderLEADScoreBreakdown(results)}
             ${this.renderDevelopmentRecommendations(results.recommendations)}
         `;
 
-    // Save to leaderboard with comprehensive data
-    this.saveToLeaderboard({
+    // Save to leaderboard with comprehensive data.
+    //
+    // BUGFIX (culture count): the old guard was a single boolean on this.state
+    // (`savedToLeaderboard`). That is fragile because viewPlayerFeedback()
+    // swaps this.state for a reconstructed object that omits the flag, so the
+    // guard could read as undefined mid-render, and the new-player path never
+    // reset it. We now key idempotency on the run's stable runId, tracked on a
+    // property that is NOT part of the swappable this.state (`this._savedRunIds`).
+    // This survives the state swap and still writes exactly once per run.
+    if (!this._savedRunIds) {
+      this._savedRunIds = new Set();
+    }
+
+    const currentRunId = this.state.runId;
+    if (currentRunId && this._savedRunIds.has(currentRunId)) {
+      return;
+    }
+    // Fallback: if this.state.runId is missing (e.g. a swapped state), consult
+    // the persisted culture store so a re-entry still cannot double-write.
+    if (
+      !currentRunId &&
+      this.getCultureData().some(
+        (p) =>
+          p &&
+          p.name === this.state.playerName &&
+          p.round === this.state.round &&
+          p.timestamp &&
+          Date.now() - p.timestamp < 60000,
+      )
+    ) {
+      return;
+    }
+    if (currentRunId) {
+      this._savedRunIds.add(currentRunId);
+    }
+    // Keep the legacy flag in sync for any code that still reads it.
+    this.state.savedToLeaderboard = true;
+
+    const placement = this.saveToLeaderboard({
       name: this.state.playerName,
+      // Segmentation (for culture analysis)
+      jobFunction: this.state.jobFunction,
+      seniority: this.state.seniority,
       // Game metrics
       growth: this.state.growth,
       morale: this.state.morale,
@@ -1876,11 +3182,65 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       feedback: results.feedback,
       recommendations: results.recommendations,
       leadRatios: results.leadRatios,
+      // Round 2 adaptation bonus (0 for Round 1 runs) so the culture analysis
+      // and detailed feedback can see it.
+      adaptationBonus:
+        typeof results.adaptationBonus === "number"
+          ? results.adaptationBonus
+          : 0,
       timestamp: Date.now(),
     });
 
+    // Record the runId that saveToLeaderboard() just assigned, so a re-entry
+    // into showFeedback() for this same run is suppressed even though the id
+    // was not known when the guard was first evaluated.
+    if (this.state.runId) {
+      this._savedRunIds.add(this.state.runId);
+    }
+
     // Reload leaderboard for next player
     this.loadLeaderboard();
+
+    // Dramatic leaderboard placement reveal
+    this.showLeaderboardPlacement(placement);
+  }
+
+  // Animated rank-in reveal on the results screen.
+  // Uses the truthful rank computed against the full cohort.
+  showLeaderboardPlacement(placement) {
+    const container = document.getElementById("results-placement");
+    if (!container || !placement || !placement.rank) return;
+
+    const { rank, total, inTop10 } = placement;
+    const isPodium = rank <= 3;
+    const medal =
+      rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "🏅";
+
+    const headline = isPodium
+      ? `TOP ${rank} OF ${total}`
+      : inTop10
+        ? `#${rank} OF ${total}`
+        : `#${rank} OF ${total}`;
+
+    const subline = isPodium
+      ? "Outstanding — you are on the podium."
+      : inTop10
+        ? "You made the leaderboard."
+        : "Every run sharpens the picture of our culture.";
+
+    container.innerHTML = `
+            <div class="placement-card ${isPodium ? "podium" : ""}">
+                <div class="placement-medal">${medal}</div>
+                <div class="placement-rank">${headline}</div>
+                <div class="placement-sub">${subline}</div>
+            </div>
+        `;
+
+    // Trigger the rank-in animation on the next frame
+    requestAnimationFrame(() => {
+      const card = container.querySelector(".placement-card");
+      if (card) card.classList.add("revealed");
+    });
   }
 
   renderDevelopmentRecommendations(recommendations) {
@@ -1903,15 +3263,15 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   }
 
   renderLEADScoreBreakdown(results) {
-    // UPDATED 2026-05-17: TRUE MAXIMUM values calculated from code analysis
-    // These represent the absolute maximum achievable points across all 6 scenarios
-    // Excellence reduced from 495 to 300 to reflect realistic information gathering
-    // (495 assumed requesting ALL info in ALL scenarios, which is analysis paralysis)
+    // BUGFIX (audit): The game plays 9 scenarios, not 6. The previous maximums
+    // were calibrated for 6 scenarios, so every "% of maximum" shown to the player
+    // was inflated by ~50% (e.g. a genuine 50% read as 75%). These values are the
+    // 6-scenario maximums scaled by 9/6 = 1.5 to match the real 9-scenario run.
     const maximums = {
-      leadership: 267, // True maximum from optimal choices across 6 scenarios
-      excellence: 300, // Recalibrated - realistic info requests (not exhaustive)
-      agility: 155, // True maximum from optimal choices across 6 scenarios
-      determination: 212, // True maximum from optimal choices across 6 scenarios
+      leadership: 401, // 267 x 1.5 (9 scenarios)
+      excellence: 450, // 300 x 1.5 (9 scenarios)
+      agility: 233, // 155 x 1.5 (9 scenarios)
+      determination: 318, // 212 x 1.5 (9 scenarios)
     };
 
     // Track cumulative totals
@@ -2204,7 +3564,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
       detailedView +=
         '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Final Performance Metrics</h4>';
-      detailedView += `<p><strong>Revenue Growth:</strong> ${this.state.growth.toFixed(1)}% (Target: 20%)</p>`;
+      detailedView += `<p><strong>Revenue Growth:</strong> ${this.state.growth.toFixed(1)}% (Target: 15%)</p>`;
 
       // Morale with explanatory note if at cap
       if (this.state.morale >= 95) {
@@ -2299,50 +3659,22 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
   viewPlayerFeedback(playerIndex) {
     try {
-      const leaderboardData = this.getLeaderboardData();
-      const player = leaderboardData[playerIndex];
+      // Reconstruct the player's state/results via the shared helper so the
+      // reconstruction logic is not duplicated with downloadPlayerFeedbackPdf.
+      const reconstructed = this._reconstructPlayerState(playerIndex);
 
-      if (!player) {
+      if (!reconstructed) {
         alert("Player data not found.");
         return;
       }
-
-      // Reconstruct finalResults from stored player data
-      const reconstructedResults = {
-        escaped: player.escaped,
-        optimal: player.optimal,
-        leadershipProfile: player.leadershipProfile || {},
-        personalityColor: player.personalityColor,
-        personalityDescription: player.personalityDescription,
-        feedback: player.feedback || "",
-        recommendations: player.recommendations || [],
-        leadRatios: player.leadRatios || {},
-      };
-
-      // Reconstruct state from stored player data
-      const reconstructedState = {
-        growth: player.growth,
-        morale: player.morale,
-        attrition: player.attrition,
-        profitMargin: player.profitMargin,
-        leadership: player.leadership,
-        excellence: player.excellence,
-        agility: player.agility,
-        determination: player.determination,
-        organizationalCapability: player.organizationalCapability || 0,
-        infoRequests: player.infoRequests || [],
-        decisions: player.decisions || [],
-        leadershipStyles: player.leadershipStyles || {},
-        round: player.round || 1,
-      };
 
       // Temporarily store current state
       const originalState = this.state;
       const originalResults = this.finalResults;
 
       // Replace with player's data
-      this.state = reconstructedState;
-      this.finalResults = reconstructedResults;
+      this.state = reconstructed.state;
+      this.finalResults = reconstructed.results;
 
       // Call existing viewDetailedFeedback method
       this.viewDetailedFeedback();
@@ -2365,6 +3697,11 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       BLUE: "Analytical",
       YELLOW: "Collaborative",
       GREEN: "Supportive",
+      "RED/YELLOW": "Driven Innovator",
+      "BLUE/GREEN": "Thoughtful Coach",
+      "YELLOW/RED": "Energetic Achiever",
+      "GREEN/BLUE": "Developmental Strategist",
+      BALANCED: "Adaptive Leader",
     };
     return labels[color] || color;
   }
@@ -2375,8 +3712,13 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       BLUE: "#0066CC",
       YELLOW: "#FFCB00",
       GREEN: "#008E4C",
+      "RED/YELLOW": "#E31C23",
+      "BLUE/GREEN": "#0066CC",
+      "YELLOW/RED": "#FFCB00",
+      "GREEN/BLUE": "#008E4C",
+      BALANCED: "#7A7A7A",
     };
-    return hexColors[color] || "#FFFFFF";
+    return hexColors[color] || "#7A7A7A";
   }
 
   getLeadFeedback(attribute, score) {
@@ -2417,7 +3759,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
   // COMPANY CULTURE ANALYSIS METHODS
   showCultureDashboard() {
-    const leaderboard = this.getLeaderboardData();
+    // Use the FULL cohort, not the truncated top-10 display leaderboard.
+    // getCultureData() reconciles jcb_culture_data against jcb_leaderboard
+    // first, so a stale culture store self-heals before analysis runs.
+    const cohort = this.getCultureData();
 
     if (!window.CultureAnalysis) {
       alert("Culture analysis engine not loaded. Please refresh the page.");
@@ -2425,17 +3770,401 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     }
 
     const analyzer = new window.CultureAnalysis();
-    const analysis = analyzer.analyzeCulture(leaderboard);
+    const analysis = analyzer.analyzeCulture(cohort);
 
     if (analysis.error) {
-      alert(
-        analysis.message + "\n\nCurrent player count: " + analysis.playerCount,
-      );
+      // Report the reconciled cohort length so the count is truthful even if
+      // the analyzer was handed a stale array.
+      alert(analysis.message + "\n\nCurrent player count: " + cohort.length);
       return;
     }
 
     this.renderCultureDashboard(analysis);
     this.showScreen("culture-dashboard-screen");
+  }
+
+  /**
+   * Build and download a PDF of the company culture analysis.
+   *
+   * The analysis object is never cached, so this method re-derives it from the
+   * cohort on every click. This makes the button safe to press even if the
+   * dashboard was never opened. Falls back to an HTML download when the
+   * SimplePDF writer is unavailable.
+   */
+  downloadCulturePdf() {
+    try {
+      if (!window.CultureAnalysis) {
+        alert("Culture analysis engine not loaded. Please refresh the page.");
+        return;
+      }
+
+      const cohort = this.getCultureData();
+      const analyzer = new window.CultureAnalysis();
+      const analysis = analyzer.analyzeCulture(cohort);
+
+      if (analysis.error) {
+        alert(analysis.message);
+        return;
+      }
+
+      const html = this._buildCultureReportHtml(analysis);
+      const timestamp = Date.now();
+      const baseName =
+        "JCB_Culture_Analysis_" +
+        (analysis.playerCount || 0) +
+        "leaders_" +
+        timestamp;
+
+      let blob;
+      let downloadName;
+      if (window.SimplePDF && typeof window.SimplePDF.fromHTML === "function") {
+        blob = window.SimplePDF.fromHTML(html, {
+          title: "JCB Leadership Assessment",
+          subtitle:
+            "Company Culture Analysis — " +
+            (analysis.playerCount || 0) +
+            " Leaders",
+        });
+        downloadName = baseName + ".pdf";
+      } else {
+        blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        downloadName = baseName + ".html";
+      }
+
+      this._downloadBlob(blob, downloadName);
+    } catch (e) {
+      console.error("Error generating culture PDF:", e);
+      alert("Could not generate the culture PDF: " + e.message);
+    }
+  }
+
+  /**
+   * Build a self-contained, print-friendly HTML document for the company
+   * culture analysis. Mirrors _buildFeedbackReportHtml: inline <style> only,
+   * semantic markup, and local esc()/num() helpers. No emoji, because the PDF
+   * writer maps to Latin-1 and would mangle them.
+   *
+   * @param {Object} analysis Result of CultureAnalysis.analyzeCulture()
+   * @returns {string} Complete HTML document string
+   */
+  _buildCultureReportHtml(analysis) {
+    const a = analysis || {};
+    const metrics = a.metrics || {};
+    const leadership = a.leadership || {};
+    const lead = a.lead || {};
+    const segments = a.segments || {};
+    const decisions = a.decisions || {};
+    const observations = a.observations || [];
+    const recommendations = a.recommendations || [];
+    const playerCount = a.playerCount || 0;
+
+    const esc = (v) =>
+      String(v === undefined || v === null ? "" : v)
+        .replace(/&/g, "&")
+        .replace(/</g, "<")
+        .replace(/>/g, ">");
+
+    const num = (v, digits) =>
+      typeof v === "number" && isFinite(v) ? v.toFixed(digits) : "0";
+
+    // PERCENTAGE ACCURACY FIX: clamp conceptually bounded percentages (style
+    // shares, diversity, morale) to 0-100 and guard non-finite input. Raw
+    // metrics (growth, attrition, profitMargin) stay unclamped but finite.
+    const pct = (v, digits) => {
+      const d = typeof digits === "number" ? digits : 0;
+      if (typeof v !== "number" || !isFinite(v)) return "0";
+      return Math.max(0, Math.min(100, v)).toFixed(d);
+    };
+
+    const cap = (v) => {
+      const s = String(v === undefined || v === null ? "" : v);
+      return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+    };
+
+    const generated = new Date().toLocaleDateString("en-GB", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    // --- 1. Title + meta -----------------------------------------------------
+    // Plain-language opening summary (2-3 sentences).
+    const openingSummary =
+      "<p>This report analyses the leadership culture across " +
+      esc(playerCount) +
+      " recorded leader run(s). It summarises performance ranges, leadership " +
+      "style distribution, LEAD framework scores and the decision tendencies " +
+      "observed across the cohort, highlighting where the organisation is " +
+      "strong and where development focus is warranted.</p>";
+
+    let html =
+      "<!DOCTYPE html><html><head><meta charset='utf-8'/>" +
+      "<title>JCB Leadership Assessment — Company Culture Analysis</title>" +
+      "<style>" +
+      "body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:24px;line-height:1.5;}" +
+      "h1{font-size:22px;margin:0 0 4px 0;}" +
+      "h2{font-size:16px;margin:22px 0 8px 0;border-bottom:2px solid #FFCB00;padding-bottom:4px;}" +
+      "h3{font-size:14px;margin:12px 0 4px 0;}" +
+      "p{margin:4px 0;}" +
+      "table{border-collapse:collapse;width:100%;margin:8px 0;}" +
+      "td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:13px;}" +
+      "th{background:#f4f4f4;}" +
+      ".meta{color:#555;font-size:13px;margin-bottom:12px;}" +
+      ".block{margin:10px 0;padding:8px 10px;border-left:3px solid #FFCB00;background:#fafafa;}" +
+      ".category{color:#777;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;}" +
+      "</style></head><body>" +
+      this._buildReportHeaderBlock(
+        "Company Culture Analysis",
+        "JCB Leadership Assessment — " + playerCount + " Leaders",
+        ["Cohort size: " + playerCount + " leaders", "Generated: " + generated],
+      ) +
+      openingSummary;
+
+    // --- 2. Executive Summary ------------------------------------------------
+    html +=
+      "<h2>Executive Summary</h2>" +
+      "<table>" +
+      "<tr><th>Measure</th><th>Value</th></tr>" +
+      "<tr><td>Leaders analysed</td><td>" +
+      esc(playerCount) +
+      "</td></tr>" +
+      "<tr><td>Met basic targets</td><td>" +
+      esc(metrics.successCount || 0) +
+      " of " +
+      esc(playerCount) +
+      "</td></tr>" +
+      "<tr><td>Achieved optimal</td><td>" +
+      esc(metrics.optimalCount || 0) +
+      " of " +
+      esc(playerCount) +
+      "</td></tr>" +
+      "<tr><td>Style spread</td><td>" +
+      esc(leadership.spreadLabel || "n/a") +
+      "</td></tr>" +
+      "</table>";
+
+    // --- 3. Performance Ranges ----------------------------------------------
+    html +=
+      "<h2>Performance Ranges</h2>" +
+      "<table>" +
+      "<tr><th>Metric</th><th>Median</th><th>Range</th></tr>" +
+      "<tr><td>Revenue Growth</td><td>" +
+      num(metrics.medianGrowth, 1) +
+      "%</td><td>" +
+      num(metrics.minGrowth, 1) +
+      "% - " +
+      num(metrics.maxGrowth, 1) +
+      "%</td></tr>" +
+      "<tr><td>Team Morale</td><td>" +
+      pct(metrics.medianMorale, 0) +
+      "%</td><td>" +
+      pct(metrics.minMorale, 0) +
+      "% - " +
+      pct(metrics.maxMorale, 0) +
+      "%</td></tr>" +
+      "<tr><td>Staff Attrition</td><td>" +
+      num(metrics.medianAttrition, 1) +
+      "%</td><td>" +
+      num(metrics.minAttrition, 1) +
+      "% - " +
+      num(metrics.maxAttrition, 1) +
+      "%</td></tr>" +
+      "<tr><td>Profit Margin</td><td>" +
+      num(metrics.medianProfitMargin, 0) +
+      "%</td><td>Median across the cohort</td></tr>" +
+      "</table>";
+
+    // --- 4. Leadership Style Distribution -----------------------------------
+    const aggregate = leadership.aggregate || {};
+    let styleRows = "";
+    Object.keys(aggregate).forEach((style) => {
+      styleRows +=
+        "<tr><td>" +
+        esc(cap(style)) +
+        "</td><td>" +
+        pct(aggregate[style], 0) +
+        "%</td></tr>";
+    });
+    if (!styleRows) {
+      styleRows = "<tr><td colspan='2'>No style data</td></tr>";
+    }
+    const mostUsed = leadership.mostUsed || ["n/a", 0];
+    const leastUsed = leadership.leastUsed || ["n/a", 0];
+    html +=
+      "<h2>Leadership Style Distribution</h2>" +
+      "<table><tr><th>Style</th><th>Aggregate Share</th></tr>" +
+      styleRows +
+      "</table>" +
+      "<p><strong>Diversity index:</strong> " +
+      pct((leadership.diversity || 0) * 100, 0) +
+      "%</p>" +
+      "<p><strong>Most Used:</strong> " +
+      esc(cap(mostUsed[0])) +
+      " (" +
+      pct(mostUsed[1], 0) +
+      "%) &nbsp; <strong>Least Used:</strong> " +
+      esc(cap(leastUsed[0])) +
+      " (" +
+      pct(leastUsed[1], 0) +
+      "%)</p>";
+
+    // --- 5. LEAD Framework Scores -------------------------------------------
+    const leadDims = [
+      ["Leadership", lead.leadership],
+      ["Excellence", lead.excellence],
+      ["Agility", lead.agility],
+      ["Determination", lead.determination],
+    ];
+    let leadRows = "";
+    leadDims.forEach(([label, stats]) => {
+      const s = stats || {};
+      leadRows +=
+        "<tr><td>" +
+        esc(label) +
+        "</td><td>" +
+        num(s.median, 0) +
+        "</td><td>" +
+        num(s.avg, 0) +
+        "</td><td>" +
+        num(s.min, 0) +
+        " - " +
+        num(s.max, 0) +
+        "</td><td>" +
+        esc(s.consistency || "n/a") +
+        "</td></tr>";
+    });
+    html +=
+      "<h2>LEAD Framework Scores</h2>" +
+      "<table><tr><th>Dimension</th><th>Median</th><th>Average</th>" +
+      "<th>Range</th><th>Consistency</th></tr>" +
+      leadRows +
+      "</table>";
+
+    // --- 6. By Business Function --------------------------------------------
+    const funcSegments = (segments.byFunction || []).filter(
+      (s) => s && s.sufficient === true,
+    );
+    if (funcSegments.length > 0) {
+      html += "<h2>By Business Function</h2>";
+      funcSegments.forEach((seg) => {
+        html +=
+          "<div class='block'>" +
+          "<h3>" +
+          esc(seg.name || "Unknown") +
+          " (" +
+          esc(seg.count || 0) +
+          " leaders)</h3>" +
+          "<p><strong>Dominant style:</strong> " +
+          esc(cap(seg.dominantStyle || "n/a")) +
+          "</p>" +
+          "<p><strong>Average growth:</strong> " +
+          num(seg.avgGrowth, 1) +
+          "% &nbsp; <strong>Average morale:</strong> " +
+          num(seg.avgMorale, 0) +
+          "% &nbsp; <strong>Average attrition:</strong> " +
+          num(seg.avgAttrition, 1) +
+          "%</p>" +
+          "</div>";
+      });
+    }
+
+    // --- 7. By Seniority -----------------------------------------------------
+    const senSegments = (segments.bySeniority || []).filter(
+      (s) => s && s.sufficient === true,
+    );
+    if (senSegments.length > 0) {
+      html += "<h2>By Seniority</h2>";
+      senSegments.forEach((seg) => {
+        html +=
+          "<div class='block'>" +
+          "<h3>" +
+          esc(seg.name || "Unknown") +
+          " (" +
+          esc(seg.count || 0) +
+          " leaders)</h3>" +
+          "<p><strong>Dominant style:</strong> " +
+          esc(cap(seg.dominantStyle || "n/a")) +
+          "</p>" +
+          "<p><strong>Average growth:</strong> " +
+          num(seg.avgGrowth, 1) +
+          "% &nbsp; <strong>Average morale:</strong> " +
+          num(seg.avgMorale, 0) +
+          "% &nbsp; <strong>Average attrition:</strong> " +
+          num(seg.avgAttrition, 1) +
+          "%</p>" +
+          "</div>";
+      });
+    }
+
+    // --- 8. What the Data Shows ---------------------------------------------
+    if (observations.length > 0) {
+      html += "<h2>What the Data Shows</h2>";
+      observations.forEach((obs) => {
+        const o = obs || {};
+        html +=
+          "<div class='block'>" +
+          "<div class='category'>" +
+          esc(o.category || "") +
+          "</div>" +
+          "<h3>" +
+          esc(o.headline || "") +
+          "</h3>" +
+          "<p>" +
+          esc(o.detail || "") +
+          "</p>" +
+          "</div>";
+      });
+    }
+
+    // --- 9. Suggested Focus Areas -------------------------------------------
+    if (recommendations.length > 0) {
+      html += "<h2>Suggested Focus Areas</h2>";
+      recommendations.forEach((rec, index) => {
+        const r = rec || {};
+        const actions = r.actions || [];
+        html +=
+          "<div class='block'>" +
+          "<h3>Focus " +
+          esc(index + 1) +
+          ": " +
+          esc(r.title || "") +
+          "</h3>" +
+          "<p><strong>Why:</strong> " +
+          esc(r.rationale || "") +
+          "</p>";
+        if (actions.length > 0) {
+          html += "<p><strong>Suggested actions:</strong></p><ol>";
+          actions.forEach((action) => {
+            html += "<li>" + esc(action) + "</li>";
+          });
+          html += "</ol>";
+        }
+        html += "</div>";
+      });
+    }
+
+    // --- 10. Decision Tendencies --------------------------------------------
+    if (decisions.available === true) {
+      const info = decisions.infoSeekingBehavior || {};
+      html +=
+        "<h2>Decision Tendencies</h2>" +
+        "<table>" +
+        "<tr><th>Measure</th><th>Value</th></tr>" +
+        // Decision rates are proportions of total decisions, bounded 0-100.
+        "<tr><td>Aggressive decision rate</td><td>" +
+        pct(decisions.aggressiveDecisionRate, 1) +
+        "%</td></tr>" +
+        "<tr><td>Collaborative decision rate</td><td>" +
+        pct(decisions.collaborativeDecisionRate, 1) +
+        "%</td></tr>" +
+        "<tr><td>Average info requests per player</td><td>" +
+        num(info.avgRequestsPerPlayer, 1) +
+        "</td></tr>" +
+        "</table>";
+    }
+
+    html += "</body></html>";
+    return html;
   }
 
   renderCultureDashboard(analysis) {
@@ -2446,38 +4175,38 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // Executive Summary Card
     html += '<div class="culture-summary-card">';
     html += `<h2>Executive Summary</h2>`;
-    html += `<p style="margin-bottom: 20px; color: rgba(255, 255, 255, 0.85); line-height: 1.6;">This dashboard analyzes the collective leadership culture of your team based on ${analysis.playerCount} completed simulations. Scores compare your team's average performance against high-performance benchmarks.</p>`;
+    html += `<p style="margin-bottom: 20px; color: rgba(255, 255, 255, 0.85); line-height: 1.6;">This dashboard describes the collective leadership culture of your team based on ${analysis.playerCount} completed simulations. All figures are drawn directly from the players' own results - there is no external benchmark.</p>`;
     html += `<div class="culture-stat-row">`;
-    html += `<div class="culture-stat"><span class="culture-stat-label">Players Analyzed:</span><span class="culture-stat-value">${analysis.playerCount}</span></div>`;
-    html += `<div class="culture-stat"><span class="culture-stat-label">Success Rate:</span><span class="culture-stat-value">${analysis.metrics.successRate.toFixed(0)}%</span></div>`;
-    html += `<div class="culture-stat"><span class="culture-stat-label">Performance Level:</span><span class="culture-stat-value">${analysis.comparisonToHighPerformance.performanceLevel}</span></div>`;
-    html += `<div class="culture-stat"><span class="culture-stat-label">Estimated Percentile:</span><span class="culture-stat-value" title="Estimated ranking compared to other companies (50th = average, 90th = top 10%)">${analysis.comparisonToHighPerformance.percentileEstimate}th</span></div>`;
+    html += `<div class="culture-stat"><span class="culture-stat-label">Leaders Analysed:</span><span class="culture-stat-value">${analysis.playerCount}</span></div>`;
+    html += `<div class="culture-stat"><span class="culture-stat-label">Met Basic Targets:</span><span class="culture-stat-value">${analysis.metrics.successCount} of ${analysis.playerCount}</span></div>`;
+    html += `<div class="culture-stat"><span class="culture-stat-label">Achieved Optimal:</span><span class="culture-stat-value">${analysis.metrics.optimalCount} of ${analysis.playerCount}</span></div>`;
+    html += `<div class="culture-stat"><span class="culture-stat-label">Style Spread:</span><span class="culture-stat-value">${analysis.leadership.spreadLabel}</span></div>`;
     html += `</div>`;
     html += "</div>";
 
-    // Aggregate Metrics
+    // Aggregate Metrics (descriptive ranges)
     html += '<div class="culture-section">';
-    html += "<h2>📊 Aggregate Performance Metrics</h2>";
+    html += "<h2>📊 Performance Ranges</h2>";
     html += '<div class="culture-metrics-grid">';
     html += `<div class="culture-metric-card">
-            <div class="culture-metric-label">Average Growth</div>
-            <div class="culture-metric-value ${analysis.metrics.avgGrowth >= 20 ? "success" : "warning"}">${analysis.metrics.avgGrowth.toFixed(1)}%</div>
-            <div class="culture-metric-target">Target: 20%</div>
+            <div class="culture-metric-label">Revenue Growth</div>
+            <div class="culture-metric-value">${analysis.metrics.medianGrowth.toFixed(1)}%</div>
+            <div class="culture-metric-target">Median (range ${analysis.metrics.minGrowth.toFixed(1)}% - ${analysis.metrics.maxGrowth.toFixed(1)}%)</div>
         </div>`;
     html += `<div class="culture-metric-card">
-            <div class="culture-metric-label">Average Morale</div>
-            <div class="culture-metric-value ${analysis.metrics.avgMorale >= 70 ? "success" : "warning"}">${analysis.metrics.avgMorale.toFixed(0)}%</div>
-            <div class="culture-metric-target">Healthy: 70%+</div>
+            <div class="culture-metric-label">Team Morale</div>
+            <div class="culture-metric-value">${analysis.metrics.medianMorale.toFixed(0)}%</div>
+            <div class="culture-metric-target">Median (range ${analysis.metrics.minMorale.toFixed(0)}% - ${analysis.metrics.maxMorale.toFixed(0)}%)</div>
         </div>`;
     html += `<div class="culture-metric-card">
-            <div class="culture-metric-label">Average Attrition</div>
-            <div class="culture-metric-value ${analysis.metrics.avgAttrition < 15 ? "success" : "warning"}">${analysis.metrics.avgAttrition.toFixed(1)}%</div>
-            <div class="culture-metric-target">Healthy: <15%</div>
+            <div class="culture-metric-label">Staff Attrition</div>
+            <div class="culture-metric-value">${analysis.metrics.medianAttrition.toFixed(1)}%</div>
+            <div class="culture-metric-target">Median (range ${analysis.metrics.minAttrition.toFixed(1)}% - ${analysis.metrics.maxAttrition.toFixed(1)}%)</div>
         </div>`;
     html += `<div class="culture-metric-card">
-            <div class="culture-metric-label">Optimal Rate</div>
-            <div class="culture-metric-value">${analysis.metrics.optimalRate.toFixed(0)}%</div>
-            <div class="culture-metric-target">% of players who achieved optimal</div>
+            <div class="culture-metric-label">Profit Margin</div>
+            <div class="culture-metric-value">${analysis.metrics.medianProfitMargin.toFixed(0)}%</div>
+            <div class="culture-metric-target">Median across the cohort</div>
         </div>`;
     html += "</div>";
     html += "</div>";
@@ -2485,21 +4214,18 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // Leadership Style Distribution
     html += '<div class="culture-section">';
     html += "<h2>👥 Leadership Style Distribution</h2>";
-    html += `<div class="culture-diversity-score ${analysis.leadership.balanced ? "success" : "warning"}">`;
-    html += `<strong>Diversity Index:</strong> ${(analysis.leadership.diversity * 100).toFixed(0)}%`;
-    html += `(${analysis.leadership.balanced ? "BALANCED ✓" : "NEEDS IMPROVEMENT"})`;
+    html += `<div class="culture-diversity-score">`;
+    html += `<strong>Style Spread:</strong> ${analysis.leadership.spreadLabel}`;
+    html += ` (diversity index ${(analysis.leadership.diversity * 100).toFixed(0)}%)`;
     html += `</div>`;
     html += '<div class="culture-style-bars">';
 
     Object.entries(analysis.leadership.aggregate).forEach(
       ([style, percentage]) => {
-        const warning =
-          (style === "pacesetting" && percentage > 30) ||
-          (style === "coaching" && percentage < 15);
         html += `<div class="culture-style-bar">`;
         html += `<div class="culture-style-label">${this.capitalizeFirst(style)}</div>`;
         html += `<div class="culture-style-track">`;
-        html += `<div class="culture-style-fill ${warning ? "warning" : ""}" style="width: ${percentage}%"></div>`;
+        html += `<div class="culture-style-fill" style="width: ${percentage}%"></div>`;
         html += `</div>`;
         html += `<div class="culture-style-percentage">${percentage.toFixed(0)}%</div>`;
         html += `</div>`;
@@ -2511,75 +4237,68 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     html += `<strong>Least Used:</strong> ${this.capitalizeFirst(analysis.leadership.leastUsed[0])} (${analysis.leadership.leastUsed[1].toFixed(0)}%)</p>`;
     html += "</div>";
 
-    // LEAD Scores
+    // LEAD Scores (descriptive ranges)
     html += '<div class="culture-section">';
     html += "<h2>🎯 LEAD Framework Scores</h2>";
     html += '<div class="culture-lead-grid">';
-    html += this.renderLEADComparison(
-      "Leadership",
-      analysis.lead.avgLeadership,
-      75,
-    );
-    html += this.renderLEADComparison(
-      "Excellence",
-      analysis.lead.avgExcellence,
-      65,
-    );
-    html += this.renderLEADComparison("Agility", analysis.lead.avgAgility, 45);
-    html += this.renderLEADComparison(
-      "Determination",
-      analysis.lead.avgDetermination,
-      40,
-    );
+    html += this.renderLEADRange("Leadership", analysis.lead.leadership);
+    html += this.renderLEADRange("Excellence", analysis.lead.excellence);
+    html += this.renderLEADRange("Agility", analysis.lead.agility);
+    html += this.renderLEADRange("Determination", analysis.lead.determination);
     html += "</div>";
     html += "</div>";
 
-    // Strengths
-    if (analysis.strengths.length > 0) {
-      html += '<div class="culture-section culture-strengths">';
-      html += "<h2>✅ Cultural Strengths</h2>";
-      analysis.strengths.forEach((strength) => {
-        html += `<div class="culture-strength-card">`;
-        html += `<h3>${strength.area}</h3>`;
-        html += `<div class="culture-strength-score">${strength.score}</div>`;
-        html += `<p>${strength.insight}</p>`;
+    // Segmentation by function
+    const funcSegments = analysis.segments.byFunction.filter(
+      (s) => s.sufficient,
+    );
+    if (funcSegments.length > 0) {
+      html += '<div class="culture-section">';
+      html += "<h2>🏢 By Business Function</h2>";
+      html += '<div class="culture-segment-grid">';
+      funcSegments.forEach((seg) => {
+        html += `<div class="culture-segment-card">`;
+        html += `<h3>${seg.name} <span class="culture-segment-count">${seg.count} leaders</span></h3>`;
+        html += `<p><strong>Most used style:</strong> ${this.capitalizeFirst(seg.dominantStyle || "n/a")}</p>`;
+        html += `<p><strong>Average growth:</strong> ${seg.avgGrowth.toFixed(1)}%</p>`;
+        html += `<p><strong>Average morale:</strong> ${seg.avgMorale.toFixed(0)}%</p>`;
+        html += `<p><strong>Average attrition:</strong> ${seg.avgAttrition.toFixed(1)}%</p>`;
         html += `</div>`;
       });
       html += "</div>";
-    }
-
-    // Weaknesses
-    if (analysis.weaknesses.length > 0) {
-      html += '<div class="culture-section culture-weaknesses">';
-      html += "<h2>⚠️ Cultural Weaknesses</h2>";
-      analysis.weaknesses.forEach((weakness) => {
-        html += `<div class="culture-weakness-card">`;
-        html += `<h3>${weakness.area}</h3>`;
-        html += `<div class="culture-weakness-score">${weakness.score} <span class="culture-gap">${weakness.gap}</span></div>`;
-        html += `<p>${weakness.insight}</p>`;
-        html += `</div>`;
-      });
       html += "</div>";
     }
 
-    // Cultural Risks
-    if (analysis.culturalRisks.length > 0) {
-      html += '<div class="culture-section culture-risks">';
-      html += "<h2>🚨 Cultural Risks</h2>";
-      analysis.culturalRisks.forEach((risk) => {
-        const severityClass =
-          risk.severity === "CRITICAL"
-            ? "critical"
-            : risk.severity === "HIGH"
-              ? "high"
-              : "medium";
-        html += `<div class="culture-risk-card ${severityClass}">`;
-        html += `<div class="culture-risk-header">`;
-        html += `<h3>${risk.risk}</h3>`;
-        html += `<span class="culture-risk-severity">${risk.severity}</span>`;
+    // Segmentation by seniority
+    const senSegments = analysis.segments.bySeniority.filter(
+      (s) => s.sufficient,
+    );
+    if (senSegments.length > 0) {
+      html += '<div class="culture-section">';
+      html += "<h2>📈 By Seniority</h2>";
+      html += '<div class="culture-segment-grid">';
+      senSegments.forEach((seg) => {
+        html += `<div class="culture-segment-card">`;
+        html += `<h3>${seg.name} <span class="culture-segment-count">${seg.count} leaders</span></h3>`;
+        html += `<p><strong>Most used style:</strong> ${this.capitalizeFirst(seg.dominantStyle || "n/a")}</p>`;
+        html += `<p><strong>Average growth:</strong> ${seg.avgGrowth.toFixed(1)}%</p>`;
+        html += `<p><strong>Average morale:</strong> ${seg.avgMorale.toFixed(0)}%</p>`;
+        html += `<p><strong>Average attrition:</strong> ${seg.avgAttrition.toFixed(1)}%</p>`;
         html += `</div>`;
-        html += `<p><strong>Detail:</strong> ${risk.detail}</p>`;
-        html += `<p><strong>Consequence:</strong> ${risk.consequence}</p>`;
+      });
+      html += "</div>";
+      html += "</div>";
+    }
+
+    // Observations
+    if (analysis.observations.length > 0) {
+      html += '<div class="culture-section culture-observations">';
+      html += "<h2>🔍 What the Data Shows</h2>";
+      analysis.observations.forEach((obs) => {
+        html += `<div class="culture-observation-card">`;
+        html += `<div class="culture-observation-category">${obs.category}</div>`;
+        html += `<h3>${obs.headline}</h3>`;
+        html += `<p>${obs.detail}</p>`;
         html += `</div>`;
       });
       html += "</div>";
@@ -2588,22 +4307,21 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // Recommendations
     if (analysis.recommendations.length > 0) {
       html += '<div class="culture-section culture-recommendations">';
-      html += "<h2>💡 Prioritized Recommendations</h2>";
+      html += "<h2>💡 Suggested Focus Areas</h2>";
       analysis.recommendations.forEach((rec, index) => {
-        const displayPriority = index + 1; // Use index for display (1, 2, 3...)
+        const displayPriority = index + 1;
         html += `<div class="culture-rec-card priority-${displayPriority}">`;
         html += `<div class="culture-rec-header">`;
-        html += `<h3><span class="culture-rec-number">Priority ${displayPriority}</span> ${rec.title}</h3>`;
+        html += `<h3><span class="culture-rec-number">Focus ${displayPriority}</span> ${rec.title}</h3>`;
         html += `</div>`;
         html += `<div class="culture-rec-body">`;
-        html += `<h4>Actions:</h4>`;
+        html += `<p><strong>Why:</strong> ${rec.rationale}</p>`;
+        html += `<h4>Suggested actions:</h4>`;
         html += `<ul>`;
         rec.actions.forEach((action) => {
           html += `<li>${action}</li>`;
         });
         html += `</ul>`;
-        html += `<p><strong>Timeline:</strong> ${rec.timeline}</p>`;
-        html += `<p><strong>Expected Impact:</strong> ${rec.expectedImpact}</p>`;
         html += `</div>`;
         html += `</div>`;
       });
@@ -2613,20 +4331,16 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     container.innerHTML = html;
   }
 
-  renderLEADComparison(dimension, avgScore, benchmark) {
-    const gap = avgScore - benchmark;
-    const gapClass = gap >= 0 ? "positive" : "negative";
-    const gapText = gap >= 0 ? `+${gap.toFixed(0)}` : gap.toFixed(0);
-
+  renderLEADRange(dimension, stats) {
     return `
             <div class="culture-lead-card">
                 <div class="culture-lead-dimension">${dimension}</div>
                 <div class="culture-lead-scores">
-                    <div class="culture-lead-current" title="Average team score">${avgScore.toFixed(0)}</div>
-                    <div class="culture-lead-vs">vs benchmark</div>
-                    <div class="culture-lead-benchmark" title="High-performance benchmark score">${benchmark}</div>
+                    <div class="culture-lead-current" title="Median score">${stats.median.toFixed(0)}</div>
+                    <div class="culture-lead-vs">median</div>
+                    <div class="culture-lead-benchmark" title="Average score">${stats.avg.toFixed(0)} avg</div>
                 </div>
-                <div class="culture-lead-gap ${gapClass}">${gapText} points</div>
+                <div class="culture-lead-gap">range ${stats.min.toFixed(0)} - ${stats.max.toFixed(0)} pts (${stats.consistency})</div>
             </div>
         `;
   }

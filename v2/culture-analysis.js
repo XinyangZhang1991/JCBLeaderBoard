@@ -1,601 +1,807 @@
 // Company Culture Analysis Engine for JCB Leadership Game
-// Analyzes aggregate leadership data from multiple players
+// Analyses the aggregate leadership data of everyone who has played.
+//
+// DESIGN PRINCIPLE: This engine is DESCRIPTIVE, not comparative.
+// It reports what the cohort actually did - distributions, ranges,
+// medians, concentration and consistency - with no external benchmark
+// and no invented "high performance" target. Every figure shown is
+// derived directly from the players' own results, so nothing can be
+// claimed that is not explicitly true of the data.
 
 class CultureAnalysis {
-    constructor() {
-        this.highPerformanceBenchmark = {
-            avgGrowth: 28,
-            avgMorale: 80,
-            avgAttrition: 8,
-            styleBalance: {
-                threshold: 30, // No style should be > 30% in aggregate
-                diversity: 0.7 // Diversity index (0-1 scale)
-            },
-            leadScores: {
-                leadership: 75,
-                excellence: 65,
-                agility: 45,
-                determination: 40
-            }
-        };
+  constructor() {
+    // Minimum number of players required before any analysis is shown.
+    this.minPlayers = 3;
+    // Minimum players in a segment before that segment is displayed.
+    this.minSegmentSize = 3;
+  }
+
+  analyzeCulture(cohortData) {
+    if (!cohortData || cohortData.length < this.minPlayers) {
+      return {
+        error: "Insufficient data",
+        message:
+          "Company Culture Analysis requires at least " +
+          this.minPlayers +
+          " leaders to have completed the game.",
+        playerCount: cohortData ? cohortData.length : 0,
+      };
     }
 
-    analyzeCulture(leaderboardData) {
-        if (!leaderboardData || leaderboardData.length < 3) {
-            return {
-                error: 'Insufficient data',
-                message: 'Company Culture Analysis requires at least 3 leaders to have completed the game.',
-                playerCount: leaderboardData ? leaderboardData.length : 0
-            };
+    const analysis = {
+      playerCount: cohortData.length,
+      metrics: this.calculateAggregateMetrics(cohortData),
+      leadership: this.analyzeLeadershipDistribution(cohortData),
+      decisions: this.analyzeDecisionPatterns(cohortData),
+      lead: this.analyzeLEADScores(cohortData),
+      colors: this.analyzePersonalityColors(cohortData),
+      segments: this.analyzeSegments(cohortData),
+      observations: [],
+      recommendations: [],
+    };
+
+    // Descriptive observations derived only from the data above
+    this.generateObservations(analysis);
+
+    // Recommendations derived only from the observations
+    this.generateRecommendations(analysis);
+
+    return analysis;
+  }
+
+  // ------------------------------------------------------------------
+  // Descriptive statistics helpers
+  // ------------------------------------------------------------------
+
+  mean(values) {
+    if (!values.length) return 0;
+    return values.reduce((a, b) => a + b, 0) / values.length;
+  }
+
+  median(values) {
+    if (!values.length) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 !== 0
+      ? sorted[mid]
+      : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+
+  min(values) {
+    return values.length ? Math.min(...values) : 0;
+  }
+
+  max(values) {
+    return values.length ? Math.max(...values) : 0;
+  }
+
+  // Population standard deviation - used to describe spread/consistency
+  stdDev(values) {
+    if (values.length < 2) return 0;
+    const m = this.mean(values);
+    const variance =
+      values.reduce((sum, v) => sum + Math.pow(v - m, 2), 0) / values.length;
+    return Math.sqrt(variance);
+  }
+
+  // Shannon entropy normalised to 0-1 (0 = all one value, 1 = perfectly even)
+  calculateDiversityIndex(values) {
+    const total = values.reduce((a, b) => a + b, 0);
+    if (total === 0) return 0;
+
+    const probabilities = values.map((v) => v / total).filter((p) => p > 0);
+    const entropy = -probabilities.reduce(
+      (sum, p) => sum + p * Math.log2(p),
+      0,
+    );
+    const maxEntropy = Math.log2(values.length);
+
+    return maxEntropy > 0 ? entropy / maxEntropy : 0;
+  }
+
+  // Returns a plain-language description of how tightly values cluster.
+  describeConsistency(values, unit) {
+    const sd = this.stdDev(values);
+    const m = this.mean(values);
+    if (m === 0) return "no variation data";
+    const cv = (sd / Math.abs(m)) * 100;
+    if (cv < 10) return "very consistent";
+    if (cv < 20) return "broadly consistent";
+    if (cv < 35) return "varied";
+    return "highly varied";
+  }
+
+  // ------------------------------------------------------------------
+  // Aggregate metrics (descriptive only)
+  // ------------------------------------------------------------------
+
+  calculateAggregateMetrics(data) {
+    const growth = data.map((p) => p.growth || 0);
+    const morale = data.map((p) => p.morale || 0);
+    const attrition = data.map((p) => p.attrition || 0);
+    const profit = data.map((p) => p.profitMargin || 0);
+
+    const metrics = {
+      // Growth
+      avgGrowth: this.mean(growth),
+      medianGrowth: this.median(growth),
+      minGrowth: this.min(growth),
+      maxGrowth: this.max(growth),
+      growthSpread: this.stdDev(growth),
+      growthConsistency: this.describeConsistency(growth, "%"),
+
+      // Morale
+      avgMorale: this.mean(morale),
+      medianMorale: this.median(morale),
+      minMorale: this.min(morale),
+      maxMorale: this.max(morale),
+      moraleSpread: this.stdDev(morale),
+      moraleConsistency: this.describeConsistency(morale, "%"),
+
+      // Attrition
+      avgAttrition: this.mean(attrition),
+      medianAttrition: this.median(attrition),
+      minAttrition: this.min(attrition),
+      maxAttrition: this.max(attrition),
+
+      // Profit
+      avgProfitMargin: this.mean(profit),
+      medianProfitMargin: this.median(profit),
+
+      // Outcomes (factual counts)
+      successCount: data.filter((p) => p.escaped).length,
+      optimalCount: data.filter((p) => p.optimal).length,
+      successRate: (data.filter((p) => p.escaped).length / data.length) * 100,
+      optimalRate: (data.filter((p) => p.optimal).length / data.length) * 100,
+    };
+
+    return metrics;
+  }
+
+  // ------------------------------------------------------------------
+  // Leadership style distribution (descriptive only)
+  // ------------------------------------------------------------------
+
+  analyzeLeadershipDistribution(data) {
+    const styleAggregate = {
+      coercive: 0,
+      authoritative: 0,
+      affiliative: 0,
+      democratic: 0,
+      pacesetting: 0,
+      coaching: 0,
+    };
+
+    const dominantStyles = {};
+
+    // PERCENTAGE ACCURACY FIX: `leadershipProfile` is documented as a 0-100
+    // percentage split, but the code elsewhere also accepts raw style points.
+    // Averaging raw points directly produced aggregates far above 100. We now
+    // normalise each player's profile to a percentage split (summing to 100)
+    // BEFORE averaging, and skip players whose profile is empty/non-finite.
+    let contributingPlayers = 0;
+
+    data.forEach((player) => {
+      if (player.leadershipProfile) {
+        // Sum only the recognised, finite style values for this player.
+        let profileSum = 0;
+        Object.keys(styleAggregate).forEach((style) => {
+          const v = player.leadershipProfile[style];
+          if (typeof v === "number" && isFinite(v) && v > 0) {
+            profileSum += v;
+          }
+        });
+
+        // Skip players with no usable profile (sum 0 or non-finite) so they
+        // do not drag the cohort average toward zero.
+        if (profileSum > 0 && isFinite(profileSum)) {
+          contributingPlayers++;
+          Object.keys(styleAggregate).forEach((style) => {
+            const v = player.leadershipProfile[style];
+            const safe = typeof v === "number" && isFinite(v) && v > 0 ? v : 0;
+            // Scale so each player contributes exactly 100 percentage points.
+            styleAggregate[style] += (safe / profileSum) * 100;
+          });
         }
+      }
 
-        const analysis = {
-            playerCount: leaderboardData.length,
-            metrics: this.calculateAggregateMetrics(leaderboardData),
-            leadership: this.analyzeLeadershipDistribution(leaderboardData),
-            decisions: this.analyzeDecisionPatterns(leaderboardData),
-            lead: this.analyzeLEADScores(leaderboardData),
-            colors: this.analyzePersonalityColors(leaderboardData),
-            strengths: [],
-            weaknesses: [],
-            culturalRisks: [],
-            recommendations: [],
-            comparisonToHighPerformance: {}
-        };
+      const style = player.leadershipStyle || "Unknown";
+      dominantStyles[style] = (dominantStyles[style] || 0) + 1;
+    });
 
-        // Calculate gaps vs high-performance benchmark
-        analysis.comparisonToHighPerformance = this.compareToBenchmark(analysis);
+    // Average across contributing players only (fall back to cohort size when
+    // nobody had a usable profile, preserving the previous zero behaviour).
+    const count = contributingPlayers > 0 ? contributingPlayers : data.length;
+    Object.keys(styleAggregate).forEach((style) => {
+      // Clamp each aggregate share to 0-100 for safety.
+      const avg = styleAggregate[style] / count;
+      styleAggregate[style] = isFinite(avg)
+        ? Math.max(0, Math.min(100, avg))
+        : 0;
+    });
 
-        // Identify cultural patterns
-        this.identifyStrengthsAndWeaknesses(analysis);
+    const diversity = this.calculateDiversityIndex(
+      Object.values(styleAggregate),
+    );
 
-        // Generate recommendations
-        this.generateCulturalRecommendations(analysis);
+    const sortedStyles = Object.entries(styleAggregate).sort(
+      (a, b) => b[1] - a[1],
+    );
 
-        return analysis;
+    // How many leaders named each style as their self-identified primary
+    const selfIdentified = {};
+    data.forEach((p) => {
+      const s = p.selfIdentifiedStyle || "Unknown";
+      selfIdentified[s] = (selfIdentified[s] || 0) + 1;
+    });
+
+    // PERCENTAGE ACCURACY FIX: mostUsed/leastUsed derive from the aggregate, so
+    // clamp their percentage component to 0-100 as well (the style name is
+    // untouched). diversity is an entropy index already bounded 0-1; clamp it
+    // defensively so it can never render above 100%.
+    const clampPair = (pair) =>
+      pair
+        ? [
+            pair[0],
+            typeof pair[1] === "number" && isFinite(pair[1])
+              ? Math.max(0, Math.min(100, pair[1]))
+              : 0,
+          ]
+        : pair;
+
+    return {
+      aggregate: styleAggregate,
+      dominantStyles: dominantStyles,
+      selfIdentified: selfIdentified,
+      diversity:
+        typeof diversity === "number" && isFinite(diversity)
+          ? Math.max(0, Math.min(1, diversity))
+          : 0,
+      mostUsed: clampPair(sortedStyles[0]),
+      leastUsed: clampPair(sortedStyles[sortedStyles.length - 1]),
+      // Descriptive label based on the entropy index only
+      spreadLabel:
+        diversity >= 0.85
+          ? "Evenly spread"
+          : diversity >= 0.65
+            ? "Moderately spread"
+            : "Concentrated",
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // Decision patterns (descriptive only)
+  // ------------------------------------------------------------------
+
+  analyzeDecisionPatterns(data) {
+    // Scan ALL players for decision history, not just the first record
+    const playersWithDecisions = data.filter(
+      (p) => Array.isArray(p.decisions) && p.decisions.length > 0,
+    );
+
+    if (playersWithDecisions.length === 0) {
+      return {
+        available: false,
+        message: "Decision history not available for this cohort",
+      };
     }
 
-    calculateAggregateMetrics(data) {
-        const metrics = {
-            avgGrowth: 0,
-            avgMorale: 0,
-            avgAttrition: 0,
-            avgProfitMargin: 0,
-            successRate: 0,
-            optimalRate: 0,
-            growthDistribution: { high: 0, medium: 0, low: 0 },
-            moraleDistribution: { high: 0, medium: 0, low: 0 },
-            attritionDistribution: { healthy: 0, concerning: 0, critical: 0 }
-        };
+    const patterns = {
+      available: true,
+      playersWithDecisions: playersWithDecisions.length,
+      aggressiveDecisionCount: 0,
+      collaborativeDecisionCount: 0,
+      totalDecisions: 0,
+      aggressiveDecisionRate: 0,
+      collaborativeDecisionRate: 0,
+      infoSeekingBehavior: {
+        avgRequestsPerPlayer: 0,
+        totalRequests: 0,
+      },
+    };
 
-        let growthSum = 0, moraleSum = 0, attritionSum = 0, profitSum = 0;
-        let escapeCount = 0, optimalCount = 0;
+    let totalAggressive = 0;
+    let totalCollaborative = 0;
+    let totalDecisions = 0;
+    let totalInfoRequests = 0;
 
-        data.forEach(player => {
-            growthSum += player.growth || 0;
-            moraleSum += player.morale || 0;
-            attritionSum += player.attrition || 0;
-            profitSum += player.profitMargin || 20;
+    playersWithDecisions.forEach((player) => {
+      player.decisions.forEach((decision) => {
+        totalDecisions++;
+        if (decision.stylesUsed) {
+          if (
+            decision.stylesUsed.includes("pacesetting") ||
+            decision.stylesUsed.includes("coercive")
+          ) {
+            totalAggressive++;
+          }
+          if (
+            decision.stylesUsed.includes("democratic") ||
+            decision.stylesUsed.includes("coaching") ||
+            decision.stylesUsed.includes("affiliative")
+          ) {
+            totalCollaborative++;
+          }
+        }
+      });
 
-            if (player.escaped) escapeCount++;
-            if (player.optimal) optimalCount++;
+      if (Array.isArray(player.infoRequests)) {
+        totalInfoRequests += player.infoRequests.length;
+      }
+    });
 
-            // Distribution buckets
-            if (player.growth >= 25) metrics.growthDistribution.high++;
-            else if (player.growth >= 18) metrics.growthDistribution.medium++;
-            else metrics.growthDistribution.low++;
+    patterns.totalDecisions = totalDecisions;
+    patterns.aggressiveDecisionCount = totalAggressive;
+    patterns.collaborativeDecisionCount = totalCollaborative;
+    patterns.aggressiveDecisionRate =
+      totalDecisions > 0 ? (totalAggressive / totalDecisions) * 100 : 0;
+    patterns.collaborativeDecisionRate =
+      totalDecisions > 0 ? (totalCollaborative / totalDecisions) * 100 : 0;
+    patterns.infoSeekingBehavior.totalRequests = totalInfoRequests;
+    patterns.infoSeekingBehavior.avgRequestsPerPlayer =
+      totalInfoRequests / playersWithDecisions.length;
 
-            if (player.morale >= 75) metrics.moraleDistribution.high++;
-            else if (player.morale >= 65) metrics.moraleDistribution.medium++;
-            else metrics.moraleDistribution.low++;
+    return patterns;
+  }
 
-            if (player.attrition < 10) metrics.attritionDistribution.healthy++;
-            else if (player.attrition < 15) metrics.attritionDistribution.concerning++;
-            else metrics.attritionDistribution.critical++;
+  // ------------------------------------------------------------------
+  // LEAD scores (descriptive only)
+  // ------------------------------------------------------------------
+
+  analyzeLEADScores(data) {
+    const collect = (key) => data.map((p) => p[key] || 0);
+
+    const leadership = collect("leadership");
+    const excellence = collect("excellence");
+    const agility = collect("agility");
+    const determination = collect("determination");
+
+    const describe = (values) => ({
+      avg: this.mean(values),
+      median: this.median(values),
+      min: this.min(values),
+      max: this.max(values),
+      spread: this.stdDev(values),
+      consistency: this.describeConsistency(values, "pts"),
+    });
+
+    return {
+      leadership: describe(leadership),
+      excellence: describe(excellence),
+      agility: describe(agility),
+      determination: describe(determination),
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // Personality colours (descriptive only)
+  // ------------------------------------------------------------------
+
+  analyzePersonalityColors(data) {
+    const colors = {
+      RED: 0,
+      BLUE: 0,
+      YELLOW: 0,
+      GREEN: 0,
+      BALANCED: 0,
+    };
+
+    data.forEach((player) => {
+      const raw = player.personalityColor || "BALANCED";
+      // Compound colours (e.g. "RED/YELLOW") are bucketed into their
+      // PRIMARY component (the part before the "/") so the counts
+      // always total data.length and percentages sum to ~100.
+      // Unknown/empty values fall back to BALANCED.
+      const primary = String(raw).split("/")[0].trim();
+      if (primary in colors) {
+        colors[primary]++;
+      } else {
+        colors.BALANCED++;
+      }
+    });
+
+    const total = data.length;
+    const percentages = {};
+    Object.keys(colors).forEach((color) => {
+      percentages[color] = (colors[color] / total) * 100;
+    });
+
+    const dominant = Object.keys(colors).reduce((a, b) =>
+      colors[a] >= colors[b] ? a : b,
+    );
+
+    return {
+      counts: colors,
+      percentages: percentages,
+      dominant: dominant,
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // Segmentation by business function and seniority
+  // ------------------------------------------------------------------
+
+  analyzeSegments(data) {
+    return {
+      byFunction: this.segmentBy(data, "jobFunction"),
+      bySeniority: this.segmentBy(data, "seniority"),
+    };
+  }
+
+  segmentBy(data, field) {
+    const groups = {};
+
+    data.forEach((player) => {
+      const key = player[field] || "Not specified";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(player);
+    });
+
+    const segments = Object.entries(groups)
+      .map(([name, players]) => {
+        const growth = players.map((p) => p.growth || 0);
+        const morale = players.map((p) => p.morale || 0);
+        const attrition = players.map((p) => p.attrition || 0);
+
+        // Dominant style within this segment
+        const styleTotals = {};
+        players.forEach((p) => {
+          if (p.leadershipProfile) {
+            Object.entries(p.leadershipProfile).forEach(([style, val]) => {
+              styleTotals[style] = (styleTotals[style] || 0) + (val || 0);
+            });
+          }
         });
-
-        const count = data.length;
-        metrics.avgGrowth = growthSum / count;
-        metrics.avgMorale = moraleSum / count;
-        metrics.avgAttrition = attritionSum / count;
-        metrics.avgProfitMargin = profitSum / count;
-        metrics.successRate = (escapeCount / count) * 100;
-        metrics.optimalRate = (optimalCount / count) * 100;
-
-        return metrics;
-    }
-
-    analyzeLeadershipDistribution(data) {
-        const styleAggregate = {
-            coercive: 0,
-            authoritative: 0,
-            affiliative: 0,
-            democratic: 0,
-            pacesetting: 0,
-            coaching: 0
-        };
-
-        const dominantStyles = {};
-
-        data.forEach(player => {
-            // Aggregate style percentages
-            if (player.leadershipProfile) {
-                Object.keys(player.leadershipProfile).forEach(style => {
-                    styleAggregate[style] += player.leadershipProfile[style] || 0;
-                });
-            }
-
-            // Count dominant styles
-            const style = player.leadershipStyle || 'Unknown';
-            dominantStyles[style] = (dominantStyles[style] || 0) + 1;
-        });
-
-        // Calculate average percentages
-        const count = data.length;
-        Object.keys(styleAggregate).forEach(style => {
-            styleAggregate[style] = styleAggregate[style] / count;
-        });
-
-        // Calculate diversity index (entropy-based)
-        const diversity = this.calculateDiversityIndex(Object.values(styleAggregate));
-
-        // Find most/least used styles
-        const sortedStyles = Object.entries(styleAggregate).sort((a, b) => b[1] - a[1]);
+        const dominantStyle = Object.entries(styleTotals).sort(
+          (a, b) => b[1] - a[1],
+        )[0];
 
         return {
-            aggregate: styleAggregate,
-            dominantStyles: dominantStyles,
-            diversity: diversity,
-            mostUsed: sortedStyles[0],
-            leastUsed: sortedStyles[sortedStyles.length - 1],
-            balanced: diversity > 0.7
+          name: name,
+          count: players.length,
+          avgGrowth: this.mean(growth),
+          avgMorale: this.mean(morale),
+          avgAttrition: this.mean(attrition),
+          dominantStyle: dominantStyle ? dominantStyle[0] : null,
+          // Only meaningful when the segment is large enough
+          sufficient: players.length >= this.minSegmentSize,
         };
+      })
+      .sort((a, b) => b.count - a.count);
+
+    return segments;
+  }
+
+  // ------------------------------------------------------------------
+  // Descriptive observations (replaces strengths/weaknesses/risks)
+  // ------------------------------------------------------------------
+
+  generateObservations(analysis) {
+    const { metrics, leadership, lead, decisions, colors, segments } = analysis;
+
+    // --- Performance spread ---
+    analysis.observations.push({
+      category: "Performance Range",
+      headline:
+        "Growth outcomes ranged from " +
+        metrics.minGrowth.toFixed(1) +
+        "% to " +
+        metrics.maxGrowth.toFixed(1) +
+        "%",
+      detail:
+        "The median was " +
+        metrics.medianGrowth.toFixed(1) +
+        "% and the average " +
+        metrics.avgGrowth.toFixed(1) +
+        "%. Outcomes were " +
+        metrics.growthConsistency +
+        " across the cohort.",
+    });
+
+    // --- Morale spread ---
+    analysis.observations.push({
+      category: "Team Health Range",
+      headline:
+        "Morale outcomes ranged from " +
+        metrics.minMorale.toFixed(0) +
+        "% to " +
+        metrics.maxMorale.toFixed(0) +
+        "%",
+      detail:
+        "The median was " +
+        metrics.medianMorale.toFixed(0) +
+        "% and the average " +
+        metrics.avgMorale.toFixed(0) +
+        "%. Morale was " +
+        metrics.moraleConsistency +
+        " across the cohort.",
+    });
+
+    // --- Attrition spread ---
+    analysis.observations.push({
+      category: "Retention Range",
+      headline:
+        "Attrition outcomes ranged from " +
+        metrics.minAttrition.toFixed(1) +
+        "% to " +
+        metrics.maxAttrition.toFixed(1) +
+        "%",
+      detail:
+        "The median was " +
+        metrics.medianAttrition.toFixed(1) +
+        "% and the average " +
+        metrics.avgAttrition.toFixed(1) +
+        "%.",
+    });
+
+    // --- Leadership style concentration ---
+    analysis.observations.push({
+      category: "Leadership Style Spread",
+      headline:
+        "Most used style: " +
+        this.capitalize(leadership.mostUsed[0]) +
+        " (" +
+        leadership.mostUsed[1].toFixed(0) +
+        "%)",
+      detail:
+        "Least used: " +
+        this.capitalize(leadership.leastUsed[0]) +
+        " (" +
+        leadership.leastUsed[1].toFixed(0) +
+        "%). Style usage was " +
+        leadership.spreadLabel.toLowerCase() +
+        " (diversity index " +
+        (leadership.diversity * 100).toFixed(0) +
+        "%).",
+    });
+
+    // --- LEAD profile ---
+    const leadDims = [
+      ["Leadership", lead.leadership],
+      ["Excellence", lead.excellence],
+      ["Agility", lead.agility],
+      ["Determination", lead.determination],
+    ];
+    const strongest = [...leadDims].sort((a, b) => b[1].avg - a[1].avg)[0];
+    const weakest = [...leadDims].sort((a, b) => a[1].avg - b[1].avg)[0];
+
+    analysis.observations.push({
+      category: "LEAD Profile",
+      headline:
+        "Highest average: " +
+        strongest[0] +
+        " (" +
+        strongest[1].avg.toFixed(0) +
+        " pts)",
+      detail:
+        "Lowest average: " +
+        weakest[0] +
+        " (" +
+        weakest[1].avg.toFixed(0) +
+        " pts). Scores ranged from " +
+        weakest[1].min.toFixed(0) +
+        " to " +
+        strongest[1].max.toFixed(0) +
+        " points across the cohort.",
+    });
+
+    // --- Decision tendencies ---
+    if (decisions.available) {
+      analysis.observations.push({
+        category: "Decision Tendencies",
+        headline:
+          decisions.aggressiveDecisionRate.toFixed(0) +
+          "% of decisions used directive styles",
+        detail:
+          decisions.collaborativeDecisionRate.toFixed(0) +
+          "% used collaborative styles. Leaders requested an average of " +
+          decisions.infoSeekingBehavior.avgRequestsPerPlayer.toFixed(1) +
+          " additional information sources each.",
+      });
     }
 
-    analyzeDecisionPatterns(data) {
-        if (!data[0].decisions) {
-            return {
-                available: false,
-                message: 'Decision history not available for this leaderboard data'
-            };
-        }
+    // --- Personality colour mix ---
+    analysis.observations.push({
+      category: "Personality Mix",
+      headline:
+        "Most common profile: " +
+        this.capitalize(colors.dominant.toLowerCase()) +
+        " (" +
+        colors.percentages[colors.dominant].toFixed(0) +
+        "%)",
+      detail:
+        "Across " +
+        analysis.playerCount +
+        " leaders, the colour distribution was " +
+        Object.entries(colors.percentages)
+          .filter(([, pct]) => pct > 0)
+          .map(
+            ([color, pct]) =>
+              this.capitalize(color.toLowerCase()) + " " + pct.toFixed(0) + "%",
+          )
+          .join(", ") +
+        ".",
+    });
 
-        const patterns = {
-            available: true,
-            scenarioFailureRates: {},
-            commonTraps: {
-                priceWar: 0,
-                moneySolution: 0,
-                marketTrend: 0,
-                competitorPanic: 0
-            },
-            infoSeekingBehavior: {
-                avgRequestsPerPlayer: 0,
-                usefulInfoRate: 0,
-                trapInfoRate: 0
-            },
-            aggressiveDecisionRate: 0,
-            collaborativeDecisionRate: 0
-        };
+    // --- Segmentation insight (function) ---
+    const funcSegments = segments.byFunction.filter((s) => s.sufficient);
+    if (funcSegments.length >= 2) {
+      const top = funcSegments[0];
+      analysis.observations.push({
+        category: "Functional Differences",
+        headline:
+          top.name + " is the largest group (" + top.count + " leaders)",
+        detail:
+          "Their most used style was " +
+          this.capitalize(top.dominantStyle || "n/a") +
+          ", averaging " +
+          top.avgGrowth.toFixed(1) +
+          "% growth and " +
+          top.avgMorale.toFixed(0) +
+          "% morale.",
+      });
+    }
 
-        let totalAggressiveDecisions = 0;
-        let totalCollaborativeDecisions = 0;
-        let totalInfoRequests = 0;
-        let totalUsefulInfo = 0;
-        let totalTrapInfo = 0;
+    // --- Segmentation insight (seniority) ---
+    const senSegments = segments.bySeniority.filter((s) => s.sufficient);
+    if (senSegments.length >= 2) {
+      const top = senSegments[0];
+      analysis.observations.push({
+        category: "Seniority Differences",
+        headline:
+          top.name + " is the largest group (" + top.count + " leaders)",
+        detail:
+          "Their most used style was " +
+          this.capitalize(top.dominantStyle || "n/a") +
+          ", averaging " +
+          top.avgGrowth.toFixed(1) +
+          "% growth and " +
+          top.avgMorale.toFixed(0) +
+          "% morale.",
+      });
+    }
+  }
 
-        data.forEach(player => {
-            if (!player.decisions) return;
+  // ------------------------------------------------------------------
+  // Recommendations (derived only from observed data)
+  // ------------------------------------------------------------------
 
-            player.decisions.forEach(decision => {
-                // Count aggressive decisions
-                if (decision.stylesUsed) {
-                    if (decision.stylesUsed.includes('pacesetting') ||
-                        decision.stylesUsed.includes('coercive')) {
-                        totalAggressiveDecisions++;
-                    }
-                    if (decision.stylesUsed.includes('democratic') ||
-                        decision.stylesUsed.includes('coaching') ||
-                        decision.stylesUsed.includes('affiliative')) {
-                        totalCollaborativeDecisions++;
-                    }
-                }
+  generateRecommendations(analysis) {
+    const { metrics, leadership, lead, decisions, segments } = analysis;
 
-                // Track common traps (based on scenario and choice patterns)
-                if (decision.scenarioId === 'competitor_threat') {
-                    // Check for price war trap
-                    if (decision.choices[0]?.values && decision.choices[0].values[0] >= 1.0) {
-                        patterns.commonTraps.priceWar++;
-                    }
-                }
+    // 1. Style concentration - only if the data shows concentration
+    if (leadership.diversity < 0.65) {
+      analysis.recommendations.push({
+        title: "Broaden Leadership Style Repertoire",
+        rationale:
+          "Style usage is concentrated (diversity index " +
+          (leadership.diversity * 100).toFixed(0) +
+          "%), with " +
+          this.capitalize(leadership.mostUsed[0]) +
+          " used most (" +
+          leadership.mostUsed[1].toFixed(0) +
+          "%).",
+        actions: [
+          "Run a facilitated session on Goleman's six leadership styles",
+          "Pair leaders with colleagues who use different dominant styles",
+          'Build a "when to use which style" playbook for the leadership team',
+        ],
+      });
+    }
 
-                if (decision.scenarioId === 'talent_exodus') {
-                    // Check for money solution trap
-                    if (decision.choices[1]?.index === 2) {
-                        patterns.commonTraps.moneySolution++;
-                    }
-                }
-            });
+    // 2. Coaching usage - only if the data shows it is low
+    if (leadership.aggregate.coaching < 15) {
+      analysis.recommendations.push({
+        title: "Increase Coaching and Development Focus",
+        rationale:
+          "Coaching accounted for only " +
+          leadership.aggregate.coaching.toFixed(0) +
+          "% of style usage across the cohort.",
+        actions: [
+          "Introduce structured coaching conversations for all people managers",
+          "Recognise leaders who develop others as a measured outcome",
+          "Review succession plans for each function",
+        ],
+      });
+    }
 
-            // Analyze info requests
-            if (player.infoRequests) {
-                totalInfoRequests += player.infoRequests.length;
-                player.infoRequests.forEach(req => {
-                    if (req.type === 'useful') totalUsefulInfo++;
-                    if (req.type === 'trap') totalTrapInfo++;
-                });
-            }
+    // 3. Morale spread - only if morale varies widely
+    if (metrics.moraleSpread > 12) {
+      analysis.recommendations.push({
+        title: "Share Team-Health Practices Across the Cohort",
+        rationale:
+          "Morale outcomes varied widely (range " +
+          metrics.minMorale.toFixed(0) +
+          "% to " +
+          metrics.maxMorale.toFixed(0) +
+          "%), suggesting inconsistent team-health practices.",
+        actions: [
+          "Capture what the highest-morale leaders did differently",
+          "Create peer-learning sessions between functions",
+          "Include team health in leadership performance reviews",
+        ],
+      });
+    }
+
+    // 4. Information seeking - only if the data shows it is low
+    if (
+      decisions.available &&
+      decisions.infoSeekingBehavior.avgRequestsPerPlayer < 2
+    ) {
+      analysis.recommendations.push({
+        title: "Strengthen Evidence-Based Decision Making",
+        rationale:
+          "Leaders requested an average of only " +
+          decisions.infoSeekingBehavior.avgRequestsPerPlayer.toFixed(1) +
+          " additional information sources per simulation.",
+        actions: [
+          "Encourage structured information gathering before major decisions",
+          "Share examples where additional data changed the outcome",
+          "Review decision-making processes for missing inputs",
+        ],
+      });
+    }
+
+    // 5. Agility - only if the data shows it is the weakest dimension
+    const leadDims = [
+      ["Leadership", lead.leadership.avg],
+      ["Excellence", lead.excellence.avg],
+      ["Agility", lead.agility.avg],
+      ["Determination", lead.determination.avg],
+    ];
+    const weakest = [...leadDims].sort((a, b) => a[1] - b[1])[0];
+    if (weakest[0] === "Agility") {
+      analysis.recommendations.push({
+        title: "Build Adaptability and Agility",
+        rationale:
+          "Agility was the lowest-scoring LEAD dimension across the cohort (average " +
+          lead.agility.avg.toFixed(0) +
+          " points).",
+        actions: [
+          "Create rapid-response teams for market changes",
+          "Reduce approval layers for tactical decisions",
+          "Run scenario-planning exercises for the leadership team",
+        ],
+      });
+    }
+
+    // 6. Functional differences - only if segments differ meaningfully
+    const funcSegments = segments.byFunction.filter((s) => s.sufficient);
+    if (funcSegments.length >= 2) {
+      const growthValues = funcSegments.map((s) => s.avgGrowth);
+      const spread = this.max(growthValues) - this.min(growthValues);
+      if (spread > 5) {
+        analysis.recommendations.push({
+          title: "Share Best Practice Between Functions",
+          rationale:
+            "Average growth differed by " +
+            spread.toFixed(1) +
+            " percentage points between functions, from " +
+            this.min(growthValues).toFixed(1) +
+            "% to " +
+            this.max(growthValues).toFixed(1) +
+            "%.",
+          actions: [
+            "Identify what the highest-performing function did differently",
+            "Run cross-functional knowledge-sharing sessions",
+            "Set shared objectives that encourage collaboration",
+          ],
         });
-
-        const totalDecisions = data.reduce((sum, p) => sum + (p.decisions?.length || 0), 0);
-        patterns.aggressiveDecisionRate = (totalAggressiveDecisions / totalDecisions) * 100;
-        patterns.collaborativeDecisionRate = (totalCollaborativeDecisions / totalDecisions) * 100;
-
-        patterns.infoSeekingBehavior.avgRequestsPerPlayer = totalInfoRequests / data.length;
-        patterns.infoSeekingBehavior.usefulInfoRate = totalInfoRequests > 0 ?
-            (totalUsefulInfo / totalInfoRequests) * 100 : 0;
-        patterns.infoSeekingBehavior.trapInfoRate = totalInfoRequests > 0 ?
-            (totalTrapInfo / totalInfoRequests) * 100 : 0;
-
-        return patterns;
+      }
     }
+  }
 
-    analyzeLEADScores(data) {
-        const lead = {
-            avgLeadership: 0,
-            avgExcellence: 0,
-            avgAgility: 0,
-            avgDetermination: 0,
-            distribution: {
-                leadership: { high: 0, medium: 0, low: 0 },
-                excellence: { high: 0, medium: 0, low: 0 },
-                agility: { high: 0, medium: 0, low: 0 },
-                determination: { high: 0, medium: 0, low: 0 }
-            }
-        };
+  // ------------------------------------------------------------------
+  // Utilities
+  // ------------------------------------------------------------------
 
-        let lSum = 0, eSum = 0, aSum = 0, dSum = 0;
-
-        data.forEach(player => {
-            const l = player.leadership || 0;
-            const e = player.excellence || 0;
-            const a = player.agility || 0;
-            const d = player.determination || 0;
-
-            lSum += l; eSum += e; aSum += a; dSum += d;
-
-            // Distribution buckets
-            lead.distribution.leadership[l >= 60 ? 'high' : l >= 30 ? 'medium' : 'low']++;
-            lead.distribution.excellence[e >= 60 ? 'high' : e >= 30 ? 'medium' : 'low']++;
-            lead.distribution.agility[a >= 40 ? 'high' : a >= 20 ? 'medium' : 'low']++;
-            lead.distribution.determination[d >= 40 ? 'high' : d >= 20 ? 'medium' : 'low']++;
-        });
-
-        const count = data.length;
-        lead.avgLeadership = lSum / count;
-        lead.avgExcellence = eSum / count;
-        lead.avgAgility = aSum / count;
-        lead.avgDetermination = dSum / count;
-
-        return lead;
-    }
-
-    analyzePersonalityColors(data) {
-        const colors = {
-            RED: 0,
-            BLUE: 0,
-            YELLOW: 0,
-            GREEN: 0,
-            BALANCED: 0
-        };
-
-        data.forEach(player => {
-            const color = player.personalityColor || 'BALANCED';
-            colors[color]++;
-        });
-
-        const total = data.length;
-        const percentages = {};
-        Object.keys(colors).forEach(color => {
-            percentages[color] = (colors[color] / total) * 100;
-        });
-
-        return {
-            counts: colors,
-            percentages: percentages,
-            dominant: Object.keys(colors).reduce((a, b) => colors[a] > colors[b] ? a : b)
-        };
-    }
-
-    compareToBenchmark(analysis) {
-        const benchmark = this.highPerformanceBenchmark;
-        const gaps = {
-            growth: analysis.metrics.avgGrowth - benchmark.avgGrowth,
-            morale: analysis.metrics.avgMorale - benchmark.avgMorale,
-            attrition: analysis.metrics.avgAttrition - benchmark.avgAttrition,
-            leadership: analysis.lead.avgLeadership - benchmark.leadScores.leadership,
-            excellence: analysis.lead.avgExcellence - benchmark.leadScores.excellence,
-            agility: analysis.lead.avgAgility - benchmark.leadScores.agility,
-            determination: analysis.lead.avgDetermination - benchmark.leadScores.determination,
-            diversity: analysis.leadership.diversity - benchmark.styleBalance.diversity
-        };
-
-        return {
-            gaps: gaps,
-            performanceLevel: this.calculatePerformanceLevel(gaps),
-            percentileEstimate: this.estimatePercentile(analysis)
-        };
-    }
-
-    calculatePerformanceLevel(gaps) {
-        const criticalGaps = [
-            gaps.growth < -5,
-            gaps.morale < -10,
-            gaps.attrition > 5,
-            gaps.diversity < -0.2
-        ];
-
-        const criticalCount = criticalGaps.filter(g => g).length;
-
-        if (criticalCount >= 3) return 'NEEDS IMMEDIATE ATTENTION';
-        if (criticalCount >= 2) return 'BELOW BENCHMARK';
-        if (criticalCount === 1) return 'APPROACHING BENCHMARK';
-        if (gaps.growth >= 0 && gaps.morale >= 0 && gaps.attrition <= 0) return 'AT BENCHMARK';
-        return 'ABOVE BENCHMARK';
-    }
-
-    estimatePercentile(analysis) {
-        // Heuristic estimation based on multiple factors
-        const factors = [
-            analysis.metrics.avgGrowth >= 28 ? 20 : analysis.metrics.avgGrowth >= 22 ? 10 : 0,
-            analysis.metrics.avgMorale >= 80 ? 20 : analysis.metrics.avgMorale >= 70 ? 10 : 0,
-            analysis.metrics.avgAttrition <= 8 ? 20 : analysis.metrics.avgAttrition <= 12 ? 10 : 0,
-            analysis.leadership.diversity >= 0.75 ? 20 : analysis.leadership.diversity >= 0.6 ? 10 : 0,
-            analysis.metrics.optimalRate >= 50 ? 20 : analysis.metrics.optimalRate >= 30 ? 10 : 0
-        ];
-
-        const score = factors.reduce((a, b) => a + b, 0);
-        return Math.min(95, 50 + score); // 50-95 percentile range
-    }
-
-    calculateDiversityIndex(values) {
-        // Shannon Entropy normalized to 0-1 scale
-        const total = values.reduce((a, b) => a + b, 0);
-        if (total === 0) return 0;
-
-        const probabilities = values.map(v => v / total).filter(p => p > 0);
-        const entropy = -probabilities.reduce((sum, p) => sum + p * Math.log2(p), 0);
-        const maxEntropy = Math.log2(values.length);
-
-        return entropy / maxEntropy; // 0 = no diversity, 1 = perfect diversity
-    }
-
-    identifyStrengthsAndWeaknesses(analysis) {
-        const { metrics, leadership, lead, decisions, colors, comparisonToHighPerformance } = analysis;
-
-        // STRENGTHS
-        if (metrics.avgGrowth >= 25) {
-            analysis.strengths.push({
-                area: 'Revenue Growth',
-                score: metrics.avgGrowth.toFixed(1) + '%',
-                insight: 'Culture drives strong commercial performance - leaders consistently deliver above-target growth.'
-            });
-        }
-
-        if (metrics.avgMorale >= 75) {
-            analysis.strengths.push({
-                area: 'Employee Engagement',
-                score: metrics.avgMorale.toFixed(0) + '%',
-                insight: 'High team morale indicates a supportive, values-driven culture where people feel valued.'
-            });
-        }
-
-        if (metrics.avgAttrition < 10) {
-            analysis.strengths.push({
-                area: 'Talent Retention',
-                score: metrics.avgAttrition.toFixed(1) + '%',
-                insight: 'Low attrition suggests sustainable leadership practices and strong employee loyalty.'
-            });
-        }
-
-        if (leadership.diversity >= 0.7) {
-            analysis.strengths.push({
-                area: 'Leadership Flexibility',
-                score: (leadership.diversity * 100).toFixed(0) + '%',
-                insight: 'Diverse leadership styles indicate adaptive culture - leaders can flex their approach based on context.'
-            });
-        }
-
-        if (decisions.available && decisions.infoSeekingBehavior.avgRequestsPerPlayer >= 2.5) {
-            analysis.strengths.push({
-                area: 'Information Thoroughness',
-                score: decisions.infoSeekingBehavior.avgRequestsPerPlayer.toFixed(1) + ' requests/player',
-                insight: 'Leaders consistently seek additional information before deciding - evidence-based culture.'
-            });
-        }
-
-        // WEAKNESSES
-        if (metrics.avgGrowth < 20) {
-            analysis.weaknesses.push({
-                area: 'Revenue Growth',
-                score: metrics.avgGrowth.toFixed(1) + '%',
-                gap: (20 - metrics.avgGrowth).toFixed(1) + '% below target',
-                insight: 'Leaders struggle to achieve growth targets - may indicate risk aversion or lack of commercial drive.'
-            });
-        }
-
-        if (metrics.avgMorale < 65) {
-            analysis.weaknesses.push({
-                area: 'Employee Engagement',
-                score: metrics.avgMorale.toFixed(0) + '%',
-                gap: 'Below healthy threshold',
-                insight: 'Low morale suggests unsustainable leadership practices - people may feel undervalued or overworked.'
-            });
-        }
-
-        if (metrics.avgAttrition >= 15) {
-            analysis.weaknesses.push({
-                area: 'Talent Retention',
-                score: metrics.avgAttrition.toFixed(1) + '%',
-                gap: 'Critical level',
-                insight: 'High attrition indicates cultural crisis - leaders are burning through talent to hit numbers.'
-            });
-        }
-
-        if (leadership.diversity < 0.5) {
-            analysis.weaknesses.push({
-                area: 'Leadership Monoculture',
-                score: leadership.mostUsed[0] + ' (' + leadership.mostUsed[1].toFixed(0) + '%)',
-                gap: 'Low diversity (index: ' + (leadership.diversity * 100).toFixed(0) + '%)',
-                insight: 'Homogeneous leadership style indicates groupthink risk - culture may lack adaptability.'
-            });
-        }
-
-        if (lead.avgAgility < 25) {
-            analysis.weaknesses.push({
-                area: 'Organizational Agility',
-                score: lead.avgAgility.toFixed(0) + ' points',
-                gap: (45 - lead.avgAgility).toFixed(0) + ' points below benchmark',
-                insight: 'Low agility scores suggest rigid culture - leaders struggle to adapt when circumstances change.'
-            });
-        }
-
-        if (decisions.available && decisions.commonTraps.priceWar / analysis.playerCount > 0.5) {
-            analysis.weaknesses.push({
-                area: 'Strategic Short-Termism',
-                score: Math.round((decisions.commonTraps.priceWar / analysis.playerCount) * 100) + '% fell into price war trap',
-                gap: 'Reactive culture',
-                insight: 'Majority of leaders chose short-term price matching over long-term differentiation - reactive culture.'
-            });
-        }
-
-        // CULTURAL RISKS
-        if (colors.percentages.RED > 50) {
-            analysis.culturalRisks.push({
-                risk: 'Aggressive Monoculture',
-                severity: 'HIGH',
-                detail: colors.percentages.RED.toFixed(0) + '% of leaders are RED (Dominant/Driven) personality',
-                consequence: 'High burnout risk, potential for toxic competition, people may not speak up'
-            });
-        }
-
-        if (leadership.aggregate.pacesetting > 35) {
-            analysis.culturalRisks.push({
-                risk: 'Pacesetting Overuse',
-                severity: 'MEDIUM',
-                detail: leadership.aggregate.pacesetting.toFixed(0) + '% pacesetting leadership (healthy: <25%)',
-                consequence: 'Unsustainable pressure on teams, lack of development focus, short-term optimization'
-            });
-        }
-
-        if (leadership.aggregate.coaching < 15) {
-            analysis.culturalRisks.push({
-                risk: 'Development Deficit',
-                severity: 'MEDIUM',
-                detail: leadership.aggregate.coaching.toFixed(0) + '% coaching leadership (healthy: >20%)',
-                consequence: 'Talent pipeline at risk, low succession readiness, directing instead of developing'
-            });
-        }
-
-        if (metrics.successRate < 50) {
-            analysis.culturalRisks.push({
-                risk: 'Widespread Failure Pattern',
-                severity: 'CRITICAL',
-                detail: metrics.successRate.toFixed(0) + '% of leaders failed to meet basic targets',
-                consequence: 'Systemic leadership capability gap - cultural transformation needed'
-            });
-        }
-    }
-
-    generateCulturalRecommendations(analysis) {
-        const { weaknesses, culturalRisks, comparisonToHighPerformance, leadership, metrics } = analysis;
-
-        // Priority 1: Critical gaps
-        if (metrics.avgAttrition >= 15 || culturalRisks.some(r => r.severity === 'CRITICAL')) {
-            analysis.recommendations.push({
-                priority: 1,
-                title: 'URGENT: Cultural Intervention Required',
-                actions: [
-                    'Pause aggressive growth targets and conduct culture assessment',
-                    'Implement 360-degree feedback for all leaders to identify blind spots',
-                    'Bring in external facilitator for leadership team workshop on sustainable performance',
-                    'Review and reset expectations around work-life balance and team capacity'
-                ],
-                timeline: 'Immediate (within 30 days)',
-                expectedImpact: 'Stabilize attrition, prevent talent exodus, restore psychological safety'
-            });
-        }
-
-        // Priority 2: Leadership development gaps
-        if (leadership.diversity < 0.5 || leadership.aggregate.coaching < 15) {
-            analysis.recommendations.push({
-                priority: 2,
-                title: 'Develop Leadership Flexibility',
-                actions: [
-                    'Mandate Goleman\'s "Primal Leadership" as required reading for leadership team',
-                    'Implement leadership style assessment (360-degree) for all leaders',
-                    'Create coaching circles - pair leaders with different dominant styles',
-                    'Develop context-based leadership playbook: "When to use which style"'
-                ],
-                timeline: 'Q1-Q2 (3-6 months)',
-                expectedImpact: 'Increase leadership diversity index from ' + (leadership.diversity * 100).toFixed(0) + '% to 75%+'
-            });
-        }
-
-        // Priority 3: Commercial performance
-        if (metrics.avgGrowth < 20) {
-            analysis.recommendations.push({
-                priority: 3,
-                title: 'Strengthen Commercial Acumen',
-                actions: [
-                    'Implement strategic decision-making training (e.g., "Playing to Win" framework)',
-                    'Create cross-functional teams to break down silos',
-                    'Establish quarterly "strategic choices" reviews - force hard decisions',
-                    'Bring in external business coach to work with underperforming leaders'
-                ],
-                timeline: 'Q2-Q3 (6-9 months)',
-                expectedImpact: 'Close ' + (20 - metrics.avgGrowth).toFixed(1) + '% growth gap, improve strategic confidence'
-            });
-        }
-
-        // Priority 4: Agility and adaptation
-        if (analysis.lead.avgAgility < 30) {
-            analysis.recommendations.push({
-                priority: 4,
-                title: 'Build Organizational Agility',
-                actions: [
-                    'Implement "fail fast" experimentation culture - celebrate learning from failures',
-                    'Reduce approval layers for tactical decisions',
-                    'Create rapid response teams for market changes',
-                    'Train leaders on scenario planning and decision-making under uncertainty'
-                ],
-                timeline: 'Q3-Q4 (9-12 months)',
-                expectedImpact: 'Increase agility score to 45+ (benchmark level)'
-            });
-        }
-
-        // Priority 5: Sustain strengths
-        if (analysis.strengths.length > 0) {
-            analysis.recommendations.push({
-                priority: 5,
-                title: 'Sustain Cultural Strengths',
-                actions: [
-                    'Document and share success stories from high performers',
-                    'Create internal case studies: "How [Leader] achieved 28% growth with 80% morale"',
-                    'Establish recognition program for leaders who embody company values',
-                    'Use top performers as coaches/mentors for others'
-                ],
-                timeline: 'Ongoing',
-                expectedImpact: 'Lock in cultural gains, prevent regression, create role models'
-            });
-        }
-
-        // Sort by priority
-        analysis.recommendations.sort((a, b) => a.priority - b.priority);
-    }
+  capitalize(str) {
+    if (!str) return "";
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
 }
 
 // Make available to game engine
-if (typeof window !== 'undefined') {
-    window.CultureAnalysis = CultureAnalysis;
+if (typeof window !== "undefined") {
+  window.CultureAnalysis = CultureAnalysis;
 }

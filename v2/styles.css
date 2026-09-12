@@ -1,13 +1,13 @@
 /* JCB Leadership Challenge - Styles */
 
 :root {
-  --jcb-yellow: #FFCB00;
+  --jcb-yellow: #ffcb00;
   --jcb-black: #000000;
-  --jcb-white: #FFFFFF;
-  --jcb-red: #E31C23;
-  --jcb-green: #008E4C;
+  --jcb-white: #ffffff;
+  --jcb-red: #e31c23;
+  --jcb-green: #008e4c;
   --jcb-gray: #333333;
-  --jcb-light-gray: #F5F5F5;
+  --jcb-light-gray: #f5f5f5;
 }
 
 * {
@@ -17,7 +17,7 @@
 }
 
 body {
-  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-family: "Helvetica Neue", Arial, sans-serif;
   background-color: var(--jcb-black);
   color: var(--jcb-white);
   overflow: hidden;
@@ -60,18 +60,32 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* Welcome Screen */
 #welcome-screen {
-  background: linear-gradient(135deg, var(--jcb-black) 0%, var(--jcb-gray) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--jcb-black) 0%,
+    var(--jcb-gray) 100%
+  );
   z-index: 1;
 }
 
@@ -92,13 +106,13 @@ body {
 }
 
 .welcome-right {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 40px;
-    background: rgba(0, 0, 0, 0.3);
-    border-left: 5px solid var(--jcb-yellow);
-    overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 40px;
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 5px solid var(--jcb-yellow);
+  overflow-y: auto;
 }
 
 .leaderboard-title {
@@ -189,11 +203,20 @@ body {
   background: var(--jcb-yellow);
   margin-bottom: 40px;
   position: relative;
-  clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0% 80%, 0% 20%);
+  clip-path: polygon(
+    20% 0%,
+    80% 0%,
+    100% 20%,
+    100% 80%,
+    80% 100%,
+    20% 100%,
+    0% 80%,
+    0% 20%
+  );
 }
 
 .jcb-logo-large::after {
-  content: 'JCB';
+  content: "JCB";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -247,7 +270,7 @@ body {
 }
 
 .btn-primary:hover {
-  background: #FFD700;
+  background: #ffd700;
   transform: scale(1.05);
 }
 
@@ -321,6 +344,102 @@ body {
   text-align: center;
 }
 
+/* Round Choice Screen (returning players) */
+.round-choice-container {
+  max-width: 900px;
+}
+
+.round-choice-intro {
+  font-size: 20px;
+  line-height: 1.6;
+  color: var(--jcb-white);
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.round-choice-detail {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  margin-bottom: 35px;
+}
+
+.round-choice-options {
+  display: flex;
+  gap: 25px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.round-choice-option {
+  flex: 1 1 300px;
+  max-width: 380px;
+  padding: 30px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid var(--jcb-yellow);
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+  position: relative;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.round-choice-option:hover {
+  background: rgba(255, 203, 0, 0.15);
+  transform: translateY(-3px);
+}
+
+.round-choice-option.advanced {
+  border-color: var(--jcb-green, #4caf50);
+}
+
+.round-choice-option-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: var(--jcb-yellow);
+  margin-bottom: 12px;
+}
+
+.round-choice-option.advanced .round-choice-option-title {
+  color: var(--jcb-green, #4caf50);
+}
+
+.round-choice-option-desc {
+  font-size: 16px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Welcome Back Screen (Round 2) */
+.welcome-back-container {
+  max-width: 900px;
+  text-align: center;
+}
+
+.welcome-back-summary {
+  font-size: 18px;
+  line-height: 1.7;
+  color: var(--jcb-white);
+  margin-bottom: 35px;
+  text-align: left;
+}
+
+.welcome-back-improvement {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 203, 0, 0.2) 0%,
+    rgba(255, 203, 0, 0.05) 100%
+  );
+  border: 2px solid var(--jcb-yellow);
+  border-radius: 10px;
+  padding: 18px;
+  color: var(--jcb-yellow);
+  font-weight: bold;
+  margin: 15px 0;
+}
+
 .form-group {
   margin-bottom: 40px;
 }
@@ -358,6 +477,43 @@ body {
   border-color: var(--jcb-yellow);
   background: rgba(255, 255, 255, 0.15);
   box-shadow: 0 0 10px rgba(255, 204, 0, 0.3);
+}
+
+/* DROPDOWN FIX: <select> elements cannot use a translucent background.
+   The native control renders the closed state with the OS default, so a
+   semi-transparent white background over the dark panel made the white text
+   invisible until hover/focus forced a repaint. Give selects an OPAQUE dark
+   background and force the option list to dark-on-light so every item is
+   readable at all times. */
+select.input-large {
+  background-color: #1a1a1a;
+  color: var(--jcb-white);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  /* Custom chevron so the control still looks like a dropdown */
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FFCB00'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 18px center;
+  background-size: 28px 28px;
+  padding-right: 60px;
+  cursor: pointer;
+}
+
+select.input-large:focus {
+  background-color: #1a1a1a;
+}
+
+/* The popup list itself is rendered by the OS; force readable colours. */
+select.input-large option {
+  background-color: #1a1a1a;
+  color: var(--jcb-white);
+}
+
+select.input-large option:checked,
+select.input-large option:hover {
+  background-color: var(--jcb-yellow);
+  color: #000000;
 }
 
 .radio-group {
@@ -495,6 +651,38 @@ body {
   border-top: 1px solid rgba(255, 203, 0, 0.3);
 }
 
+/* Exec-expectations callout in the mission brief.
+   Coaches the pressure the player will feel in business terms without
+   revealing any scoring thresholds or win conditions. */
+.exec-expectations {
+  margin: 20px 0;
+  padding: 18px 22px;
+  background: rgba(255, 203, 0, 0.07);
+  border-left: 4px solid var(--jcb-yellow);
+  border-radius: 6px;
+}
+
+.exec-expectations p {
+  margin: 0 0 12px 0;
+}
+
+.exec-expectations ul {
+  margin: 10px 0 12px 0;
+  padding-left: 22px;
+}
+
+.exec-expectations li {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.exec-expectations-note {
+  margin: 0 !important;
+  font-size: 14px;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.75);
+}
+
 .video-container {
   flex: 1;
   max-width: 800px;
@@ -518,7 +706,16 @@ body {
   height: 100px;
   background: var(--jcb-yellow);
   margin-bottom: 20px;
-  clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0% 80%, 0% 20%);
+  clip-path: polygon(
+    20% 0%,
+    80% 0%,
+    100% 20%,
+    100% 80%,
+    80% 100%,
+    20% 100%,
+    0% 80%,
+    0% 20%
+  );
 }
 
 .video-text {
@@ -595,7 +792,11 @@ body {
 
 /* HUD */
 .hud {
-  background: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 100%);
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.85) 100%
+  );
   border-bottom: 3px solid var(--jcb-yellow);
   padding: 15px 30px;
 }
@@ -642,6 +843,8 @@ body {
   font-size: 20px;
   font-weight: bold;
   color: var(--jcb-yellow);
+  display: inline-block;
+  transition: color 0.3s ease;
 }
 
 .morale-bar {
@@ -667,7 +870,7 @@ body {
   font-size: 14px;
   font-weight: bold;
   color: var(--jcb-white);
-  text-shadow: 0 0 4px rgba(0,0,0,0.8);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
 }
 
 .hud-footer {
@@ -1030,6 +1233,273 @@ body {
   text-align: center;
 }
 
+/* ============================================================
+   PRIORITY 2 — Cinematic impact card (consequence modal)
+   ============================================================ */
+
+.impact-card {
+  padding: 32px 40px 40px;
+  text-align: center;
+  animation: impactCardIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes impactCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.impact-card-header {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--jcb-black);
+  background: var(--jcb-yellow);
+  padding: 6px 18px;
+  border-radius: 999px;
+  margin-bottom: 24px;
+}
+
+.impact-consequence {
+  font-size: 24px;
+  line-height: 1.7;
+  color: #ffffff;
+  margin-bottom: 32px;
+  animation: slideUp 0.5s ease-out 0.15s both;
+}
+
+.impact-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+
+.impact-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 120px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  animation: impactChipIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.impact-chip:nth-child(1) {
+  animation-delay: 0.25s;
+}
+.impact-chip:nth-child(2) {
+  animation-delay: 0.33s;
+}
+.impact-chip:nth-child(3) {
+  animation-delay: 0.41s;
+}
+.impact-chip:nth-child(4) {
+  animation-delay: 0.49s;
+}
+.impact-chip:nth-child(5) {
+  animation-delay: 0.57s;
+}
+
+@keyframes impactChipIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.impact-chip.good {
+  border-color: rgba(0, 142, 76, 0.6);
+  background: rgba(0, 142, 76, 0.14);
+}
+
+.impact-chip.bad {
+  border-color: rgba(227, 28, 35, 0.6);
+  background: rgba(227, 28, 35, 0.14);
+}
+
+/* Neutral chip: metric did not meaningfully change for this decision.
+   Shown so players always see the full five-metric picture. */
+.impact-chip.neutral {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.75;
+}
+
+.impact-chip.neutral .impact-value {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.impact-label {
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 6px;
+}
+
+.impact-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.impact-chip.good .impact-value {
+  color: #4ade80;
+}
+
+.impact-chip.bad .impact-value {
+  color: #f87171;
+}
+
+/* ============================================================
+   PRIORITY 2 — Animated HUD metric deltas
+   ============================================================ */
+
+.metric-value.metric-flash,
+.metric .metric-value.metric-flash {
+  animation: metricFlash 0.9s ease-out;
+}
+
+@keyframes metricFlash {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.metric-value.delta-good {
+  color: #4ade80 !important;
+}
+
+.metric-value.delta-bad {
+  color: #f87171 !important;
+}
+
+.metric-delta-chip {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  pointer-events: none;
+  animation: deltaFloat 1.6s ease-out forwards;
+  z-index: 5;
+}
+
+.metric-delta-chip.delta-good {
+  color: #4ade80;
+  background: rgba(0, 142, 76, 0.22);
+}
+
+.metric-delta-chip.delta-bad {
+  color: #f87171;
+  background: rgba(227, 28, 35, 0.22);
+}
+
+@keyframes deltaFloat {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+/* ============================================================
+   PRIORITY 2 — Leaderboard placement reveal (results screen)
+   ============================================================ */
+
+.results-placement {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.placement-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 24px 48px;
+  border-radius: 16px;
+  background: rgba(51, 51, 51, 0.85);
+  border: 2px solid rgba(255, 203, 0, 0.35);
+  opacity: 0;
+  transform: translateY(30px) scale(0.9);
+  transition:
+    opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.placement-card.revealed {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.placement-card.podium {
+  border-color: var(--jcb-yellow);
+  box-shadow: 0 0 30px rgba(255, 203, 0, 0.35);
+  animation: podiumGlow 2s ease-in-out infinite;
+}
+
+@keyframes podiumGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 24px rgba(255, 203, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 44px rgba(255, 203, 0, 0.6);
+  }
+}
+
+.placement-medal {
+  font-size: 44px;
+  line-height: 1;
+}
+
+.placement-rank {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--jcb-yellow);
+}
+
+.placement-sub {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
 .consequence-continue {
   text-align: center;
   margin-top: 30px;
@@ -1078,8 +1548,13 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .results-metrics {
@@ -1181,7 +1656,7 @@ body {
 
 .leadership-bar-fill {
   height: 100%;
-  background: linear-gradient(to right, var(--jcb-yellow), #FFD700);
+  background: linear-gradient(to right, var(--jcb-yellow), #ffd700);
   transition: width 1s ease-out;
 }
 
@@ -1285,7 +1760,11 @@ button,
 
 /* Compact Leaderboard Styles */
 .leaderboard-item-compact {
-  background: linear-gradient(135deg, rgba(255, 203, 0, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 203, 0, 0.1) 0%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
   border: 2px solid rgba(255, 203, 0, 0.3);
   border-radius: 8px;
   padding: 15px;
@@ -1300,7 +1779,11 @@ button,
 
 .leaderboard-item-compact:hover {
   border-color: var(--jcb-yellow);
-  background: linear-gradient(135deg, rgba(255, 203, 0, 0.15) 0%, rgba(0, 0, 0, 0.4) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 203, 0, 0.15) 0%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
   transform: translateX(5px);
 }
 
