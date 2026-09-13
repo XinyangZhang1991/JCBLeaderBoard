@@ -38,15 +38,16 @@ window.addEventListener("DOMContentLoaded", () => {
 document.addEventListener("DOMContentLoaded", () => {
   const nameInput = document.getElementById("player-name");
   if (nameInput) {
-    // Force focus on touch
+    // BUGFIX (#2): focus SYNCHRONOUSLY inside the user-gesture call stack.
+    // The previous `setTimeout(..., 100)` wrapper deferred focus outside the
+    // gesture, which iOS/iPadOS often ignores — the on-screen keyboard then
+    // never appeared. Focusing immediately (plus the inline
+    // `ontouchstart="this.focus();"` on the input) reliably raises it.
     nameInput.addEventListener(
       "touchstart",
       function (e) {
         e.stopPropagation();
-        setTimeout(() => {
-          this.focus();
-          this.click();
-        }, 100);
+        this.focus();
       },
       { passive: false },
     );
@@ -100,35 +101,53 @@ document.addEventListener("keydown", function (e) {
   }
 });
 
-// Debug helpers (remove for production)
-window.debugGame = function () {
-  console.log("=== GAME STATE DEBUG ===");
-  console.log("Player:", game.state.playerName);
-  console.log("Self-identified style:", game.state.selfIdentifiedStyle);
-  console.log("Current scenario:", game.state.currentScenario);
-  console.log("Metrics:", {
-    growth: game.state.growth,
-    morale: game.state.morale,
-    attrition: game.state.attrition,
-    profitMargin: game.state.profitMargin,
-  });
-  console.log("Leadership styles:", game.state.leadershipStyles);
-  console.log("Decisions made:", game.state.decisions.length);
-  console.log("Time remaining:", game.state.timeRemaining);
-};
+// Debug helpers — gated behind an explicit dev flag so they are not exposed
+// in production. Enable with ?debug=1 in the URL or by setting
+// window.__JCB_DEBUG__ = true before this script runs.
+//
+// NOTE: this identifier is deliberately NOT named DEBUG_ENABLED. game-engine.js
+// is loaded earlier as a classic script and already declares a top-level
+// `const DEBUG_ENABLED`; a second top-level `const` of the same name in the
+// shared global scope throws "Identifier 'DEBUG_ENABLED' has already been
+// declared" and aborts this whole script. A file-local name avoids the clash
+// while keeping app.js standalone-safe.
+const APP_DEBUG_ENABLED =
+  (typeof window !== "undefined" &&
+    (window.__JCB_DEBUG__ === true ||
+      (window.location &&
+        /[?&]debug=1(?:&|$)/.test(window.location.search)))) ||
+  false;
 
-window.skipToResults = function () {
-  console.log("Skipping to results...");
-  game.endGame();
-};
+if (APP_DEBUG_ENABLED) {
+  window.debugGame = function () {
+    console.log("=== GAME STATE DEBUG ===");
+    console.log("Player:", game.state.playerName);
+    console.log("Self-identified style:", game.state.selfIdentifiedStyle);
+    console.log("Current scenario:", game.state.currentScenario);
+    console.log("Metrics:", {
+      growth: game.state.growth,
+      morale: game.state.morale,
+      attrition: game.state.attrition,
+      profitMargin: game.state.profitMargin,
+    });
+    console.log("Leadership styles:", game.state.leadershipStyles);
+    console.log("Decisions made:", game.state.decisions.length);
+    console.log("Time remaining:", game.state.timeRemaining);
+  };
 
-window.setMetrics = function (growth, morale, attrition) {
-  game.state.growth = growth || game.state.growth;
-  game.state.morale = morale || game.state.morale;
-  game.state.attrition = attrition || game.state.attrition;
-  game.updateHUD();
-  console.log("Metrics updated");
-};
+  window.skipToResults = function () {
+    console.log("Skipping to results...");
+    game.endGame();
+  };
+
+  window.setMetrics = function (growth, morale, attrition) {
+    game.state.growth = growth || game.state.growth;
+    game.state.morale = morale || game.state.morale;
+    game.state.attrition = attrition || game.state.attrition;
+    game.updateHUD();
+    console.log("Metrics updated");
+  };
+}
 
 // Error handling
 window.addEventListener("error", function (e) {

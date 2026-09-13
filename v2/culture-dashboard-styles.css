@@ -323,7 +323,7 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
-.culture-lead-benchmark {
+.culture-lead-average {
   font-size: 24px;
   color: rgba(255, 255, 255, 0.6);
 }
@@ -524,4 +524,91 @@
 .culture-rec-body p {
   margin: 10px 0;
   color: rgba(255, 255, 255, 0.8);
+}
+
+/* Observation Cards (Issue F) - "What the Data Shows" */
+.culture-observations .culture-observation-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 4px solid var(--jcb-yellow);
+  border-radius: 8px;
+  padding: 20px 22px;
+  margin-bottom: 18px;
+}
+
+.culture-observations .culture-observation-card:last-child {
+  margin-bottom: 0;
+}
+
+.culture-observation-category {
+  display: inline-block;
+  padding: 3px 10px;
+  margin-bottom: 10px;
+  background: rgba(255, 203, 0, 0.15);
+  border: 1px solid rgba(255, 203, 0, 0.35);
+  border-radius: 4px;
+  color: var(--jcb-yellow);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.culture-observation-card h3 {
+  margin: 0 0 8px 0;
+  color: #ffffff;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.culture-observation-card p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.6;
+}
+
+/* Segmentation Cards — By Business Function / By Seniority / By LEAD Course Cohort */
+.culture-segment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.culture-segment-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 4px solid var(--jcb-yellow);
+  border-radius: 8px;
+  padding: 20px 22px;
+}
+
+.culture-segment-card h3 {
+  margin: 0 0 12px 0;
+  color: #ffffff;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.culture-segment-count {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(255, 203, 0, 0.15);
+  border: 1px solid rgba(255, 203, 0, 0.35);
+  border-radius: 4px;
+  color: var(--jcb-yellow);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.culture-segment-card p {
+  margin: 0 0 6px 0;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.6;
+}
+
+.culture-segment-card p:last-child {
+  margin-bottom: 0;
 }

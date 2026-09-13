@@ -1,5 +1,72 @@
 // Scoring Engine - Calculates decision impacts and final results
 
+// BUGFIX (audit H4): consume the ONE canonical set of LEAD thresholds from
+// lead-constants.js so scoring.js and executive-summary-generator.js can never
+// diverge again. Falls back to an inline copy only if the module is missing
+// (e.g. an old cached page), so the engine never crashes.
+const LEAD_CONSTANTS = (typeof window !== "undefined" &&
+  window.LEAD_CONSTANTS) ||
+  (typeof globalThis !== "undefined" && globalThis.LEAD_CONSTANTS) || {
+    exceptionalLEAD: 0.78,
+    solidLEAD: 0.65,
+    strongLEAD: 0.5,
+    minimumLEAD: 0.5,
+    minimumDimensionRatio: 0.35,
+    wellBalancedMax: 50,
+    isBalancedMax: 60,
+    reasonablyBalancedMax: 70,
+    growthTarget: 15,
+    minGrowthFloor: 10,
+    benchmarkPerScenario: 19,
+    round1Scenarios: 9,
+    round2Scenarios: 6,
+    leadDimensionCap: 250,
+    // BUGFIX (audit): breakdownMaxPerScenario was omitted from this fallback,
+    // yet scoring.js dereferences LEAD_CONSTANTS.breakdownMaxPerScenario.leadership
+    // (see the "Your LEAD Competencies Explained" block). If the fallback were
+    // ever used, that dereference threw "Cannot read properties of undefined".
+    // Mirrors v2/lead-constants.js exactly.
+    breakdownMaxPerScenario: {
+      leadership: 401 / 9,
+      excellence: 450 / 9,
+      agility: 233 / 9,
+      determination: 318 / 9,
+    },
+  };
+
+// BUGFIX (audit): the canonical lead-constants.js also exposes two helper
+// functions that scoring.js calls behind `typeof ... === "function"` guards.
+// The inline fallback above is a plain object, so those guards would silently
+// take the degraded branch. Attaching equivalent helpers keeps the fallback
+// genuinely complete and behaviourally identical to the canonical module.
+if (typeof LEAD_CONSTANTS.scenarioCountForRound !== "function") {
+  LEAD_CONSTANTS.scenarioCountForRound = function (round) {
+    return round === 2
+      ? LEAD_CONSTANTS.round2Scenarios
+      : LEAD_CONSTANTS.round1Scenarios;
+  };
+}
+if (typeof LEAD_CONSTANTS.cumulativeBenchmarkForRound !== "function") {
+  LEAD_CONSTANTS.cumulativeBenchmarkForRound = function (round) {
+    return (
+      LEAD_CONSTANTS.scenarioCountForRound(round) *
+      LEAD_CONSTANTS.benchmarkPerScenario
+    );
+  };
+}
+if (typeof LEAD_CONSTANTS.breakdownMaximumsForRound !== "function") {
+  LEAD_CONSTANTS.breakdownMaximumsForRound = function (round) {
+    const count = LEAD_CONSTANTS.scenarioCountForRound(round);
+    const per = LEAD_CONSTANTS.breakdownMaxPerScenario;
+    return {
+      leadership: Math.round(per.leadership * count),
+      excellence: Math.round(per.excellence * count),
+      agility: Math.round(per.agility * count),
+      determination: Math.round(per.determination * count),
+    };
+  };
+}
+
 class ScoringEngine {
   constructor() {
     this.styleWeights = {
@@ -115,9 +182,14 @@ class ScoringEngine {
     // Combined modifier: LEAD quality + leadership balance
     const qualityModifier = leadStrength * 0.6 + balanceStrength * 0.4;
 
+    // CALIBRATION (2026-09-13): These per-decision caps are deliberately
+    // conservative. A single £250K-£500K decision must not swing a division
+    // metric by an implausible amount, so the LEAD modifier can only nudge an
+    // impact, never dominate it. The caps below are the maximum fraction of an
+    // impact that high LEAD quality may buffer or amplify.
     // 1. Buffer negative attrition impacts (high LEAD reduces people leaving)
     if (impact.attrition > 0) {
-      const buffer = qualityModifier * 0.4; // Up to 40% reduction
+      const buffer = qualityModifier * 0.25; // Up to 25% reduction (was 40%)
       const originalAttrition = impact.attrition;
       impact.attrition *= 1 - buffer;
       if (buffer > 0 && buffer < 1) {
@@ -134,7 +206,7 @@ class ScoringEngine {
     // the 20% positive amplifier below, created a one-way ratchet that kept morale pinned
     // near 100 for almost every player. Halving the buffer restores downside risk.
     if (impact.morale < 0) {
-      const buffer = qualityModifier * 0.15; // Up to 15% reduction (was 30%)
+      const buffer = qualityModifier * 0.1; // Up to 10% reduction (was 15%)
       const originalMorale = impact.morale;
       impact.morale *= 1 - buffer;
       if (buffer > 0 && buffer < 1) {
@@ -146,7 +218,7 @@ class ScoringEngine {
 
     // 3. Amplify positive growth (high LEAD makes good decisions even better)
     if (impact.growth > 0) {
-      const amplifier = qualityModifier * 0.25; // Up to 25% boost
+      const amplifier = qualityModifier * 0.12; // Up to 12% boost (was 25%)
       const originalGrowth = impact.growth;
       impact.growth *= 1 + amplifier;
       if (amplifier > 0) {
@@ -160,13 +232,13 @@ class ScoringEngine {
     // MORALE REBALANCE: Reduced amplifier from 20% to 10%. Combined with the reduced
     // negative buffer above, this removes the upward ratchet that pinned morale near 100.
     if (impact.morale > 0) {
-      const amplifier = qualityModifier * 0.1; // Up to 10% boost (was 20%)
+      const amplifier = qualityModifier * 0.06; // Up to 6% boost (was 10%)
       impact.morale *= 1 + amplifier;
     }
 
     // 5. Reduce negative growth impacts (high LEAD provides resilience)
     if (impact.growth < 0) {
-      const buffer = qualityModifier * 0.2; // Up to 20% reduction
+      const buffer = qualityModifier * 0.1; // Up to 10% reduction (was 20%)
       impact.growth *= 1 - buffer;
     }
   }
@@ -304,7 +376,10 @@ class ScoringEngine {
           break;
         case "coaching":
           impact.morale += 8;
-          impact.growth += 0;
+          // Issue 2: small positive growth - developing people is a growth
+          // driver, so balanced/people-first leadership is rewarded rather than
+          // reading as "no impact".
+          impact.growth += 0.5;
           impact.leadership += 12;
           break;
         case "pacesetting":
@@ -316,7 +391,10 @@ class ScoringEngine {
           break;
         case "affiliative":
           impact.morale += 6; // ENHANCED from +3
-          impact.growth += 0; // ENHANCED from -2 (neutral now)
+          // Issue 2: small positive growth (was 0) - a stable, engaged team
+          // still delivers growth, so people-first leadership is not shown as
+          // "no impact".
+          impact.growth += 0.5;
           impact.attrition -= 2; // NEW: Reduces turnover risk
           impact.leadership += 8; // NEW: People-first leadership
           break;
@@ -500,7 +578,7 @@ class ScoringEngine {
           // MORALE REBALANCE 2026-05-17: Reduced from -18% to -12% (33% reduction)
           impact.morale -= 12;
           // ATTRITION REBALANCE 2026-05-17: Reduced from +15% to +10% (33% reduction)
-          impact.attrition += 10;
+          impact.attrition += 8; // CALIBRATED: capped from +10
           // ALIGNMENT FIX: a safety incident must NOT increase growth. The
           // punitive suspension is a knee-jerk reaction that ignores the root
           // cause, so it now carries a small growth penalty instead of a gain.
@@ -519,7 +597,7 @@ class ScoringEngine {
           impact.growth -= 0.2;
           impact.excellence += 20; // Evidence-based response
           impact.leadership += 15;
-          impact.organizationalCapability += 20; // Training builds capability
+          impact.organizationalCapability += 15; // CALIBRATED: capped from +20; training builds capability
           impact.attrition -= 3; // Addressing the gap reduces turnover risk
           break;
 
@@ -584,7 +662,7 @@ class ScoringEngine {
             break;
 
           case 1: // Learning opportunity - coaching (KEEP FULL IMPACT)
-            impact.morale += 15;
+            impact.morale += 12; // CALIBRATED: capped from +15
             impact.excellence += 15;
             impact.leadership += 20;
             impact.organizationalCapability += 15;
@@ -948,8 +1026,8 @@ class ScoringEngine {
       impact.agility += 40; // MAXIMUM AGILITY SCORE
       impact.excellence += 35; // Emotional intelligence
       impact.leadership += 25;
-      impact.morale += 15;
-      impact.attrition -= 12;
+      impact.morale += 12; // CALIBRATED: capped from +15
+      impact.attrition -= 8; // CALIBRATED: capped from -12
       impact.leadershipStyles.coaching += 25;
       // This is THE key self-awareness moment
     } else if (rootCause === 2) {
@@ -966,7 +1044,7 @@ class ScoringEngine {
       // replaceable, so it must carry a morale/attrition cost and erode trust.
       impact.growth += 2;
       impact.morale -= 8;
-      impact.attrition += 10;
+      impact.attrition += 8; // CALIBRATED: capped from +10
       impact.organizationalCapability -= 8;
       impact.leadershipStyles.coercive += 20;
     }
@@ -983,8 +1061,8 @@ class ScoringEngine {
         impact.leadership += 15;
       } else if (respOption.style === "pacesetting") {
         // Double down - disaster
-        impact.morale -= 15;
-        impact.attrition += 15;
+        impact.morale -= 12; // CALIBRATED: capped from -15
+        impact.attrition += 8; // CALIBRATED: capped from +15
       }
     }
 
@@ -1004,8 +1082,8 @@ class ScoringEngine {
     // 0=Maintain, 1=10%, 2=20%, 3=30%
     if (adjustment === 0 && gameState.morale < 65) {
       // Maintain with low morale = catastrophe
-      impact.attrition += 20;
-      impact.morale -= 15;
+      impact.attrition += 8; // CALIBRATED: capped from +20
+      impact.morale -= 12; // CALIBRATED: capped from -15
       // ALIGNMENT FIX: refusing to adjust targets while morale is already low
       // is a neglectful choice - it also erodes capability.
       impact.organizationalCapability -= 10;
@@ -1028,8 +1106,8 @@ class ScoringEngine {
       impact.organizationalCapability += 5;
     } else if (adjustment === 2 || adjustment === 3) {
       // Significant reduction shows genuine change
-      impact.morale += 15;
-      impact.attrition -= 10;
+      impact.morale += 12; // CALIBRATED: capped from +15
+      impact.attrition -= 8; // CALIBRATED: capped from -10
       impact.growth -= 5;
       impact.agility += 15;
       // ALIGNMENT FIX: a significant target reduction is people-first - it also
@@ -1041,7 +1119,7 @@ class ScoringEngine {
     const paceSettingUsage = gameState.leadershipStyles.pacesetting || 0;
     if (paceSettingUsage > 50) {
       // Amplify negative impacts
-      impact.attrition += 10;
+      impact.attrition += 8; // CALIBRATED: capped from +10
       impact.morale -= 10;
     }
   }
@@ -1418,7 +1496,7 @@ class ScoringEngine {
       // MORALE REBALANCE 2026-05-17: Reduced from -15% to -10% (33% reduction)
       impact.morale -= 10;
       // ATTRITION REBALANCE 2026-05-17: Reduced from +15% to +10% (33% reduction)
-      impact.attrition += 10;
+      impact.attrition += 8; // CALIBRATED: capped from +10
       impact.determination += 20; // Relentless ambition
     } else if (strategy === 3) {
       // Balanced approach (DEMOCRATIC - keep full morale impact)
@@ -1429,7 +1507,7 @@ class ScoringEngine {
       impact.determination += 15; // Sustainable ambition
     } else if (strategy === 1 && gameState.attrition > 15) {
       // Consolidation when needed (COACHING - keep full impact)
-      impact.morale += 15;
+      impact.morale += 12; // CALIBRATED: capped from +15
       impact.attrition -= 5;
       impact.determination += 8; // Measured restraint
     } else if (strategy === 2) {
@@ -1485,10 +1563,10 @@ class ScoringEngine {
     // The benchmark is per-scenario, so it is identical for both rounds; only the
     // divisor (scenarioCount) changes. Cumulative targets: R1 = 171, R2 = 114.
     const benchmarks = {
-      leadership: 19,
-      excellence: 19,
-      agility: 19,
-      determination: 19,
+      leadership: LEAD_CONSTANTS.benchmarkPerScenario,
+      excellence: LEAD_CONSTANTS.benchmarkPerScenario,
+      agility: LEAD_CONSTANTS.benchmarkPerScenario,
+      determination: LEAD_CONSTANTS.benchmarkPerScenario,
     };
 
     const leadRatios = {
@@ -1515,11 +1593,11 @@ class ScoringEngine {
     // Individual dimension minimums prevent ignoring an entire LEAD dimension
     // (e.g. can't succeed with zero info requests by compensating elsewhere).
     const meetsLEADQuality =
-      avgLEADRatio >= 0.5 &&
-      leadRatios.leadership >= 0.35 &&
-      leadRatios.excellence >= 0.35 &&
-      leadRatios.agility >= 0.35 &&
-      leadRatios.determination >= 0.35;
+      avgLEADRatio >= LEAD_CONSTANTS.minimumLEAD &&
+      leadRatios.leadership >= LEAD_CONSTANTS.minimumDimensionRatio &&
+      leadRatios.excellence >= LEAD_CONSTANTS.minimumDimensionRatio &&
+      leadRatios.agility >= LEAD_CONSTANTS.minimumDimensionRatio &&
+      leadRatios.determination >= LEAD_CONSTANTS.minimumDimensionRatio;
 
     // NEW: Leadership Balance Requirement
     // Calculate balance score (no single style should dominate)
@@ -1558,7 +1636,8 @@ class ScoringEngine {
     const maxStylePercentage = Math.max(...Object.values(stylePercentages));
 
     // Balance requirement: No single style above 70% (allows some specialization but prevents extremes)
-    const meetsBalanceRequirement = maxStylePercentage <= 70;
+    const meetsBalanceRequirement =
+      maxStylePercentage <= LEAD_CONSTANTS.reasonablyBalancedMax;
 
     // Store these for use in generateFeedback
     results.avgLEADRatio = avgLEADRatio;
@@ -1571,21 +1650,22 @@ class ScoringEngine {
     // Philosophy: Reward high LEAD scores and balanced leadership, not extreme strategies
 
     // Calculate LEAD excellence tiers
-    const exceptionalLEAD = avgLEADRatio >= 0.78; // Top 78% of benchmark (truly exceptional) - RAISED v9 to reduce Random/Pure Democratic
-    const strongLEAD = avgLEADRatio >= 0.5; // Top 50% of benchmark (strong leadership)
+    const exceptionalLEAD = avgLEADRatio >= LEAD_CONSTANTS.exceptionalLEAD; // Top 78% of benchmark (truly exceptional) - RAISED v9 to reduce Random/Pure Democratic
+    const strongLEAD = avgLEADRatio >= LEAD_CONSTANTS.strongLEAD; // Top 50% of benchmark (strong leadership)
     // BUGFIX (audit): the Growth Path floor was 0.4 (40%), which allowed a player
     // scoring only ~42% of the LEAD benchmark to win on growth alone. That is not
     // credible leadership. Raised to 0.5 (50%) so every winner demonstrates at
     // least half the benchmark across the LEAD framework.
-    const minimumLEAD = avgLEADRatio >= 0.5; // Minimum 50% of benchmark (baseline)
+    const minimumLEAD = avgLEADRatio >= LEAD_CONSTANTS.minimumLEAD; // Minimum 50% of benchmark (baseline)
 
     // Calculate balance score (0-100, where 100 = perfectly balanced, 0 = single style dominates)
     const balanceScore = 100 - maxStylePercentage; // If max is 40%, balance = 60
-    const wellBalanced = maxStylePercentage <= 50; // No single style > 50%
-    const reasonablyBalanced = maxStylePercentage <= 70; // No single style > 70%
+    const wellBalanced = maxStylePercentage <= LEAD_CONSTANTS.wellBalancedMax; // No single style > 50%
+    const reasonablyBalanced =
+      maxStylePercentage <= LEAD_CONSTANTS.reasonablyBalancedMax; // No single style > 70%
 
     // Business metrics
-    const meetsGrowth = gameState.growth >= 15;
+    const meetsGrowth = gameState.growth >= LEAD_CONSTANTS.growthTarget;
     const meetsCapability = gameState.organizationalCapability >= 145;
     const capabilityPath = meetsCapability && gameState.growth >= 8;
     const meetsTeamHealth = healthyAttrition && healthyProfit && healthyMorale;
@@ -1660,7 +1740,7 @@ class ScoringEngine {
     // executives. 10% is the floor: still below the 15% headline target (so strong
     // leadership can legitimately compensate), but high enough that every winner
     // has actually grown the business.
-    const MIN_GROWTH_FLOOR = 10;
+    const MIN_GROWTH_FLOOR = LEAD_CONSTANTS.minGrowthFloor;
 
     // INTENT (user): the win paths must stay HIDDEN behind the growth objective.
     // A player who leans on a single Goleman style may still win, but only just -
@@ -1699,7 +1779,9 @@ class ScoringEngine {
       gameState.morale >= 45 && gameState.attrition < 30; // LOWERED morale from 50% v5
 
     const winsViaGrowthPath =
-      gameState.growth >= 15 && minimumLEAD && acceptableTeamImpact;
+      gameState.growth >= LEAD_CONSTANTS.growthTarget &&
+      minimumLEAD &&
+      acceptableTeamImpact;
     // Accepts profit trade-offs, NO balance requirement
 
     results.escaped =
@@ -1767,11 +1849,11 @@ class ScoringEngine {
 
     if (total === 0) return false;
 
-    // Check if any single style is > 60%
+    // Check if any single style is > 60% (canonical isBalancedMax)
     const maxStyle = Math.max(...styles);
     const maxPercentage = (maxStyle / total) * 100;
 
-    return maxPercentage <= 60;
+    return maxPercentage <= LEAD_CONSTANTS.isBalancedMax;
   }
 
   // ============================================
@@ -1892,7 +1974,7 @@ class ScoringEngine {
       const parts = [];
       if (axisA > 0 && weakestDimension) {
         parts.push(
-          `you lifted your weakest Round 1 dimension (${weakestDimension}) from ${(round1WeakestRatio * 100).toFixed(0)}% to ${(round2WeakestRatio * 100).toFixed(0)}% of benchmark`,
+          `you lifted your weakest Round 1 dimension (${weakestDimension}) from ${(round1WeakestRatio * 100).toFixed(0)}% to ${(round2WeakestRatio * 100).toFixed(0)}% of target`,
         );
       }
       if (axisB > 0 && r1Max && r2Max) {
@@ -1999,15 +2081,45 @@ class ScoringEngine {
     return null;
   }
 
+  // ============================================
+  // PERSONALITY COLOUR DERIVATION (Jung/Goleman bridge)
+  // ============================================
+  //
+  // BUCKET MAPPING (the four Jungian colours over the six Goleman styles):
+  //   RED    = coercive + pacesetting      (driven / results-first)
+  //   BLUE   = authoritative               (visionary / analytical)
+  //   YELLOW = affiliative + democratic    (collaborative / energising)
+  //   GREEN  = coaching                    (empathetic / developmental)
+  //
+  // Every bucket is the share of the SAME six-style total, so the four
+  // buckets sum to 100%. (Previously red/yellow were averaged over two
+  // styles (/2) while blue/green used a single style (/1), which halved the
+  // red/yellow buckets and systematically biased the dominant-colour test
+  // toward BLUE and GREEN - the "always green/blue" bug.)
+  //
+  // DOMINANCE THRESHOLD: a colour is only named when its bucket is >= 40% of
+  // the total. Below that the six-style profile is genuinely spread, so we
+  // return "BALANCED". The old > 20% threshold was far too loose: summing two
+  // mid-sized styles into one bucket (e.g. affiliative 26 + democratic 27 =
+  // yellow 53) manufactured a "dominant" colour that does not exist in the
+  // six-style view the player actually sees.
+  //
+  // COMPOUND RULE: a compound (e.g. "YELLOW/RED") is only returned when the
+  // secondary bucket is >= 25% AND the gap between primary and secondary is
+  // <= 15 percentage points. A 53/30 split is therefore reported as the single
+  // primary colour ("YELLOW"), not a compound - the secondary is not close
+  // enough to be a genuine co-dominant. The old rule (secondary > 12) was too
+  // loose and produced misleading compounds.
+  //
+  // TIE GUARD: if two or more buckets share the maximum there is no unique
+  // dominant colour, so we return "BALANCED" rather than letting branch order
+  // decide.
+  //
+  // Return values are restricted to: "RED", "BLUE", "YELLOW", "GREEN",
+  // "RED/YELLOW", "BLUE/GREEN", "YELLOW/RED", "GREEN/BLUE", "BALANCED".
   calculatePersonalityColor(gameState) {
     const styles = gameState.leadershipStyles;
 
-    // Consistent-basis derivation: every colour bucket is computed as the
-    // share of the SAME six-style total, so the four buckets sum to 100%.
-    // Previously red/yellow were averaged over two styles (/2) while
-    // blue/green used a single style (/1), which halved the red/yellow
-    // buckets and systematically biased the dominant-colour test toward
-    // BLUE and GREEN (the "always green/blue" bug).
     const coercive = styles.coercive || 0;
     const authoritative = styles.authoritative || 0;
     const affiliative = styles.affiliative || 0;
@@ -2029,14 +2141,10 @@ class ScoringEngine {
     const yellow = ((affiliative + democratic) / total) * 100; // Creative/Collaborative
     const green = (coaching / total) * 100; // Empathetic
 
-    // Determine dominant color(s).
-    // Thresholds: a colour must exceed 20% to dominate; a secondary colour
-    // above 12% produces a compound colour.
     const max = Math.max(red, blue, yellow, green);
 
-    // Tie-break determinism: if two or more buckets share the maximum there
-    // is no unique dominant colour, so return BALANCED rather than letting
-    // branch order decide.
+    // TIE GUARD: two or more buckets sharing the maximum means no unique
+    // dominant colour -> BALANCED.
     let maxCount = 0;
     if (red === max) maxCount++;
     if (blue === max) maxCount++;
@@ -2044,14 +2152,21 @@ class ScoringEngine {
     if (green === max) maxCount++;
     if (maxCount > 1) return "BALANCED";
 
-    if (max === red && red > 20) {
-      return yellow > 12 ? "RED/YELLOW" : "RED";
-    } else if (max === blue && blue > 20) {
-      return green > 12 ? "BLUE/GREEN" : "BLUE";
-    } else if (max === yellow && yellow > 20) {
-      return red > 12 ? "YELLOW/RED" : "YELLOW";
-    } else if (max === green && green > 20) {
-      return blue > 12 ? "GREEN/BLUE" : "GREEN";
+    // BALANCED GUARD: no bucket reaches the 40% dominance threshold, so the
+    // profile is genuinely spread across the six styles.
+    if (max < 40) return "BALANCED";
+
+    // Compound helper: secondary must be >= 25% AND within 15pp of primary.
+    const isCompound = (secondary) => secondary >= 25 && max - secondary <= 15;
+
+    if (max === red) {
+      return isCompound(yellow) ? "RED/YELLOW" : "RED";
+    } else if (max === blue) {
+      return isCompound(green) ? "BLUE/GREEN" : "BLUE";
+    } else if (max === yellow) {
+      return isCompound(red) ? "YELLOW/RED" : "YELLOW";
+    } else if (max === green) {
+      return isCompound(blue) ? "GREEN/BLUE" : "GREEN";
     } else {
       return "BALANCED";
     }
@@ -2059,25 +2174,297 @@ class ScoringEngine {
 
   getPersonalityDescription(color) {
     const descriptions = {
-      RED: "Results-focused, decisive, competitive. You drive for outcomes and set high standards.",
-      BLUE: "Analytical, systematic, visionary. You provide clear direction and strategic thinking.",
+      RED: "Results-focused, decisive, competitive. You repeatedly chose to push for the outcome and set a high bar for the team.",
+      BLUE: "Analytical, systematic, visionary. You repeatedly chose to gather the facts and set a clear direction before you moved.",
       YELLOW:
-        "Optimistic, enthusiastic, collaborative. You energize teams and build connections.",
+        "Optimistic, enthusiastic, collaborative. You repeatedly chose to bring people with you and keep the team energised.",
       GREEN:
-        "Supportive, patient, empathetic. You develop people and create psychological safety.",
+        "Supportive, patient, empathetic. You repeatedly chose to coach people and build capability for the long term.",
       "RED/YELLOW":
-        "The Driven Innovator - You combine results focus with creative energy.",
+        "The Driven Innovator - You repeatedly chose to push hard while bringing the team with you.",
       "BLUE/GREEN":
-        "The Thoughtful Coach - You blend strategic vision with people development.",
+        "The Thoughtful Coach - You repeatedly chose to set direction and build the capability to deliver it.",
       "YELLOW/RED":
-        "The Energetic Achiever - You inspire teams toward ambitious goals.",
+        "The Energetic Achiever - You repeatedly chose to aim high and rally people behind the goal.",
       "GREEN/BLUE":
-        "The Developmental Strategist - You build capability with clear direction.",
+        "The Developmental Strategist - You repeatedly chose to grow the team against a clear long-term plan.",
       BALANCED:
-        "The Adaptive Leader - You flexibly apply different styles as needed.",
+        "The Adaptive Leader - You repeatedly chose the approach the moment demanded rather than one fixed style.",
     };
 
     return descriptions[color] || descriptions["BALANCED"];
+  }
+
+  // ---------------------------------------------------------------------------
+  // #8 FEEDBACK/SCORING ALIGNMENT — content library
+  //
+  // The product owner wants the feedback to read like a personality-profiler
+  // result: it must OPEN with the player's computed colour archetype, justify it
+  // with the styles that actually drove it, compare the player's self-image with
+  // their revealed behaviour, and cite a concrete decision. Everything below is
+  // derived from values the scoring engine ALREADY computes (personalityColor,
+  // leadershipProfile, leadRatios, decisions) — no scoring logic is changed.
+  // ---------------------------------------------------------------------------
+
+  // Richer per-archetype narrative used to OPEN the feedback. Each entry maps to
+  // the SAME colour vocabulary as calculatePersonalityColor()/getColorLabel() so
+  // the prose can never contradict the badge shown on the leaderboard.
+  getColorArchetypeNarrative(color) {
+    const archetypes = {
+      RED: {
+        label: "Driven",
+        tagline: "The Driver",
+        summary:
+          "You consistently chose to push for the outcome. When the pressure rose you backed your own judgement, set the bar high and moved the team towards it rather than waiting for certainty.",
+        strengths:
+          "you made the call when others hesitated, you held the team to a demanding standard, and you kept commercial results in view through the difficult turns",
+        watchOut:
+          "acting on instinct rather than evidence, and treating pace as a substitute for direction",
+        leadLean: "Determination",
+        leadRisk: "Excellence",
+      },
+      BLUE: {
+        label: "Analytical",
+        tagline: "The Strategist",
+        summary:
+          "You repeatedly chose to gather the facts before you moved. Your decisions favoured evidence, structure and a clear long-range direction over reacting to the loudest voice in the room.",
+        strengths:
+          "you asked for the information that mattered, you weighed the evidence before committing, and you gave the team a direction it could navigate by",
+        watchOut:
+          "over-planning, and holding a course that the situation has already changed",
+        leadLean: "Excellence",
+        leadRisk: "Agility",
+      },
+      YELLOW: {
+        label: "Collaborative",
+        tagline: "The Energiser",
+        summary:
+          "You consistently chose to bring people with you. Your decisions favoured open dialogue, shared ownership and the morale of the team, even when a faster unilateral call was available.",
+        strengths:
+          "you built buy-in before you acted, you kept the team energised through setbacks, and you made it safe for people to raise ideas",
+        watchOut:
+          "avoiding the hard, unpopular call, and letting consensus delay a decision that was yours to make",
+        leadLean: "Leadership",
+        leadRisk: "Determination",
+      },
+      GREEN: {
+        label: "Supportive",
+        tagline: "The Developer",
+        summary:
+          "You repeatedly chose to invest in people. Your decisions favoured coaching, patience and long-term capability over the quick win, and you protected the team while it grew.",
+        strengths:
+          "you coached rather than directed, you built capability that will outlast the year, and you earned a loyalty that carried the team through pressure",
+        watchOut:
+          "moving too slowly when urgency demands action, and protecting comfort over performance",
+        leadLean: "Leadership",
+        leadRisk: "Determination",
+      },
+      "RED/YELLOW": {
+        label: "Driven Innovator",
+        tagline: "The Driven Innovator",
+        summary:
+          "You consistently chose to push hard and bring people with you. Your decisions paired a demanding target with visible energy, rallying the team behind an ambitious goal rather than settling for the safe option.",
+        strengths:
+          "you mobilised the team behind a stretch goal, you combined pace with genuine enthusiasm, and you kept momentum when the pressure was on",
+        watchOut:
+          "letting momentum outrun rigour, and mistaking activity for progress",
+        leadLean: "Determination",
+        leadRisk: "Excellence",
+      },
+      "BLUE/GREEN": {
+        label: "Thoughtful Coach",
+        tagline: "The Thoughtful Coach",
+        summary:
+          "You repeatedly chose to set direction and build the capability to deliver it. Your decisions combined clear strategic thinking with a real investment in the people who had to execute.",
+        strengths:
+          "you set a direction the team could follow, you built the capability to deliver it, and you developed people while the plan was still live",
+        watchOut:
+          "over-investing in preparation and development at the expense of decisive action",
+        leadLean: "Excellence",
+        leadRisk: "Agility",
+      },
+      "YELLOW/RED": {
+        label: "Energetic Achiever",
+        tagline: "The Energetic Achiever",
+        summary:
+          "You consistently chose to aim high and take the team with you. Your decisions combined collaborative energy with a competitive drive, and you kept people committed to a demanding target.",
+        strengths:
+          "you rallied people around a stretch target, you sustained momentum through setbacks, and you turned ambition into shared commitment",
+        watchOut:
+          "chasing the next win before consolidating the last, and under-investing in rigour",
+        leadLean: "Leadership",
+        leadRisk: "Excellence",
+      },
+      "GREEN/BLUE": {
+        label: "Developmental Strategist",
+        tagline: "The Developmental Strategist",
+        summary:
+          "You repeatedly chose to grow the team and give it a clear plan. Your decisions favoured developing people against a long-term direction rather than chasing short-term fixes.",
+        strengths:
+          "you grew a team that can execute without you, you paired development with a clear plan, and you built capability that compounds over time",
+        watchOut:
+          "patience tipping into inertia when the market demands a faster response",
+        leadLean: "Leadership",
+        leadRisk: "Agility",
+      },
+      BALANCED: {
+        label: "Adaptive Leader",
+        tagline: "The Adaptive Leader",
+        summary:
+          "You consistently chose the approach the moment demanded. No single style dominated your decisions, and you moved between driving, analysing, energising and developing as the situation changed.",
+        strengths:
+          "you matched your approach to the moment, you drew on a wide range of styles, and you adapted when the context shifted rather than repeating one play",
+        watchOut:
+          "range without a signature — being everything to everyone can read as having no clear centre",
+        leadLean: "Leadership",
+        leadRisk: "Determination",
+      },
+    };
+
+    return archetypes[color] || archetypes["BALANCED"];
+  }
+
+  // Builds the "Self-Image vs Reality" block. Compares the style the player
+  // selected at sign-up (gameState.selfIdentifiedStyle) with the style their
+  // decisions actually revealed (dominantStyle). Handles three cases:
+  //   - match      -> affirm the self-awareness
+  //   - divergence -> explain the gap constructively (over- or under-estimated)
+  //   - absent     -> no self-identified style was given
+  getSelfImageNarrative(gameState, results, dominantStyle) {
+    const profile = results.leadershipProfile || {};
+    const dominantPct = dominantStyle ? dominantStyle.percentage : 0;
+    const dominantName = dominantStyle ? dominantStyle.name : "unknown";
+
+    if (!gameState.selfIdentifiedStyle) {
+      return (
+        `<p>You did not nominate a primary style at sign-up, so there is no ` +
+        `self-image to compare against. Based purely on your decisions, your ` +
+        `revealed dominant style was <strong>${dominantName}</strong> ` +
+        `(${dominantPct.toFixed(0)}% of your choices). Next time, naming the ` +
+        `style you <em>think</em> you lead with is itself a useful data point — ` +
+        `the gap between intention and behaviour is where the most valuable ` +
+        `development sits.</p>`
+      );
+    }
+
+    const selfRaw = gameState.selfIdentifiedStyle;
+    const selfKey = String(selfRaw).toLowerCase();
+    const selfPct = profile[selfKey] || 0;
+    const selfLabel = this._styleLabel(selfKey);
+
+    if (selfKey === String(dominantName).toLowerCase()) {
+      let body =
+        `<p>✅ <strong>Aligned.</strong> You told us you lead with ` +
+        `<strong>${selfLabel}</strong> — and your decisions bore that out, using ` +
+        `it ${selfPct.toFixed(0)}% of the time, more than any other style. `;
+      if (selfPct > 60) {
+        body +=
+          `That is a strong, consistent signature. The development edge is not ` +
+          `to use it more, but to notice when it is <em>not</em> the right tool: ` +
+          `even a genuine strength becomes a weakness when it is the only move ` +
+          `you have. `;
+      } else {
+        body +=
+          `Your self-perception and your behaviour are telling the same story, ` +
+          `which is the foundation of coachable leadership. `;
+      }
+      body += `</p>`;
+      return body;
+    }
+
+    // Divergence: the player's self-image is not their revealed dominant style.
+    const overEstimated = selfPct >= 25;
+    let body =
+      `<p>⚠️ <strong>A gap worth examining.</strong> You identified yourself as ` +
+      `<strong>${selfLabel}</strong>, but your decisions used it only ` +
+      `${selfPct.toFixed(0)}% of the time. What actually drove your play was ` +
+      `<strong>${dominantName}</strong> (${dominantPct.toFixed(0)}%). `;
+
+    if (overEstimated) {
+      body +=
+        `This is a <em>moderate</em> gap — ${selfLabel} is still a real part of ` +
+        `how you lead, but it is not the style others experience most from you. ` +
+        `Small blind spots like this are exactly what 360-degree feedback is for: ` +
+        `ask two or three people who work closely with you which style they see ` +
+        `most, and compare their answer to yours. `;
+    } else {
+      body +=
+        `This is a <em>significant</em> gap. You may be leading from a style you ` +
+        `do not fully recognise — which means the impact you intend and the ` +
+        `impact you create are not yet the same thing. That is not a character ` +
+        `flaw; it is the single most useful thing this profile can tell you. ` +
+        `Seek candid feedback from people who experience your leadership daily. `;
+    }
+
+    body +=
+      `Neither style is "wrong" — the goal is to close the distance between how ` +
+      `you see yourself and how you actually behave, because self-aware leaders ` +
+      `develop faster.</p>`;
+    return body;
+  }
+
+  // Human-readable label for a raw style key (e.g. "pacesetting" -> "Pacesetting").
+  _styleLabel(styleKey) {
+    if (!styleKey) return "Unknown";
+    const key = String(styleKey).toLowerCase();
+    const labels = {
+      coercive: "Coercive",
+      authoritative: "Authoritative",
+      affiliative: "Affiliative",
+      democratic: "Democratic",
+      pacesetting: "Pacesetting",
+      coaching: "Coaching",
+    };
+    return labels[key] || key.charAt(0).toUpperCase() + key.slice(1);
+  }
+
+  // Cites ONE concrete decision from the player's actual play, choosing the
+  // scenario where their dominant style was most exercised (falling back to the
+  // first decision if style metadata is unavailable). Returns "" when there is
+  // no decision history, so callers can skip the sentence safely.
+  getConcreteDecisionCitation(gameState, dominantStyle) {
+    const decisions = (gameState && gameState.decisions) || [];
+    if (decisions.length === 0) return "";
+
+    const dominantName = dominantStyle ? dominantStyle.name : null;
+
+    // Prefer the decision that used the dominant style the most times.
+    let best = null;
+    let bestCount = -1;
+    decisions.forEach((d) => {
+      const styles = (d && d.stylesUsed) || [];
+      const count = dominantName
+        ? styles.filter((s) => s === dominantName).length
+        : 0;
+      if (count > bestCount) {
+        bestCount = count;
+        best = d;
+      }
+    });
+
+    // Fall back to the first decision if no style metadata matched.
+    if (!best || bestCount <= 0) {
+      best = decisions[0];
+    }
+    if (!best) return "";
+
+    const title = best.scenarioTitle || "an early scenario";
+    const monthMatch = /Month\s+\d+/i.exec(title);
+    const when = monthMatch ? monthMatch[0] : null;
+    const cleanTitle = title.replace(/^THE\s+/i, "").toLowerCase();
+    const whenPhrase = when ? ` (${when})` : "";
+
+    if (dominantName && bestCount > 0) {
+      return (
+        `For example, in <strong>${cleanTitle}</strong>${whenPhrase} you leaned ` +
+        `on <em>${dominantName}</em> leadership — one of the moments that shaped ` +
+        `the profile above. `
+      );
+    }
+    return (
+      `For example, your handling of <strong>${cleanTitle}</strong>${whenPhrase} ` +
+      `is one of the decisions that shaped the profile above. `
+    );
   }
 
   generateFeedback(gameState, results) {
@@ -2105,31 +2492,73 @@ class ScoringEngine {
 
     let feedback = '<div class="feedback-section">';
 
+    // #8 ALIGNMENT: OPEN like a personality-profiler result. Lead with the
+    // computed colour archetype (results.personalityColor, set at
+    // calculatePersonalityColor()), justify it with the styles that drove it,
+    // and cite one concrete decision from the player's actual play. This is the
+    // same colour the leaderboard badge shows, so prose and badge cannot
+    // contradict each other.
+    const archetype = this.getColorArchetypeNarrative(results.personalityColor);
+    const secondStyle = this.getSecondMostUsedStyle(results.leadershipProfile);
+    const decisionCitation = this.getConcreteDecisionCitation(
+      gameState,
+      dominantStyle,
+    );
+
+    feedback += '<div class="feedback-section">';
+    feedback += `<h4>Your Leadership Profile: ${archetype.tagline}</h4>`;
+    feedback += "<p>";
+    feedback += `<strong>Your dominant colour is ${results.personalityColor} — ${archetype.label}.</strong> `;
+    feedback += `${archetype.summary} `;
+    feedback += `This was driven by your two most-used styles: <strong>${dominantStyle.name}</strong> (${dominantStyle.percentage.toFixed(0)}%) and <strong>${secondStyle.name}</strong> (${secondStyle.percentage.toFixed(0)}%). `;
+    feedback += `Your signature strengths are ${archetype.strengths}. `;
+    feedback += `The edge to watch is ${archetype.watchOut}. `;
+    if (decisionCitation) {
+      feedback += decisionCitation;
+    }
+    feedback += "</p>";
+    feedback += "</div>";
+
+    // #8 ALIGNMENT: Self-Image vs Reality block — compares the style the player
+    // nominated at sign-up with the style their decisions revealed.
+    feedback += '<div class="feedback-section">';
+    feedback += "<h4>Self-Image vs Reality:</h4>";
+    feedback += this.getSelfImageNarrative(gameState, results, dominantStyle);
+    feedback += "</div>";
+
+    feedback += '<div class="feedback-section">';
+
     if (escaped) {
       feedback += "<h4>What You Did Well:</h4>";
       feedback += "<p>";
 
       // Check which win path they used
       // BUGFIX (audit): Aligned with the ACTUAL win conditions in calculateFinalScore().
-      // The People Path (winsViaPeoplePath) requires capability >= 140 AND growth >= 7,
-      // while the Capability Path (winsViaCapabilityPath) requires capability >= 145 AND growth >= 6.
-      // The previous check (>= 145 && growth >= 8) matched NEITHER path, so the
-      // "Organizational Capability Path" narrative could fire for players who actually
-      // won via a different route, or fail to fire for genuine People Path winners.
+      // This narrative is selected when the player cleared the People Path's
+      // capability bar (winsViaPeoplePath requires capability >= 140) and the shared
+      // MIN_GROWTH_FLOOR (LEAD_CONSTANTS.minGrowthFloor, currently 10) but did NOT
+      // meet the headline growth target (hence !meetsGrowth). The Capability Path
+      // proper (winsViaCapabilityPath) requires capability >= 145; because this
+      // narrative is a superset that also covers 140-144 People Path winners, the
+      // threshold here is deliberately 140. Both paths share the single minimum
+      // growth floor, so the previous check (>= 145 && growth >= 8) matched NEITHER
+      // path and the "Organizational Capability Path" narrative could fire for
+      // players who actually won via a different route, or fail to fire for genuine
+      // People Path winners.
       const wonViaCapability =
         gameState.organizationalCapability >= 140 &&
-        gameState.growth >= 7 &&
+        gameState.growth >= LEAD_CONSTANTS.minGrowthFloor &&
         !meetsGrowth;
 
       if (wonViaCapability) {
         feedback += `<strong>Organizational Capability Path:</strong> You achieved ${growth.toFixed(1)}% growth - below the 15% growth target, but you built exceptional organizational capability (${gameState.organizationalCapability.toFixed(0)} points). `;
         feedback += `This coaching-focused approach invests in long-term team development. `;
-        feedback += `While Year 1 growth is moderate, you've built a strong foundation for sustainable performance. `;
+        feedback += `While Year 1 growth is moderate, you have built a strong foundation for sustainable performance. `;
 
         // WARN if growth is on the low end of viable (8-10%)
         if (growth >= 8 && growth < 10) {
           feedback += `<br><br>⚠️ <em>Note: Your ${growth.toFixed(1)}% growth is at the minimum threshold for organizational viability. `;
-          feedback += `While investing in capability is valuable, ensure you're generating sufficient revenue to sustain the team you're developing.</em>`;
+          feedback += `While investing in capability is valuable, ensure you are generating sufficient revenue to sustain the team you are developing.</em>`;
         }
       } else if (growth >= 28) {
         feedback += `You achieved exceptional growth (${growth.toFixed(1)}%) while maintaining team performance. `;
@@ -2161,10 +2590,10 @@ class ScoringEngine {
 
       // BENCHMARKS: Mirrors calculateFinalScore() - 19/19/19/19 per scenario.
       const benchmarks = {
-        leadership: 19,
-        excellence: 19,
-        agility: 19,
-        determination: 19,
+        leadership: LEAD_CONSTANTS.benchmarkPerScenario,
+        excellence: LEAD_CONSTANTS.benchmarkPerScenario,
+        agility: LEAD_CONSTANTS.benchmarkPerScenario,
+        determination: LEAD_CONSTANTS.benchmarkPerScenario,
       };
 
       const leadDeficits = [];
@@ -2208,10 +2637,10 @@ class ScoringEngine {
           (dominantStyle.name === "pacesetting" ||
             dominantStyle.name === "coercive")
         ) {
-          feedback += `Your reliance on ${dominantStyle.name} (${dominantStyle.percentage}%) achieved short-term results but didn't develop leadership capability. `;
+          feedback += `Your reliance on ${dominantStyle.name} (${dominantStyle.percentage}%) achieved short-term results but did not develop leadership capability. `;
         }
 
-        feedback += `<strong>Year 1 success, but what about Year 2?</strong> This approach is unsustainable - you haven't built the LEAD competencies that drive long-term organizational success.`;
+        feedback += `<strong>Year 1 success, but what about Year 2?</strong> This approach is unsustainable - you have not built the LEAD competencies that drive long-term organizational success.`;
         feedback += `</p>`;
       }
 
@@ -2224,22 +2653,33 @@ class ScoringEngine {
       // The previous values (267/300/155/212) were derived from 6 scenarios, so a strong
       // 9-scenario player could exceed 100% and the percentages became meaningless.
       const maximums = {
-        leadership: 401, // True maximum from optimal choices across 9 scenarios
-        excellence: 450, // Recalibrated - realistic info requests (not exhaustive)
-        agility: 233, // True maximum from optimal choices across 9 scenarios
-        determination: 318, // True maximum from optimal choices across 9 scenarios
+        leadership:
+          LEAD_CONSTANTS.breakdownMaxPerScenario.leadership *
+          LEAD_CONSTANTS.round1Scenarios,
+        excellence:
+          LEAD_CONSTANTS.breakdownMaxPerScenario.excellence *
+          LEAD_CONSTANTS.round1Scenarios,
+        agility:
+          LEAD_CONSTANTS.breakdownMaxPerScenario.agility *
+          LEAD_CONSTANTS.round1Scenarios,
+        determination:
+          LEAD_CONSTANTS.breakdownMaxPerScenario.determination *
+          LEAD_CONSTANTS.round1Scenarios,
       };
 
-      const leadershipPercent = Math.round(
+      // Clamp to 0-100 so a strong player can never display >100%.
+      const clampPct = (v) =>
+        !isFinite(v) ? 0 : Math.max(0, Math.min(100, Math.round(v)));
+      const leadershipPercent = clampPct(
         (gameState.leadership / maximums.leadership) * 100,
       );
-      const excellencePercent = Math.round(
+      const excellencePercent = clampPct(
         (gameState.excellence / maximums.excellence) * 100,
       );
-      const agilityPercent = Math.round(
+      const agilityPercent = clampPct(
         (gameState.agility / maximums.agility) * 100,
       );
-      const determinationPercent = Math.round(
+      const determinationPercent = clampPct(
         (gameState.determination / maximums.determination) * 100,
       );
 
@@ -2291,33 +2731,9 @@ class ScoringEngine {
         feedback += `<p><strong>Determination (${determinationPercent}%):</strong> Needs development - Insufficient drive for results or resilience under pressure.</p>`;
       }
 
-      // NEW: Self-identified style comparison
-      if (gameState.selfIdentifiedStyle) {
-        feedback += '</div><div class="feedback-section">';
-        feedback += "<h4>Self-Awareness Check:</h4>";
-        feedback += "<p>";
-
-        const selfIdentified = gameState.selfIdentifiedStyle.toLowerCase();
-        const actualDominant = dominantStyle.name.toLowerCase();
-        const actualPercentage = results.leadershipProfile[actualDominant];
-
-        if (selfIdentified === actualDominant) {
-          feedback += `✅ <strong>Accurate self-awareness:</strong> You identified as ${gameState.selfIdentifiedStyle} and indeed used it ${actualPercentage.toFixed(0)}% of the time. `;
-          if (actualPercentage > 60) {
-            feedback += `However, you're <em>overusing</em> this style - even strengths become weaknesses when overplayed. `;
-          } else {
-            feedback += `This alignment between self-perception and behavior suggests good self-awareness.`;
-          }
-        } else {
-          const selfIdentifiedPercentage =
-            results.leadershipProfile[selfIdentified] || 0;
-          feedback += `⚠️ <strong>Self-awareness gap:</strong> You identified as ${gameState.selfIdentifiedStyle} but actually used it only ${selfIdentifiedPercentage.toFixed(0)}% of the time. `;
-          feedback += `Your dominant style was ${dominantStyle.name} (${actualPercentage.toFixed(0)}%). `;
-          feedback += `This gap suggests you may not recognize how others experience your leadership. Consider seeking 360-degree feedback.`;
-        }
-
-        feedback += "</p>";
-      }
+      // #8 ALIGNMENT: the self-identified vs revealed style comparison now lives
+      // in the dedicated "Self-Image vs Reality" block at the TOP of the
+      // feedback (see getSelfImageNarrative), so it is not duplicated here.
 
       // Information thoroughness analysis (dataRequestCount already calculated above in LEAD explanation)
 
@@ -2327,9 +2743,9 @@ class ScoringEngine {
 
       if (dataRequestCount === 0) {
         feedback += `⚠️ You requested <strong>zero additional information</strong> across all ${gameState.decisions.length} scenarios. `;
-        feedback += `This "decide on instinct" approach is fast but dangerous - you're operating with incomplete data. `;
+        feedback += `This "decide on instinct" approach is fast but dangerous - you are operating with incomplete data. `;
         if (escaped) {
-          feedback += `You succeeded despite this, but won't always be lucky. Evidence-based leaders outperform gut-decision makers over time.`;
+          feedback += `You succeeded despite this, but will not always be lucky. Evidence-based leaders outperform gut-decision makers over time.`;
         } else {
           feedback += `This likely contributed to your challenges - key decisions lacked the information needed for success.`;
         }
@@ -2364,7 +2780,7 @@ class ScoringEngine {
         }
 
         if (morale < 75) {
-          feedback += `Team morale at ${morale.toFixed(0)}% suggests room for improvement in people-centered leadership. `;
+          feedback += `Team morale at ${morale.toFixed(0)}% suggests room for improvement in people-centred leadership. `;
         }
 
         feedback += "</p>";
@@ -2387,7 +2803,7 @@ class ScoringEngine {
         if (leadRatios.determination >= 0.8 && leadRatios.excellence < 0.6) {
           feedback += `✅ This matches your profile - strong drive but could benefit from more evidence-based decisions.`;
         } else if (leadRatios.excellence >= 0.8) {
-          feedback += `Interestingly, your Excellence score is higher than typical for RED - you've developed beyond your natural preference.`;
+          feedback += `Interestingly, your Excellence score is higher than typical for RED - you have developed beyond your natural preference.`;
         }
       } else if (
         results.personalityColor === "BLUE" ||
@@ -2398,7 +2814,7 @@ class ScoringEngine {
         if (leadRatios.excellence >= 0.8 && leadRatios.agility < 0.6) {
           feedback += `✅ This matches your profile - analytical strength but could be more adaptive to changing contexts.`;
         } else if (leadRatios.agility >= 0.8) {
-          feedback += `Interestingly, your Agility score is higher than typical for BLUE - you've developed flexibility beyond your natural preference.`;
+          feedback += `Interestingly, your Agility score is higher than typical for BLUE - you have developed flexibility beyond your natural preference.`;
         }
       } else if (
         results.personalityColor === "YELLOW" ||
@@ -2409,7 +2825,7 @@ class ScoringEngine {
         if (leadRatios.leadership >= 0.8 && leadRatios.determination < 0.6) {
           feedback += `✅ This matches your profile - great people skills but could be more results-focused when needed.`;
         } else if (leadRatios.determination >= 0.8) {
-          feedback += `Interestingly, your Determination score is higher than typical for YELLOW - you've developed drive beyond your natural preference.`;
+          feedback += `Interestingly, your Determination score is higher than typical for YELLOW - you have developed drive beyond your natural preference.`;
         }
       } else if (
         results.personalityColor === "GREEN" ||
@@ -2420,10 +2836,10 @@ class ScoringEngine {
         if (leadRatios.leadership >= 0.8 && leadRatios.determination < 0.6) {
           feedback += `✅ This matches your profile - exceptional people development but could be more action-oriented when urgency demands it.`;
         } else if (leadRatios.determination >= 0.8) {
-          feedback += `Interestingly, your Determination score is higher than typical for GREEN - you've developed urgency beyond your natural preference.`;
+          feedback += `Interestingly, your Determination score is higher than typical for GREEN - you have developed urgency beyond your natural preference.`;
         }
       } else if (results.personalityColor === "BALANCED") {
-        feedback += `<br><br><strong>Balanced Leadership Profile:</strong> You don't show a strong preference for any single Jung temperament. `;
+        feedback += `<br><br><strong>Balanced Leadership Profile:</strong> You do not show a strong preference for any single Jung temperament. `;
         feedback += `This suggests high adaptability - you can shift between different leadership modes as context requires. `;
         feedback += `Your LEAD scores likely show relatively even development across all four dimensions.`;
       }
@@ -2438,7 +2854,7 @@ class ScoringEngine {
         feedback +=
           "You demonstrated balanced leadership, adapting your style to context while keeping both results and people in focus. This is sustainable high performance.";
       } else if (dominantStyle.name === "pacesetting") {
-        feedback += `You're a strong driver who sometimes forgets that sustainable leadership requires bringing people with you, not just pushing them forward. Your team delivered despite pressure, not because of inspiration.`;
+        feedback += `You are a strong driver who sometimes forgets that sustainable leadership requires bringing people with you, not just pushing them forward. Your team delivered despite pressure, not because of inspiration.`;
       } else if (dominantStyle.name === "affiliative") {
         feedback += `Your people-first approach built goodwill, but sometimes avoided necessary tough decisions. Great leaders care personally AND challenge directly.`;
       } else {
@@ -2454,14 +2870,33 @@ class ScoringEngine {
         );
         feedback += `<br><br><strong>⚠️ Adaptability warning:</strong> You won, but ${maxStylePercentage.toFixed(0)}% of your decisions used a single <em>${overusedStyle}</em> style. `;
         feedback += `That narrow range worked this time, but it leaves you exposed when the context demands a different approach. `;
-        feedback += `The strongest JCB leaders flex between styles - directive when the moment demands it, coaching when people need developing, collaborative when the answer isn't yours alone. `;
+        feedback += `The strongest JCB leaders flex between styles - directive when the moment demands it, coaching when people need developing, collaborative when the answer is not yours alone. `;
         feedback += `Deliberately practise the styles you used least; adaptability is the difference between a good year and a great career.`;
       }
 
       feedback += "</p></div>";
     } else {
       // Failure feedback - BE SPECIFIC ABOUT WHY THEY FAILED
-      feedback += "<h4>Let's Be Direct:</h4>";
+      // #8 ALIGNMENT: even on a failed run, open with the colour archetype so
+      // the player still gets a profiler-style read of WHO they are before the
+      // "why it did not work" analysis. The archetype is the same computed
+      // colour shown on the leaderboard, so it cannot contradict the score.
+      feedback += '<div class="feedback-section">';
+      feedback += `<h4>Your Leadership Profile: ${archetype.tagline}</h4>`;
+      feedback += "<p>";
+      feedback += `<strong>Your dominant colour is ${results.personalityColor} — ${archetype.label}.</strong> `;
+      feedback += `${archetype.summary} `;
+      feedback += `This was driven by your two most-used styles: <strong>${dominantStyle.name}</strong> (${dominantStyle.percentage.toFixed(0)}%) and <strong>${secondStyle.name}</strong> (${secondStyle.percentage.toFixed(0)}%). `;
+      feedback += `Your signature strengths are ${archetype.strengths}. `;
+      feedback += `The edge to watch is ${archetype.watchOut}. `;
+      if (decisionCitation) {
+        feedback += decisionCitation;
+      }
+      feedback += "</p>";
+      feedback += "</div>";
+
+      feedback += '<div class="feedback-section">';
+      feedback += "<h4>Let Us Be Direct:</h4>";
       feedback += "<p>";
 
       // Build specific failure reasons
@@ -2491,34 +2926,38 @@ class ScoringEngine {
         );
       }
 
-      // NEW: LEAD quality failure - check both average AND individual dimensions
+      // NEW: LEAD quality failure - check both average AND individual dimensions.
+      // BUGFIX (audit): the per-dimension floor here MUST be the same value the
+      // win gate actually tests (LEAD_CONSTANTS.minimumDimensionRatio, 35%), not
+      // the stale hard-coded 30%. The prose below interpolates the constant so
+      // the sentence can never drift from the gate again.
       if (!meetsLEADQuality) {
         // Check if it's average failure or individual dimension failure
         const dimensionFailures = [];
-        if (leadRatios.leadership < 0.3)
+        if (leadRatios.leadership < LEAD_CONSTANTS.minimumDimensionRatio)
           dimensionFailures.push(
             `Leadership ${(leadRatios.leadership * 100).toFixed(0)}%`,
           );
-        if (leadRatios.excellence < 0.3)
+        if (leadRatios.excellence < LEAD_CONSTANTS.minimumDimensionRatio)
           dimensionFailures.push(
             `Excellence ${(leadRatios.excellence * 100).toFixed(0)}%`,
           );
-        if (leadRatios.agility < 0.3)
+        if (leadRatios.agility < LEAD_CONSTANTS.minimumDimensionRatio)
           dimensionFailures.push(
             `Agility ${(leadRatios.agility * 100).toFixed(0)}%`,
           );
-        if (leadRatios.determination < 0.3)
+        if (leadRatios.determination < LEAD_CONSTANTS.minimumDimensionRatio)
           dimensionFailures.push(
             `Determination ${(leadRatios.determination * 100).toFixed(0)}%`,
           );
 
         if (dimensionFailures.length > 0) {
           failureReasons.push(
-            `critical LEAD dimension(s) below 30% minimum: ${dimensionFailures.join(", ")}`,
+            `critical LEAD dimension(s) below ${(LEAD_CONSTANTS.minimumDimensionRatio * 100).toFixed(0)}% minimum: ${dimensionFailures.join(", ")}`,
           );
         } else {
           failureReasons.push(
-            `average LEAD competency score was only ${(avgLEADRatio * 100).toFixed(0)}% of benchmark (minimum 40% required)`,
+            `average LEAD competency score was only ${(avgLEADRatio * 100).toFixed(0)}% of target (minimum ${(LEAD_CONSTANTS.minimumLEAD * 100).toFixed(0)}% required)`,
           );
         }
       }
@@ -2535,25 +2974,30 @@ class ScoringEngine {
       }
 
       // Clear explanation of failure
-      // NEW: Special case for high organizational capability that narrowly missed
-      // REBALANCED 2026-05-17: Updated to new thresholds (120-145 cap, 8%+ growth)
+      // NEW: Special case for high organizational capability that narrowly missed.
+      // BUGFIX (audit): the numbers quoted here MUST match the ACTUAL Capability
+      // Path in calculateFinalScore() (capability >= 145 AND growth >=
+      // LEAD_CONSTANTS.minGrowthFloor). The prose interpolates those live values
+      // so it can never drift from the win gate again.
+      const capabilityPathCapability = 145;
+      const capabilityPathGrowth = LEAD_CONSTANTS.minGrowthFloor;
       const nearCapabilityPath =
         gameState.organizationalCapability >= 120 &&
-        gameState.organizationalCapability < 145 &&
-        gameState.growth >= 8;
+        gameState.organizationalCapability < capabilityPathCapability &&
+        gameState.growth >= capabilityPathGrowth;
 
       if (nearCapabilityPath) {
         // They were close to the capability path - acknowledge the good leadership
         feedback += `<strong>Target not met - but you were close to an alternative win path.</strong> `;
-        feedback += `You built strong organizational capability (${gameState.organizationalCapability.toFixed(0)} points, need 145) through coaching and people development. `;
-        feedback += `With slightly more focus on team capability building, you could have succeeded via the Organizational Capability path (which requires 145+ capability and 8%+ growth). `;
-        feedback += `You achieved ${growth.toFixed(1)}% growth which shows potential, but didn't quite reach the threshold for either path. `;
+        feedback += `You built strong organizational capability (${gameState.organizationalCapability.toFixed(0)} points, need ${capabilityPathCapability}) through coaching and people development. `;
+        feedback += `With slightly more focus on team capability building, you could have succeeded via the Organizational Capability path (which requires ${capabilityPathCapability}+ capability and ${capabilityPathGrowth}%+ growth). `;
+        feedback += `You achieved ${growth.toFixed(1)}% growth which shows potential, but did not quite reach the threshold for either path. `;
       } else if (meetsGrowth && failureReasons.length > 0) {
         // They hit growth but failed on other metrics - THIS WAS THE BUG SCENARIO
         feedback += `<strong>Target not met.</strong> While you achieved ${growth.toFixed(1)}% growth (exceeding the 15% target), you failed because: `;
         feedback += failureReasons.join(", and ") + ".";
         feedback +=
-          "<strong>Leadership isn't just about results - it's about sustainable performance.</strong> ";
+          "<strong>Leadership is not just about results - it is about sustainable performance.</strong> ";
       } else if (!meetsGrowth && failureReasons.length > 1) {
         // Multiple failures
         feedback += `<strong>Target not met.</strong> The issues: `;
@@ -2610,7 +3054,7 @@ class ScoringEngine {
           feedback += `In Month 6 (Competitor Threat), a more aggressive response could have captured market share. `;
         }
         feedback +=
-          "Avoiding conflict doesn't make it go away - it just delays the consequences. ";
+          "Avoiding conflict does not make it go away - it just delays the consequences. ";
       } else {
         // New: More dynamic fallback that references actual patterns
         if (aggressiveCount >= 6) {
@@ -2623,11 +3067,11 @@ class ScoringEngine {
             feedback += `This resulted in ${growth.toFixed(1)}% growth. `;
           }
         } else if (collaborativeCount >= 6) {
-          feedback += `You favored collaborative approaches in ${collaborativeCount} decisions, building team morale (${morale.toFixed(0)}%). `;
+          feedback += `You favoured collaborative approaches in ${collaborativeCount} decisions, building team morale (${morale.toFixed(0)}%). `;
           if (!meetsGrowth) {
             feedback += `However, this left growth opportunities on the table (${growth.toFixed(1)}% vs. 15% target). `;
           } else if (attrition >= 15) {
-            feedback += `Despite this, high attrition (${attrition.toFixed(0)}%) suggests the collaborative approach wasn't genuine or came too late. `;
+            feedback += `Despite this, high attrition (${attrition.toFixed(0)}%) suggests the collaborative approach was not genuine or came too late. `;
           }
         } else if (dataRequestCount === 0) {
           feedback += `You never requested additional information, making all decisions with incomplete data. `;
@@ -2639,7 +3083,7 @@ class ScoringEngine {
         } else {
           feedback += `You used a mixed approach across ${gameState.decisions.length} scenarios. `;
           if (!meetsGrowth) {
-            feedback += `Growth (${growth.toFixed(1)}%) fell short because key early decisions didn't compound effectively. `;
+            feedback += `Growth (${growth.toFixed(1)}%) fell short because key early decisions did not compound effectively. `;
           } else if (attrition >= 15) {
             feedback += `While you achieved ${growth.toFixed(1)}% growth, team attrition (${attrition.toFixed(0)}%) became unsustainable. `;
           } else if (morale < 65) {
@@ -2656,16 +3100,16 @@ class ScoringEngine {
 
       if (attrition > 25) {
         feedback +=
-          "Leadership isn't about being the smartest or hardest-driving person in the room. ";
+          "Leadership is not about being the smartest or hardest-driving person in the room. ";
         feedback +=
-          "It's about creating conditions where others thrive. You optimized for metrics, not people. ";
+          "It is about creating conditions where others thrive. You optimised for metrics, not people. ";
         feedback +=
-          "In the real world, that's a recipe for burnout and failure.";
+          "In the real world, that is a recipe for burnout and failure.";
       } else if (!meetsGrowth && results.leadershipProfile.coaching < 20) {
         // New: Address specific gap
         feedback += `You missed growth targets (${growth.toFixed(1)}% vs. 15%) while barely using coaching leadership (${results.leadershipProfile.coaching}%). `;
         feedback +=
-          "In JCB's reality, sustainable growth requires developing your people's capabilities, not just directing their efforts. ";
+          "In the reality of JCB, sustainable growth requires developing the capabilities of your people, not just directing their efforts. ";
 
         // Reference Year-End reflection if it exists
         const yearEndDecision = gameState.decisions.find(
@@ -2681,14 +3125,14 @@ class ScoringEngine {
         }
       } else if (!meetsGrowth && gameState.leadership < 30) {
         // New: Low leadership score
-        feedback += `You achieved ${growth.toFixed(1)}% growth against a 15% target. Your leadership quality score (${gameState.leadership}) suggests you managed tasks but didn't truly lead people. `;
+        feedback += `You achieved ${growth.toFixed(1)}% growth against a 15% target. Your leadership quality score (${gameState.leadership}) suggests you managed tasks but did not truly lead people. `;
         feedback +=
           "The gap between management and leadership is the gap between your result and success.";
       } else {
         feedback +=
-          "You had the capability to succeed but made choices that prioritized short-term gains over sustainable performance. ";
+          "You had the capability to succeed but made choices that prioritised short-term gains over sustainable performance. ";
         feedback +=
-          "Leadership requires patience and the courage to do what's right, not what's easy.";
+          "Leadership requires patience and the courage to do what is right, not what is easy.";
       }
 
       feedback += "</p>";
@@ -2705,6 +3149,12 @@ class ScoringEngine {
         gameState,
         results,
       );
+      // BUGFIX (audit C1): expose the improvement as a STRUCTURED field on
+      // results so the scoreboard can read it directly instead of re-parsing
+      // the feedback HTML (which was fragile and, because the extractor looked
+      // for a 🎯 emoji the generator never emitted, always fell back to a
+      // generic string). The HTML is still emitted for the detailed view.
+      results.criticalImprovement = criticalImprovement;
       feedback += criticalImprovement;
 
       feedback += "</p>";
@@ -2787,16 +3237,36 @@ class ScoringEngine {
     };
 
     // Find LEAD gaps for personalization
-    // BUGFIX: Unified with calculateFinalScore()'s canonical benchmark scale.
-    // calculateFinalScore uses per-scenario benchmarks of 19/19/19/19 across 9 scenarios,
-    // i.e. a cumulative target of 171 per dimension. The previous values (75/65/45/40)
-    // were a third, inconsistent benchmark set tuned for 6 scenarios, which caused the
-    // "biggest LEAD gap" feedback to disagree with the actual scoring.
+    // BUGFIX (audit H2): the target is now ROUND-AWARE. calculateFinalScore()
+    // uses per-scenario targets of 19/19/19/19, so the cumulative target is
+    // 9 x 19 = 171 for Round 1 and 6 x 19 = 114 for Round 2. The previous fixed
+    // 171 told Round 2 players they had a large LEAD gap when they might in fact
+    // be at or above the correct 114 target.
+    const round = gameState && gameState.round === 2 ? 2 : 1;
+    const cumulativeBenchmark =
+      typeof LEAD_CONSTANTS !== "undefined" &&
+      LEAD_CONSTANTS.cumulativeBenchmarkForRound
+        ? LEAD_CONSTANTS.cumulativeBenchmarkForRound(round)
+        : round === 2
+          ? 114
+          : 171;
+
+    // ISSUE B: varied book/resource selection. `recFor(bucket, salt)` returns a
+    // tailored recommendation string from the shared data table, varying by
+    // runId while staying reproducible for the same run. Falls back to a plain
+    // string when the data table is unavailable (e.g. an old cached page).
+    const recEngine = this.getRecommendationEngine();
+    const recRunId = this.resolveRunId(gameState, results);
+    const recFor = (bucket, salt, fallback) => {
+      if (!recEngine) return fallback;
+      const rec = recEngine.buildRecommendation(bucket, recRunId, salt);
+      return rec ? rec.text : fallback;
+    };
     const leadBenchmarks = {
-      leadership: 171,
-      excellence: 171,
-      agility: 171,
-      determination: 171,
+      leadership: cumulativeBenchmark,
+      excellence: cumulativeBenchmark,
+      agility: cumulativeBenchmark,
+      determination: cumulativeBenchmark,
     };
     const leadGaps = {
       leadership: lead.leadership - leadBenchmarks.leadership,
@@ -2831,7 +3301,7 @@ class ScoringEngine {
               : dominantStyle.name === "coaching"
                 ? "developmental"
                 : dominantStyle.name;
-        return `Your ${mostUsedStyle} approach (${dominantStyle.percentage.toFixed(0)}%) might feel comfortable, but ${growth.toFixed(1)}% growth says you're playing not to lose rather than playing to win. Where's the ambition? Start with "Primal Leadership" by Goleman - learn when to inspire bold action, not just maintain relationships.`;
+        return `Your ${mostUsedStyle} approach (${dominantStyle.percentage.toFixed(0)}%) might feel comfortable, but ${growth.toFixed(1)}% growth says you are playing not to lose rather than playing to win. Where is the ambition? Start with ${recFor("dimension:leadership", "passive-growth", '"Primal Leadership" by Daniel Goleman - learn when to inspire bold action, not just maintain relationships.')}`;
       } else if (profile.pacesetting > 50) {
         // Driving too hard without direction
         const moraleImpact =
@@ -2840,13 +3310,13 @@ class ScoringEngine {
           attrition > 15
             ? `, with ${attrition.toFixed(0)}% of your team already walking out the door`
             : "";
-        return `You're running hard (${profile.pacesetting.toFixed(0)}% pacesetting) but in the wrong direction - ${growth.toFixed(1)}% growth proves effort without strategy fails${moraleImpact}${attritionImpact}. Learn to channel that drive: read "Playing to Win" by Lafley to understand strategy, then "The Coaching Habit" to develop your team (currently ${profile.coaching.toFixed(0)}%) instead of doing everything yourself.`;
+        return `You are running hard (${profile.pacesetting.toFixed(0)}% pacesetting) but in the wrong direction - ${growth.toFixed(1)}% growth proves effort without strategy fails${moraleImpact}${attritionImpact}. Learn to channel that drive: read ${recFor("commercial:strategy", "pacesetting-strategy", '"Playing to Win" by A.G. Lafley - understand strategy')}, then ${recFor("style:coaching", "pacesetting-coaching", '"The Coaching Habit" by Michael Bungay Stanier - develop your team')} to develop your team (currently ${profile.coaching.toFixed(0)}%) instead of doing everything yourself.`;
       } else if (profile.coaching > 40) {
         // Over-coaching without driving results
-        return `Coaching is noble (${profile.coaching.toFixed(0)}% of your decisions), but ${growth.toFixed(1)}% growth means you're developing people for someone else's business. You need commercial edge - read "Good to Great" by Collins to understand the paradox: develop people AND drive relentless results simultaneously.`;
+        return `Coaching is noble (${profile.coaching.toFixed(0)}% of your decisions), but ${growth.toFixed(1)}% growth means you are developing people for the business of someone else. You need commercial edge - read ${recFor("style:coaching", "over-coaching", '"Good to Great" by Jim Collins - develop people AND drive results simultaneously.')} to understand the paradox: develop people AND drive relentless results simultaneously.`;
       } else {
         // General lack of strategic aggression
-        return `${shortfall.toFixed(1)}% below target tells me you're managing the status quo, not leading transformation. JCB doesn't need careful administrators - it needs bold builders. Read "Playing to Win" by Lafley: learn how P&G leaders make high-stakes strategic choices when competitors are circling.`;
+        return `${shortfall.toFixed(1)}% below target tells me you are managing the status quo, not leading transformation. JCB does not need careful administrators - it needs bold builders. Read ${recFor("commercial:strategy", "status-quo", '"Playing to Win" by A.G. Lafley - make high-stakes strategic choices.')}`;
       }
     }
 
@@ -2864,12 +3334,12 @@ class ScoringEngine {
               : profile.coercive > 10
                 ? "coercive"
                 : "directive";
-        return `${attritionRounded}% attrition - people are fleeing, not following. Your ${taskFocusedStyle} leadership treats them as resources to extract value from, not humans to develop. Read "Dare to Lead" by Brené Brown and confront this truth: you can't lead people you don't genuinely value.`;
+        return `${attritionRounded}% attrition - people are fleeing, not following. Your ${taskFocusedStyle} leadership treats them as resources to extract value from, not humans to develop. Read ${recFor("attrition:severe", "task-focused", '"Dare to Lead" by Brené Brown - confront this truth: you cannot lead people you do not genuinely value.')}`;
       } else if (profile.coaching < 20) {
         // People like you but don't grow with you
         const moraleNote =
           morale > 70 ? " (ironic, given morale is decent)" : "";
-        return `Losing ${attritionRounded}% of your team${moraleNote} means talented people hit a ceiling with you. They need growth, not just warmth. Your coaching muscle (${profile.coaching.toFixed(0)}%) is underdeveloped - read "The Coaching Habit" by Stanier and commit to one 15-min development conversation per person, weekly.`;
+        return `Losing ${attritionRounded}% of your team${moraleNote} means talented people hit a ceiling with you. They need growth, not just warmth. Your coaching muscle (${profile.coaching.toFixed(0)}%) is underdeveloped - read ${recFor("attrition:moderate", "coaching-ceiling", '"The Coaching Habit" by Michael Bungay Stanier - commit to one 15-min development conversation per person, weekly.')}`;
       } else if (profile.pacesetting > 50) {
         // Burning people out despite good intentions
         const moraleQualifier =
@@ -2878,17 +3348,17 @@ class ScoringEngine {
             : morale < 75
               ? "fragile"
               : "surprisingly resilient";
-        return `${attritionRounded}% attrition with ${moraleQualifier} morale (${morale.toFixed(0)}%) - you're burning through people like fuel. Your pacesetting intensity (${profile.pacesetting.toFixed(0)}%) might deliver short-term wins, but the cost is unsustainable. Read "Radical Candor" by Scott: care personally while challenging directly, don't just drive harder.`;
+        return `${attritionRounded}% attrition with ${moraleQualifier} morale (${morale.toFixed(0)}%) - you are burning through people like fuel. Your pacesetting intensity (${profile.pacesetting.toFixed(0)}%) might deliver short-term wins, but the cost is unsustainable. Read ${recFor("style:pacesetting", "burnout", '"Radical Candor" by Kim Scott - care personally while challenging directly, do not just drive harder.')}`;
       } else {
         // Balanced but not authentic
-        return `${attritionRounded}% of your people left despite balanced-looking leadership. The issue isn't your style mix - it's authenticity. Are you going through the motions or genuinely invested in their success? Read "The Culture Code" by Coyle: understand how trust is built through hundreds of small moments, not grand gestures.`;
+        return `${attritionRounded}% of your people left despite balanced-looking leadership. The issue is not your style mix - it is authenticity. Are you going through the motions or genuinely invested in their success? Read ${recFor("attrition:severe", "authenticity", '"The Culture Code" by Daniel Coyle - understand how trust is built through hundreds of small moments, not grand gestures.')}`;
       }
     }
 
     // PRIORITY 3: Moderate-high attrition (15-20%) - warning sign
     if (attrition >= 15) {
       if (profile.affiliative < 15 && morale < 70) {
-        return `Attrition is creeping toward dangerous levels (${attrition.toFixed(0)}%) and morale isn't great either (${morale.toFixed(0)}%). You're treating leadership like a chess game - strategic but cold. People aren't pieces to move; they're the game. Build your affiliative capacity from ${profile.affiliative.toFixed(0)}%: start with "Dare to Lead" by Brené Brown.`;
+        return `Attrition is creeping towards dangerous levels (${attrition.toFixed(0)}%) and morale is not great either (${morale.toFixed(0)}%). You are treating leadership like a chess game - strategic but cold. People are not pieces to move; they are the game. Build your affiliative capacity from ${profile.affiliative.toFixed(0)}%: start with ${recFor("style:affiliative", "cold-strategist", '"Dare to Lead" by Brené Brown.')}`;
       } else if (dominantStyle.percentage > 65) {
         const styleLabel =
           dominantStyle.name === "pacesetting"
@@ -2898,7 +3368,7 @@ class ScoringEngine {
               : dominantStyle.name === "democratic"
                 ? "endless consultation"
                 : `${dominantStyle.name} approach`;
-        return `Your ${styleLabel} (${dominantStyle.percentage.toFixed(0)}% ${dominantStyle.name}) is becoming predictable - ${attrition.toFixed(0)}% attrition suggests people are tuning out. Overusing any style creates diminishing returns. Diversify: read "Primal Leadership" (Goleman) to master situational leadership across all six styles.`;
+        return `Your ${styleLabel} (${dominantStyle.percentage.toFixed(0)}% ${dominantStyle.name}) is becoming predictable - ${attrition.toFixed(0)}% attrition suggests people are tuning out. Overusing any style creates diminishing returns. Diversify: read ${recFor("dimension:leadership", "style-diversify", '"Primal Leadership" by Daniel Goleman - master situational leadership across all six styles.')}`;
       }
     }
 
@@ -2909,39 +3379,46 @@ class ScoringEngine {
           ? `aggressive ${growth.toFixed(1)}% growth`
           : `${growth.toFixed(1)}% growth`;
       if (profile.pacesetting > 40) {
-        return `You hit ${growthNote} and ${gameState.profitMargin.toFixed(1)}% margins, but morale is ${morale.toFixed(0)}% - this victory is temporary. Your pacesetting drive (${profile.pacesetting.toFixed(0)}%) creates sprints, not marathons. Read "The Culture Code" by Coyle: high-performing teams thrive, they don't just survive quarter to quarter.`;
+        return `You hit ${growthNote} and ${gameState.profitMargin.toFixed(1)}% margins, but morale is ${morale.toFixed(0)}% - this victory is temporary. Your pacesetting drive (${profile.pacesetting.toFixed(0)}%) creates sprints, not marathons. Read ${recFor("morale:low", "pyrrhic-pacesetting", '"The Culture Code" by Daniel Coyle - high-performing teams thrive, they do not just survive quarter to quarter.')}`;
       } else {
-        return `Targets met, team morale at ${morale.toFixed(0)}% - you're winning battles but losing hearts. This isn't sustainable leadership; it's extraction. What happens when these people leave? Read "Multipliers" by Wiseman: learn to amplify your team, not deplete them.`;
+        return `Targets met, team morale at ${morale.toFixed(0)}% - you are winning battles but losing hearts. This is not sustainable leadership; it is extraction. What happens when these people leave? Read ${recFor("morale:low", "pyrrhic-extraction", '"Multipliers" by Liz Wiseman - learn to amplify your team, not deplete them.')}`;
       }
     } else if (results.escaped && morale < 70) {
-      return `You cleared the bar (growth: ${growth.toFixed(1)}%, profit: ${profitMargin.toFixed(1)}%) but morale is only ${morale.toFixed(0)}% - this is a ticking time bomb. Success that exhausts people isn't leadership mastery. Read "The Culture Code" to understand how elite teams sustain peak performance without burnout.`;
+      return `You cleared the bar (growth: ${growth.toFixed(1)}%, profit: ${profitMargin.toFixed(1)}%) but morale is only ${morale.toFixed(0)}% - this is a ticking time bomb. Success that exhausts people is not leadership mastery. Read ${recFor("morale:low", "ticking-bomb", '"The Culture Code" by Daniel Coyle - understand how elite teams sustain peak performance without burnout.')}`;
     }
 
     // PRIORITY 5: Win conditions met but profit margin weak (<18%)
     if (results.escaped && profitMargin < 18) {
-      return `You hit growth (${growth.toFixed(1)}%) and culture targets, but profit margins are thin (${profitMargin.toFixed(1)}%). This suggests operational inefficiency or poor strategic choices. You need sharper commercial judgment - read "Playing to Win" by Lafley to understand how great leaders balance growth with profitability.`;
+      return `You hit growth (${growth.toFixed(1)}%) and culture targets, but profit margins are thin (${profitMargin.toFixed(1)}%). This suggests operational inefficiency or poor strategic choices. You need sharper commercial judgement - read ${recFor("commercial:strategy", "thin-margin", '"Playing to Win" by A.G. Lafley - understand how great leaders balance growth with profitability.')}`;
     }
 
     // PRIORITY 6: Balanced leadership but fell short on growth
-    // BUGFIX 2026-05-17: Catch more balanced scenarios (no single style >35%, not just results.isBalanced)
+    // BUGFIX (audit M1): the bespoke 35% cut-off was far narrower than the
+    // game's own definition of balance (50 well / 60 isBalanced / 70 reasonably),
+    // so genuinely balanced players (35-60% dominant style) received a less apt
+    // message. We now use the CANONICAL balance thresholds from LEAD_CONSTANTS.
     const maxStylePercentage = Math.max(...Object.values(profile));
-    const isBalancedPlay = maxStylePercentage < 35;
+    const isBalancedPlay =
+      maxStylePercentage <=
+      (typeof LEAD_CONSTANTS !== "undefined"
+        ? LEAD_CONSTANTS.isBalancedMax
+        : 60);
 
     // BUGFIX (audit): results.isBalanced was NEVER set by calculateFinalScore(), so it was
     // always undefined and this branch silently relied on isBalancedPlay alone. We now use
-    // the real flag (results.meetsBalanceRequirement) OR the local balanced-play heuristic.
+    // the real flag (results.meetsBalanceRequirement) OR the canonical balanced-play check.
     if (
       results.escaped === false &&
       (results.meetsBalanceRequirement || isBalancedPlay)
     ) {
       // BUGFIX (audit): growth target is 15% (not 20%), and the Excellence
-      // benchmark is 171 cumulative points (9 scenarios x 19), not 65.
+      // target is 171 cumulative points (9 scenarios x 19), not 65.
       const shortfall = 15 - growth;
       const excellenceGap = leadGaps.excellence;
       if (excellenceGap < -15) {
-        return `Balanced leadership, ${shortfall.toFixed(1)}% growth shortfall - the issue is decision quality (Excellence score: ${lead.excellence} vs 171 benchmark). You have range but lack rigor. Read "Thinking in Bets" by Duke: learn to make better calls when you can't predict outcomes, or study your decision-by-decision breakdown to see where thoroughness would have changed results.`;
+        return `Balanced leadership, ${shortfall.toFixed(1)}% growth shortfall - the issue is decision quality (Excellence score: ${lead.excellence} vs ${cumulativeBenchmark} target). You have range but lack rigor. Read ${recFor("dimension:excellence", "balanced-rigor", '"Thinking in Bets" by Annie Duke - learn to make better calls when you cannot predict outcomes.')} or study your decision-by-decision breakdown to see where thoroughness would have changed results.`;
       } else {
-        return `Your leadership style is balanced, but you missed growth by ${shortfall.toFixed(1)}%. That's not a style problem - it's a judgment problem. When did you choose comfort over courage? Read "Primal Leadership" and ask: did you match the style to the situation, or match it to your mood?`;
+        return `Your leadership style is balanced, but you missed growth by ${shortfall.toFixed(1)}%. That is not a style problem - it is a judgement problem. When did you choose comfort over courage? Read ${recFor("dimension:leadership", "balanced-judgment", '"Primal Leadership" by Daniel Goleman')} and ask: did you match the style to the situation, or match it to your mood? Note: "balanced" here means you spread your choices across all six styles (no single style above 60%), even though your overall colour leans towards a collaborative, energising approach - the two measures look at your range and your lean respectively.`;
       }
     }
 
@@ -2956,7 +3433,7 @@ class ScoringEngine {
             : "";
         const moraleNote =
           morale < 65 ? `, crushing morale to ${morale.toFixed(0)}%` : "";
-        return `${styleOveruse}% pacesetting - you drove relentlessly${attritionNote}${moraleNote}. Here's the hard truth: your intensity is your superpower AND your ceiling. You need balance, not more effort. Read "Multipliers" by Wiseman: learn when to step back so your team can step up.`;
+        return `${styleOveruse}% pacesetting - you drove relentlessly${attritionNote}${moraleNote}. Here is the hard truth: your intensity is your superpower AND your ceiling. You need balance, not more effort. Read ${recFor("style:pacesetting", "overuse-pacesetting", '"Multipliers" by Liz Wiseman - learn when to step back so your team can step up.')}`;
       } else if (dominantStyle.name === "democratic") {
         const growthNote =
           growth < 15
@@ -2964,11 +3441,11 @@ class ScoringEngine {
             : growth < 20
               ? "insufficient"
               : "modest";
-        return `${styleOveruse}% democratic leadership, ${growthNote} growth (${growth.toFixed(1)}%) - you consulted your way to mediocrity. Consensus is valuable, but so is decisive action. Read "The Five Dysfunctions of a Team" by Lencioni: understand when debate must end and commitment must begin.`;
+        return `${styleOveruse}% democratic leadership, ${growthNote} growth (${growth.toFixed(1)}%) - you consulted your way to mediocrity. Consensus is valuable, but so is decisive action. Read ${recFor("style:democratic", "overuse-democratic", '"The Five Dysfunctions of a Team" by Patrick Lencioni - understand when debate must end and commitment must begin.')}`;
       } else if (dominantStyle.name === "affiliative") {
-        return `${styleOveruse}% affiliative - you prioritized harmony over hard truths and delivered ${growth.toFixed(1)}% growth. People might like you, but they're not following you toward anything meaningful. Read "Radical Candor" by Scott: learn to care personally AND challenge directly.`;
+        return `${styleOveruse}% affiliative - you prioritised harmony over hard truths and delivered ${growth.toFixed(1)}% growth. People might like you, but they are not following you towards anything meaningful. Read ${recFor("style:affiliative", "overuse-affiliative", '"Radical Candor" by Kim Scott - learn to care personally AND challenge directly.')}`;
       } else if (dominantStyle.name === "coaching") {
-        return `${styleOveruse}% coaching - noble intent, ${growth.toFixed(1)}% growth reality. You're developing people for a future that's not arriving. Balance developmental work with driving results: read "Good to Great" by Collins to see how elite leaders do both simultaneously.`;
+        return `${styleOveruse}% coaching - noble intent, ${growth.toFixed(1)}% growth reality. You are developing people for a future that is not arriving. Balance developmental work with driving results: read ${recFor("style:coaching", "overuse-coaching", '"Good to Great" by Jim Collins - see how elite leaders do both simultaneously.')}`;
       } else if (dominantStyle.name === "authoritative") {
         const moraleNote =
           morale < 65 ? `, morale is suffering (${morale.toFixed(0)}%)` : "";
@@ -2976,9 +3453,9 @@ class ScoringEngine {
           underusedStyle.percentage < 15
             ? ` while neglecting ${underusedStyle.name} (${underusedStyle.percentage.toFixed(0)}%)`
             : "";
-        return `${styleOveruse}% authoritative${underusedNote}${moraleNote}. Vision without collaboration becomes dictatorship. Your team needs to be part of the solution, not just recipients of your brilliance. Read "Primal Leadership" to learn when to inspire and when to involve.`;
+        return `${styleOveruse}% authoritative${underusedNote}${moraleNote}. Vision without collaboration becomes dictatorship. Your team needs to be part of the solution, not just recipients of your brilliance. Read ${recFor("style:authoritative", "overuse-authoritative", '"Primal Leadership" by Daniel Goleman - learn when to inspire and when to involve.')}`;
       } else if (dominantStyle.name === "coercive") {
-        return `${styleOveruse}% coercive - congratulations, you've created compliance through fear. This might work in a genuine crisis, but ${growth.toFixed(1)}% growth suggests it's just your default mode. Read "Dare to Lead" by Brené Brown and examine why you lead through control rather than trust.`;
+        return `${styleOveruse}% coercive - congratulations, you have created compliance through fear. This might work in a genuine crisis, but ${growth.toFixed(1)}% growth suggests it is just your default mode. Read ${recFor("style:coercive", "overuse-coercive", '"Dare to Lead" by Brené Brown - examine why you lead through control rather than trust.')}`;
       }
     }
 
@@ -2986,12 +3463,12 @@ class ScoringEngine {
     if (underusedStyle.name === "coaching" && underusedStyle.percentage < 15) {
       const dominantNote =
         dominantStyle.percentage > 50
-          ? ` (you're ${dominantStyle.percentage.toFixed(0)}% ${dominantStyle.name})`
+          ? ` (you are ${dominantStyle.percentage.toFixed(0)}% ${dominantStyle.name})`
           : "";
       if (results.escaped) {
-        return `You succeeded this time${dominantNote}, but coaching capability is only ${underusedStyle.percentage.toFixed(0)}%. That's your constraint for scaling - your team can't solve problems you haven't personally encountered. Read "The Coaching Habit" by Stanier: 7 questions that develop your team's capability daily.`;
+        return `You succeeded this time${dominantNote}, but coaching capability is only ${underusedStyle.percentage.toFixed(0)}%. That is your constraint for scaling - your team cannot solve problems you have not personally encountered. Read ${recFor("style:coaching", "underuse-coaching-win", '"The Coaching Habit" by Michael Bungay Stanier - 7 questions that develop the capability of your team daily.')}`;
       } else {
-        return `Coaching skills at ${underusedStyle.percentage.toFixed(0)}%${dominantNote} means you're the bottleneck. Your team can't scale beyond your personal capacity. Read "Multipliers" by Wiseman: understand how great leaders amplify their team's intelligence instead of being the sole problem-solver.`;
+        return `Coaching skills at ${underusedStyle.percentage.toFixed(0)}%${dominantNote} means you are the bottleneck. Your team cannot scale beyond your personal capacity. Read ${recFor("style:coaching", "underuse-coaching-loss", '"Multipliers" by Liz Wiseman - understand how great leaders amplify the intelligence of their team instead of being the sole problem-solver.')}`;
       }
     }
 
@@ -3005,11 +3482,11 @@ class ScoringEngine {
       if (dimension === "leadership") {
         const taskFocus =
           profile.pacesetting > 40
-            ? "You set the pace but don't inspire the team"
+            ? "You set the pace but do not inspire the team"
             : profile.authoritative > 40
-              ? "You cast vision but don't connect it to people's hearts"
-              : "You manage tasks effectively but don't lead people meaningfully";
-        return `Leadership capability is ${gap} points below benchmark (${score} vs ${benchmark}). ${taskFocus}. Read "Primal Leadership" by Goleman: understand the emotional intelligence foundation that separates managers from leaders.`;
+              ? "You cast vision but do not connect it to the hearts of people"
+              : "You manage tasks effectively but do not lead people meaningfully";
+        return `Leadership capability is ${gap} points below target (${score} vs ${benchmark}). ${taskFocus}. Read ${recFor("dimension:leadership", "gap-leadership", '"Primal Leadership" by Daniel Goleman - understand the emotional intelligence foundation that separates managers from leaders.')}`;
       } else if (dimension === "excellence") {
         const decisionCount = gameState.decisions?.length || 6;
         const infoRequestRate = gameState.infoRequests
@@ -3018,11 +3495,11 @@ class ScoringEngine {
               100
             ).toFixed(0)
           : 0;
-        return `Excellence score is ${gap} points below benchmark (${score} vs ${benchmark}) - you made ${decisionCount} decisions without gathering enough evidence (info request rate: ~${infoRequestRate}%). Fast decisions aren't always good decisions. Read "Thinking in Bets" by Duke: learn to improve decision quality in uncertain environments.`;
+        return `Excellence score is ${gap} points below target (${score} vs ${benchmark}) - you made ${decisionCount} decisions without gathering enough evidence (info request rate: ~${infoRequestRate}%). Fast decisions are not always good decisions. Read ${recFor("dimension:excellence", "gap-excellence", '"Thinking in Bets" by Annie Duke - learn to improve decision quality in uncertain environments.')}`;
       } else if (dimension === "agility") {
-        return `Agility is ${gap} points below benchmark (${score} vs ${benchmark}) - you're uncomfortable with ambiguity and change. JCB's environment demands adaptability; rigidity is a liability. Read "The Lean Startup" by Ries: learn to pivot based on evidence, or "Antifragile" by Taleb to understand how to gain from uncertainty.`;
+        return `Agility is ${gap} points below target (${score} vs ${benchmark}) - you are uncomfortable with ambiguity and change. The environment of JCB demands adaptability; rigidity is a liability. Read ${recFor("dimension:agility", "gap-agility", '"The Lean Startup" by Eric Ries - learn to pivot based on evidence.')}`;
       } else if (dimension === "determination") {
-        return `Determination is ${gap} points below benchmark (${score} vs ${benchmark}) - when faced with tough choices, you took the path of least resistance. JCB needs leaders who push through discomfort. Read "Grit" by Duckworth: understand what separates high achievers from everyone else (hint: it's not talent).`;
+        return `Determination is ${gap} points below target (${score} vs ${benchmark}) - when faced with tough choices, you took the path of least resistance. JCB needs leaders who push through discomfort. Read ${recFor("dimension:determination", "gap-determination", '"Grit" by Angela Duckworth - understand what separates high achievers from everyone else (hint: it is not talent).')}`;
       }
     }
 
@@ -3033,15 +3510,15 @@ class ScoringEngine {
           dominantStyle.percentage > 55
             ? `Your ${dominantStyle.name} dominance (${dominantStyle.percentage.toFixed(0)}%)`
             : "You";
-        return `${dominantNote} rarely invite genuine input (democratic: ${underusedStyle.percentage.toFixed(0)}%). Innovation and buy-in require collaboration, not just decisive action. Read "The Five Dysfunctions of a Team" by Lencioni: learn how to build trust-based decision-making.`;
+        return `${dominantNote} rarely invite genuine input (democratic: ${underusedStyle.percentage.toFixed(0)}%). Innovation and buy-in require collaboration, not just decisive action. Read ${recFor("style:democratic", "underuse-democratic", '"The Five Dysfunctions of a Team" by Patrick Lencioni - learn how to build trust-based decision-making.')}`;
       } else if (underusedStyle.name === "affiliative") {
         const moraleContext =
           morale < 70
             ? ` explains your morale challenges (${morale.toFixed(0)}%)`
             : "limits your cultural resilience";
-        return `Affiliative leadership at ${underusedStyle.percentage.toFixed(0)}%${moraleContext}. You're focused on tasks and results while people need connection and belonging. Read "The Culture Code" by Coyle: understand how belonging fuels performance.`;
+        return `Affiliative leadership at ${underusedStyle.percentage.toFixed(0)}%${moraleContext}. You are focused on tasks and results while people need connection and belonging. Read ${recFor("style:affiliative", "underuse-affiliative", '"The Culture Code" by Daniel Coyle - understand how belonging fuels performance.')}`;
       } else if (underusedStyle.name === "authoritative") {
-        return `Your authoritative leadership is only ${underusedStyle.percentage.toFixed(0)}% - teams need direction and inspiration, not just execution. Where's the compelling vision? Read "Start With Why" by Sinek: learn to articulate purpose that mobilizes people toward ambitious goals.`;
+        return `Your authoritative leadership is only ${underusedStyle.percentage.toFixed(0)}% - teams need direction and inspiration, not just execution. Where is the compelling vision? Read ${recFor("style:authoritative", "underuse-authoritative", '"Start With Why" by Simon Sinek - learn to articulate purpose that mobilises people towards ambitious goals.')}`;
       }
     }
 
@@ -3055,15 +3532,15 @@ class ScoringEngine {
       );
 
       if (weakestLEAD[1] < leadBenchmarks[weakestLEAD[0]]) {
-        return `You achieved optimal performance, but ${weakestLEAD[0]} (${weakestLEAD[1]} vs ${leadBenchmarks[weakestLEAD[0]]} benchmark) is your constraint for world-class leadership. Even excellence has room to grow. Read "Good to Great" by Collins: understand what separates good leaders from truly great ones.`;
+        return `You achieved optimal performance, but ${weakestLEAD[0]} (${weakestLEAD[1]} vs ${leadBenchmarks[weakestLEAD[0]]} target) is your constraint for world-class leadership. Even excellence has room to grow. Read ${recFor("optimal:mastery", "optimal-constraint", '"Good to Great" by Jim Collins - understand what separates good leaders from truly great ones.')}`;
       } else {
         const styleRange =
           Math.max(...Object.values(profile)) -
           Math.min(...Object.values(profile));
         if (styleRange > 40) {
-          return `Optimal result achieved, but with uneven style distribution. Your leadership would be more resilient if every style was a genuine option, not just ${dominantStyle.name} (${dominantStyle.percentage.toFixed(0)}%). Read "Primal Leadership" to master all six styles fluently.`;
+          return `Optimal result achieved, but with uneven style distribution. Your leadership would be more resilient if every style was a genuine option, not just ${dominantStyle.name} (${dominantStyle.percentage.toFixed(0)}%). Read ${recFor("optimal:mastery", "optimal-uneven", '"Primal Leadership" by Daniel Goleman - master all six styles fluently.')}`;
         } else {
-          return `You achieved optimal - well done. Now the question is: can you do it again? Consistent excellence requires deep mastery. Read "The Score Takes Care of Itself" by Bill Walsh: learn how process discipline creates repeatable success.`;
+          return `You achieved optimal - well done. Now the question is: can you do it again? Consistent excellence requires deep mastery. Read ${recFor("optimal:mastery", "optimal-repeat", '"The Score Takes Care of Itself" by Bill Walsh - learn how process discipline creates repeatable success.')}`;
         }
       }
     }
@@ -3076,9 +3553,9 @@ class ScoringEngine {
           : attrition > 12
             ? "Talent retention suffers"
             : "Team capability is capped";
-      return `${constraintNote} because coaching capability is only ${profile.coaching.toFixed(0)}%. In fast-growth environments like JCB, your constraint isn't ideas or effort - it's whether your team can execute without you. Read "The Coaching Habit" by Stanier and commit to 7 essential questions that develop people daily.`;
+      return `${constraintNote} because coaching capability is only ${profile.coaching.toFixed(0)}%. In fast-growth environments like JCB, your constraint is not ideas or effort - it is whether your team can execute without you. Read ${recFor("style:coaching", "default-coaching", '"The Coaching Habit" by Michael Bungay Stanier - commit to 7 essential questions that develop people daily.')}`;
     } else if (dominantStyle.percentage > 50) {
-      return `${dominantStyle.percentage.toFixed(0)}% ${dominantStyle.name} leadership - you've found your comfort zone and stopped growing. Leadership mastery requires fluency across all styles. Challenge yourself: read "Primal Leadership" by Goleman and intentionally practice your underused styles.`;
+      return `${dominantStyle.percentage.toFixed(0)}% ${dominantStyle.name} leadership - you have found your comfort zone and stopped growing. Leadership mastery requires fluency across all styles. Challenge yourself: read ${recFor("general:development", "default-comfort", '"Primal Leadership" by Daniel Goleman - intentionally practice your underused styles.')}`;
     } else {
       const decisionQualityNote =
         lead.excellence < 65
@@ -3087,8 +3564,8 @@ class ScoringEngine {
             ? "increase your comfort with ambiguity"
             : lead.determination < 40
               ? "develop your resilience under pressure"
-              : "refine your contextual judgment";
-      return `You have balanced skills but need to ${decisionQualityNote}. Study your decision-by-decision breakdown: identify where you chose comfort over what the situation needed. Read "Primal Leadership" by Goleman to master contextual leadership.`;
+              : "refine your contextual judgement";
+      return `You have balanced skills but need to ${decisionQualityNote}. Study your decision-by-decision breakdown: identify where you chose comfort over what the situation needed. Read ${recFor("general:development", "default-balanced", '"Primal Leadership" by Daniel Goleman - master contextual leadership.')}`;
     }
   }
 
@@ -3125,30 +3602,97 @@ class ScoringEngine {
     return minStyle;
   }
 
+  /**
+   * ISSUE B: resolve the shared recommendation engine (recommendations-data.js).
+   * Returns the global when present, otherwise null so callers can fall back to
+   * a safe inline default. Never throws.
+   */
+  getRecommendationEngine() {
+    if (typeof RecommendationEngine !== "undefined" && RecommendationEngine) {
+      return RecommendationEngine;
+    }
+    if (typeof window !== "undefined" && window.RecommendationEngine) {
+      return window.RecommendationEngine;
+    }
+    if (typeof globalThis !== "undefined" && globalThis.RecommendationEngine) {
+      return globalThis.RecommendationEngine;
+    }
+    return null;
+  }
+
+  /**
+   * ISSUE B: derive a stable runId for deterministic-but-varied selection.
+   * Prefers an explicit runId on the state/results, then the player name, then
+   * a timestamp. The same run always resolves to the same id.
+   */
+  resolveRunId(gameState, results) {
+    const gs = gameState || {};
+    const rs = results || {};
+    return (
+      gs.runId ||
+      rs.runId ||
+      gs.playerName ||
+      (gs.playerData && gs.playerData.name) ||
+      gs.timestamp ||
+      "default-run"
+    );
+  }
+
   generateRecommendations(gameState, results) {
     const recommendations = [];
     const profile = results.leadershipProfile;
+    const engine = this.getRecommendationEngine();
+    const runId = this.resolveRunId(gameState, results);
 
-    // Identify development areas
+    // Identify development areas. Each branch now pulls a varied title from the
+    // shared data table (Issue B) instead of a hardcoded book.
     if (profile.coaching < 30) {
+      const rec = engine
+        ? engine.buildRecommendation("style:coaching", runId, "coaching-gap")
+        : null;
       recommendations.push({
         title: "DEVELOP YOUR COACHING MUSCLE (Critical)",
-        description: `Current usage: ${profile.coaching}% | Optimal: 35-40%. Recommended: Read "The Coaching Habit" by Michael Bungay Stanier. Practice: Spend 30 min weekly in development conversations. Why: Your team needs growth opportunities, not just targets.`,
+        description: `Current usage: ${profile.coaching}% | Optimal: 35-40%. Recommended: ${
+          rec
+            ? rec.text
+            : '"The Coaching Habit" by Michael Bungay Stanier - develop your people daily.'
+        } Practice: Spend 30 min weekly in development conversations. Why: Your team needs growth opportunities, not just targets.`,
       });
     }
 
     if (profile.pacesetting > 60) {
+      const rec = engine
+        ? engine.buildRecommendation(
+            "style:pacesetting",
+            runId,
+            "pacesetting-overuse",
+          )
+        : null;
       recommendations.push({
         title: "BALANCE PACESETTING WITH AFFILIATIVE (Important)",
-        description: `You're ${profile.pacesetting}% pacesetting, ${profile.affiliative}% affiliative. Risk: Burning out high performers. Recommended: Study "Primal Leadership" (Goleman) Chapter 4. Practice: Recognize effort, not just results.`,
+        description: `You are ${profile.pacesetting}% pacesetting, ${profile.affiliative}% affiliative. Risk: Burning out high performers. Recommended: ${
+          rec
+            ? rec.text
+            : '"Primal Leadership" by Daniel Goleman - master situational leadership.'
+        } Practice: Recognise effort, not just results.`,
       });
     }
 
     if (profile.democratic < 25) {
+      const rec = engine
+        ? engine.buildRecommendation(
+            "style:democratic",
+            runId,
+            "democratic-gap",
+          )
+        : null;
       recommendations.push({
         title: "IMPROVE DEMOCRATIC DECISION-MAKING (Opportunity)",
-        description:
-          'You made most major decisions unilaterally. Recommended: Implement peer problem-solving techniques. Resource: "The Five Dysfunctions of a Team" (Lencioni).',
+        description: `You made most major decisions unilaterally. Recommended: Implement peer problem-solving techniques. Resource: ${
+          rec
+            ? rec.text
+            : '"The Five Dysfunctions of a Team" by Patrick Lencioni - build trust-based decisions.'
+        }`,
       });
     }
 
@@ -3158,10 +3702,20 @@ class ScoringEngine {
     ).length;
 
     if (shortTermDecisions > 0) {
+      const rec = engine
+        ? engine.buildRecommendation(
+            "dimension:excellence",
+            runId,
+            "strategic-patience",
+          )
+        : null;
       recommendations.push({
         title: "STRENGTHEN STRATEGIC PATIENCE (Foundation)",
-        description:
-          'You favored short-term options frequently. Recommended: Develop decision-making frameworks. Resource: "Thinking in Bets" by Annie Duke.',
+        description: `You favoured short-term options frequently. Recommended: Develop decision-making frameworks. Resource: ${
+          rec
+            ? rec.text
+            : '"Thinking in Bets" by Annie Duke - improve decision quality under uncertainty.'
+        }`,
       });
     }
 
@@ -3211,11 +3765,28 @@ class ScoringEngine {
     }
 
     // Quality Metrics (15%)
+    // BUGFIX (audit H3): each LEAD dimension is capped at 250, NOT 100, so the
+    // previous `(dimension / 100) * 25` terms could each reach 62.5 and the
+    // "quality" component could reach 250 instead of the intended 0-100. It was
+    // then weighted at 15%, silently contributing up to ~37.5 points instead of
+    // ~15 and distorting the leaderboard. We now normalise each dimension
+    // against the ROUND-AWARE cumulative benchmark (171 for R1, 114 for R2) and
+    // clamp to 0-100, so qualityScore is a true 0-100 percentage of target.
+    const qualityRound = gameState && gameState.round === 2 ? 2 : 1;
+    const qualityBenchmark =
+      typeof LEAD_CONSTANTS !== "undefined" &&
+      LEAD_CONSTANTS.cumulativeBenchmarkForRound
+        ? LEAD_CONSTANTS.cumulativeBenchmarkForRound(qualityRound)
+        : qualityRound === 2
+          ? 114
+          : 171;
+    const clampQuality = (value) =>
+      Math.max(0, Math.min(100, (value / qualityBenchmark) * 100));
     const qualityScore =
-      (gameState.leadership / 100) * 25 +
-      (gameState.excellence / 100) * 25 +
-      (gameState.agility / 100) * 25 +
-      (gameState.determination / 100) * 25;
+      clampQuality(gameState.leadership || 0) * 0.25 +
+      clampQuality(gameState.excellence || 0) * 0.25 +
+      clampQuality(gameState.agility || 0) * 0.25 +
+      clampQuality(gameState.determination || 0) * 0.25;
 
     // Final weighted score
     const finalScore = Math.round(
@@ -3361,8 +3932,8 @@ class ScoringEngine {
         // Walk away - principled
         impact.leadership += 35;
         impact.excellence += 30;
-        impact.growth -= 12;
-        impact.morale += 15;
+        impact.growth -= 6; // CALIBRATED: capped from -12
+        impact.morale += 12; // CALIBRATED: capped from +15
         impact.determination += 25;
         // Losing the order costs revenue, but integrity protects the brand
         impact.profitMargin -= 1;
@@ -3371,7 +3942,7 @@ class ScoringEngine {
         // Escalate
         impact.leadership += 25;
         impact.excellence += 20;
-        impact.growth -= 8;
+        impact.growth -= 5; // CALIBRATED: capped from -8
         impact.determination += 15;
         impact.profitMargin -= 1; // Legal/compliance cost of escalation
         impact.organizationalCapability += 8;
@@ -3395,8 +3966,8 @@ class ScoringEngine {
         impact.leadership -= 40;
         impact.excellence -= 30;
         impact.growth += 3; // Small, one-off order bump - NOT the best growth play
-        impact.morale -= 20;
-        impact.attrition += 10;
+        impact.morale -= 12; // CALIBRATED: capped from -20
+        impact.attrition += 8; // CALIBRATED: capped from +10
         impact.profitMargin -= 3; // Legal exposure, fines and remediation
         impact.organizationalCapability -= 15; // Culture and trust are damaged
       }
@@ -3484,17 +4055,17 @@ class ScoringEngine {
       if (approach === 1) {
         // Fight for your team - advocate
         impact.leadership += 30;
-        impact.morale += 15;
+        impact.morale += 12; // CALIBRATED: capped from +15
         impact.attrition -= 8;
         impact.determination += 20;
-        impact.growth += 8; // Retaining talent protects delivery (whole-number scale)
+        impact.growth += 5; // CALIBRATED: capped from +8; retaining talent protects delivery
         impact.profitMargin -= 1; // Flexible exception carries some property cost
       } else if (approach === 0) {
         // Comply
         impact.morale -= 12;
         impact.attrition += 8;
         impact.leadership -= 10;
-        impact.growth -= 10; // Resignations erode capacity (whole-number scale)
+        impact.growth -= 6; // CALIBRATED: capped from -10; resignations erode capacity
         impact.profitMargin += 1; // Full office presence reduces property cost
       } else if (approach === 2) {
         // Creative workaround
@@ -3528,9 +4099,9 @@ class ScoringEngine {
         impact.growth += 6; // Coaching retains capability (whole-number scale)
         impact.organizationalCapability += 10; // Developing people builds capability
       } else if (manageOption.style === "coercive") {
-        impact.morale -= 15;
-        impact.attrition += 12;
-        impact.growth -= 8; // Coercion accelerates exits (whole-number scale)
+        impact.morale -= 12; // CALIBRATED: capped from -15
+        impact.attrition += 8; // CALIBRATED: capped from +12
+        impact.growth -= 5; // CALIBRATED: capped from -8; coercion accelerates exits
         impact.organizationalCapability -= 8; // Losing people erodes capability
       } else if (manageOption.style === "affiliative") {
         // Tailored retention deals - expensive but keeps key people
@@ -3645,7 +4216,7 @@ class ScoringEngine {
         impact.organizationalCapability += 10;
       } else if (processOption.style === "coaching") {
         impact.leadership += 30;
-        impact.morale += 15;
+        impact.morale += 12; // CALIBRATED: capped from +15
         impact.determination += 18;
         impact.organizationalCapability += 15; // Coaching the successor builds capability
       } else if (processOption.style === "authoritative") {
@@ -3716,7 +4287,7 @@ class ScoringEngine {
         impact.agility -= 15;
       } else if (response === 1) {
         // Accelerate next-gen
-        impact.growth += 10;
+        impact.growth += 6; // CALIBRATED: capped from +10
         impact.leadership += 25;
         impact.agility += 30;
         impact.excellence += 20;
@@ -3823,7 +4394,7 @@ class ScoringEngine {
         impact.leadership += 20;
       } else if (dimension === "leadership") {
         impact.leadership += 30;
-        impact.morale += 15;
+        impact.morale += 12; // CALIBRATED: capped from +15
       } else if (dimension === "excellence") {
         impact.excellence += 30;
         impact.leadership += 20;
@@ -3874,7 +4445,7 @@ class ScoringEngine {
       // Award based on top priority
       if (topRanked.includes("Developing")) {
         impact.leadership += 30;
-        impact.morale += 15;
+        impact.morale += 12; // CALIBRATED: capped from +15
         impact.organizationalCapability += 15; // Talent focus builds the bench
       } else if (topRanked.includes("innovation")) {
         impact.agility += 30;
@@ -3882,11 +4453,11 @@ class ScoringEngine {
         impact.organizationalCapability += 10;
       } else if (topRanked.includes("culture")) {
         impact.leadership += 25;
-        impact.morale += 20;
+        impact.morale += 12; // CALIBRATED: capped from +20
         impact.organizationalCapability += 10;
       } else if (topRanked.includes("commercial")) {
         impact.determination += 30;
-        impact.growth += 8;
+        impact.growth += 5; // CALIBRATED: capped from +8
         impact.profitMargin += 1; // Commercial focus protects margin
       }
     }

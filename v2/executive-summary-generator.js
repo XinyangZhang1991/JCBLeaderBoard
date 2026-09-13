@@ -1,6 +1,43 @@
 // Executive Summary PDF Generator
 // Generates printable 1-page executive summary + detailed appendix for each player
 
+// BUGFIX (audit H4 / #6): consume the ONE canonical set of LEAD thresholds from
+// lead-constants.js so this generator can never disagree with scoring.js about
+// whether a run is "exceptional" or "strong".
+//
+// BUGFIX (#6): this file previously declared a TOP-LEVEL `const LEAD_CONSTANTS`,
+// which collided with the identical top-level declaration in scoring.js. Classic
+// (non-module) scripts share one global lexical scope, so the second declaration
+// threw `SyntaxError: Identifier 'LEAD_CONSTANTS' has already been declared` and
+// the ENTIRE file failed to parse — `window.ExecutiveSummaryGenerator` was never
+// assigned. We now read the canonical global that lead-constants.js publishes
+// (it loads first in index.html) and bind it to a UNIQUE top-level name so no
+// `LEAD_CONSTANTS` binding is created here. The inline fallback is kept inside
+// an IIFE so it never leaks into the shared global lexical scope either.
+const EXEC_LEAD_CONSTANTS = (function () {
+  const fallback = {
+    exceptionalLEAD: 0.78,
+    solidLEAD: 0.65,
+    strongLEAD: 0.5,
+    minimumLEAD: 0.5,
+    minimumDimensionRatio: 0.35,
+    wellBalancedMax: 50,
+    isBalancedMax: 60,
+    reasonablyBalancedMax: 70,
+    growthTarget: 15,
+    minGrowthFloor: 10,
+    benchmarkPerScenario: 19,
+    round1Scenarios: 9,
+    round2Scenarios: 6,
+    leadDimensionCap: 250,
+  };
+  return (
+    (typeof window !== "undefined" && window.LEAD_CONSTANTS) ||
+    (typeof globalThis !== "undefined" && globalThis.LEAD_CONSTANTS) ||
+    fallback
+  );
+})();
+
 class ExecutiveSummaryGenerator {
   constructor() {
     this.playerData = null;
@@ -17,6 +54,9 @@ class ExecutiveSummaryGenerator {
     // to the engine). When absent, the generator falls back to reading
     // localStorage directly in a browser, or to illustrative figures.
     this.cultureDataProvider = null;
+    // Minimum leaders in a cohort before its row / delta is shown. Mirrors
+    // CultureAnalysis.minSegmentSize (COHORT_SEGMENTATION_DESIGN §3.3).
+    this.minCohortSize = 3;
   }
 
   /**
@@ -59,6 +99,34 @@ class ExecutiveSummaryGenerator {
     if (value < 0) return 0;
     if (value > 100) return 100;
     return value;
+  }
+
+  /**
+   * ISSUE B: resolve a varied book/resource recommendation from the shared
+   * RecommendationEngine data table. Falls back to the supplied string when the
+   * engine is unavailable (e.g. Node harnesses that do not load
+   * recommendations-data.js), so behaviour is always defined.
+   *
+   * @param {string} bucket  Bucket key, e.g. "dimension:agility".
+   * @param {string} salt    Stable salt so the same run stays reproducible.
+   * @param {string} fallback Pre-formatted fallback recommendation text.
+   * @returns {string} Recommendation text.
+   */
+  _recommendationText(bucket, salt, fallback) {
+    const engine =
+      (typeof RecommendationEngine !== "undefined" && RecommendationEngine) ||
+      (typeof window !== "undefined" && window.RecommendationEngine) ||
+      (typeof globalThis !== "undefined" && globalThis.RecommendationEngine) ||
+      null;
+    if (!engine || typeof engine.buildRecommendation !== "function") {
+      return fallback;
+    }
+    const runId =
+      (this.playerData && (this.playerData.runId || this.playerData.name)) ||
+      (this.gameState && this.gameState.runId) ||
+      "default-run";
+    const rec = engine.buildRecommendation(bucket, runId, salt);
+    return rec && rec.text ? rec.text : fallback;
   }
 
   /**
@@ -151,26 +219,130 @@ class ExecutiveSummaryGenerator {
   }
 
   /**
-   * Return the full cohort array, or [] when unavailable. Prefers an injected
-   * provider (GameEngine.getCultureData) and falls back to localStorage in a
-   * browser. Never throws.
+   * ISSUE A: the player's raw cumulative LEAD score (sum of the four
+   * dimensions) for the current round. Used to state a plain fact such as
+   * "142 / 171 target" instead of a percentage-of-benchmark. Returns a
+   * rounded integer, or 0 when the state is missing.
+   * @returns {number}
+   */
+  getCumulativeLeadScore() {
+    const gs = this.gameState || {};
+    const total =
+      (gs.leadership || 0) +
+      (gs.excellence || 0) +
+      (gs.agility || 0) +
+      (gs.determination || 0);
+    return isFinite(total) ? Math.round(total) : 0;
+  }
+
+  /**
+   * Consent/segmentation predicate: true only for a valid JCB business
+   * function. Delegates to the shared ResultsStore helper when available.
+   * @returns {boolean}
+   */
+  isCultureEligible(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.isCultureEligible === "function") {
+      return store.isCultureEligible(record);
+    }
+    const fn = record && record.jobFunction;
+    return (
+      [
+        "Engineering",
+        "Manufacturing",
+        "Commercial",
+        "Finance",
+        "Human Resources",
+        "Operations",
+        "Product Development",
+        "Marketing",
+        "IT / Digital",
+      ].indexOf(fn) !== -1
+    );
+  }
+
+  /**
+   * Consent/segmentation predicate: true only when the player consented to
+   * public display. Delegates to the shared ResultsStore helper when available.
+   * @returns {boolean}
+   */
+  isPubliclyDisplayable(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.isPubliclyDisplayable === "function") {
+      return store.isPubliclyDisplayable(record);
+    }
+    return !!(
+      record &&
+      record.consent &&
+      record.consent.publicDisplay === true
+    );
+  }
+
+  /**
+   * Return a deep clone with identity stripped for non-consenting records.
+   * Delegates to the shared ResultsStore helper when available.
+   * @returns {Object}
+   */
+  anonymiseForCulture(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.anonymiseForCulture === "function") {
+      return store.anonymiseForCulture(record);
+    }
+    if (!record) return record;
+    const clone = JSON.parse(JSON.stringify(record));
+    if (!this.isPubliclyDisplayable(clone)) {
+      clone.name = "Anonymous";
+      clone.anonymised = true;
+    }
+    return clone;
+  }
+
+  /**
+   * LEAD course cohort predicate. Delegates to the shared ResultsStore helper
+   * when available; falls back to a local canonical-values-only implementation.
+   * @returns {string} "2025" | "2026" | "" (non-participant)
+   */
+  leadCohortOf(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.leadCohortOf === "function") {
+      return store.leadCohortOf(record);
+    }
+    if (!record) return "";
+    const raw =
+      record.player && typeof record.player === "object"
+        ? record.player.leadCohort
+        : record.leadCohort;
+    const v = raw === null || raw === undefined ? "" : String(raw).trim();
+    return v === "2025" || v === "2026" ? v : "";
+  }
+
+  /**
+   * Return the culture/executive-analysis cohort: only records with a valid
+   * JCB business function (isCultureEligible), with every non-consenting
+   * record anonymised (anonymiseForCulture). Prefers an injected provider
+   * (GameEngine.getCultureData) and falls back to localStorage in a browser.
+   * Never throws.
    * @returns {Array<Object>}
    */
   getCohort() {
+    let raw = [];
     try {
       if (this.cultureDataProvider) {
         const data = this.cultureDataProvider();
-        return Array.isArray(data) ? data : [];
-      }
-      if (typeof localStorage !== "undefined" && localStorage) {
-        const raw = localStorage.getItem("jcb_culture_data");
-        const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed : [];
+        raw = Array.isArray(data) ? data : [];
+      } else if (typeof localStorage !== "undefined" && localStorage) {
+        const stored = localStorage.getItem("jcb_culture_data");
+        const parsed = stored ? JSON.parse(stored) : [];
+        raw = Array.isArray(parsed) ? parsed : [];
       }
     } catch (e) {
       // Swallow: a missing cohort must never break report generation.
+      return [];
     }
-    return [];
+    // Segmentation: exclude non-JCB players; anonymise non-consenting ones.
+    return raw
+      .filter((r) => this.isCultureEligible(r))
+      .map((r) => this.anonymiseForCulture(r));
   }
 
   /**
@@ -242,11 +414,11 @@ class ExecutiveSummaryGenerator {
 
   generateExecutiveSummary() {
     const assessment = this.calculateOverallAssessment();
-    const keyStrengths = this.identifyKeyStrengths();
-    const developmentAreas = this.identifyDevelopmentAreas();
-    const businessImpact = this.calculateBusinessImpact();
-    const promotionReadiness = this.assessPromotionReadiness();
-    const careerRisks = this.identifyCareerRisks();
+    // ONE-PAGE SUMMARY: cap the bullet lists so the summary fits a single A4
+    // page. The full lists remain available in the detailed appendix.
+    const keyStrengths = this.identifyKeyStrengths().slice(0, 3);
+    const developmentAreas = this.identifyDevelopmentAreas().slice(0, 3);
+    const recommendedActions = this.generateActionPlan().slice(0, 4);
 
     const generated = new Date().toLocaleDateString("en-GB");
     const header = this.buildBrandedHeader(
@@ -259,10 +431,10 @@ class ExecutiveSummaryGenerator {
 
     // Plain-language opening summary (2-3 sentences) before the detailed tables.
     const openingSummary =
-      `<p>This report summarises ${this.playerData.name}'s performance across the ` +
+      `<p>This report summarises the performance of ${this.playerData.name} across the ` +
       `${this.getRoundLabel()} leadership simulation. It highlights overall ` +
-      `assessment, key strengths, development areas, business impact and ` +
-      `promotion readiness, with a full appendix of supporting analysis.</p>`;
+      `assessment, key strengths, development areas and recommended actions, ` +
+      `with a full appendix of supporting analysis.</p>`;
 
     return `
 <!DOCTYPE html>
@@ -272,7 +444,11 @@ class ExecutiveSummaryGenerator {
     <title>Executive Summary - ${this.playerData.name}</title>
     <style>
         @page { size: A4; margin: 15mm; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 0; padding: 0; }
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.4; color: #000; margin: 0; padding: 0; }
+        h1 { font-size: 20pt; }
+        h2 { font-size: 15pt; }
+        h3 { font-size: 12.5pt; }
+        h4 { font-size: 11.5pt; }
         .header { border-bottom: 4px solid #FFCB00; padding-bottom: 10px; margin-bottom: 15px; }
         .jcb-logo { font-size: 24pt; font-weight: bold; color: #000; margin-bottom: 5px; }
         .title { font-size: 18pt; font-weight: bold; color: #000; margin: 5px 0; }
@@ -280,7 +456,7 @@ class ExecutiveSummaryGenerator {
         .assessment-box { background: ${assessment.color}; padding: 15px; border-left: 5px solid #FFCB00; margin: 15px 0; border-radius: 3px; }
         .assessment-title { font-size: 14pt; font-weight: bold; margin-bottom: 5px; }
         .section { margin: 15px 0; }
-        .section-title { font-size: 12pt; font-weight: bold; color: #000; border-bottom: 2px solid #FFCB00; padding-bottom: 3px; margin-bottom: 8px; }
+        .section-title { font-size: 15pt; font-weight: bold; color: #000; border-bottom: 2px solid #FFCB00; padding-bottom: 3px; margin-bottom: 8px; }
         .bullet-list { margin: 5px 0; padding-left: 20px; }
         .bullet-list li { margin: 3px 0; }
         .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
@@ -305,8 +481,6 @@ class ExecutiveSummaryGenerator {
         <p style="margin: 5px 0 0 0;">${assessment.summary}</p>
     </div>
 
-    ${careerRisks.length > 0 ? this.renderCareerRisks(careerRisks) : ""}
-
     ${
       keyStrengths.length > 0
         ? `<div class="section">
@@ -330,20 +504,9 @@ class ExecutiveSummaryGenerator {
     }
 
     <div class="section">
-        <h2>Business Impact (Simulation)</h2>
-        <table>
-            <tr><th>Metric</th><th>Value</th><th>Assessment</th></tr>
-            <tr><td>Revenue Growth</td><td>${businessImpact.growth.value}</td><td>${businessImpact.growth.label}</td></tr>
-            <tr><td>Team Morale</td><td>${businessImpact.morale.value}</td><td>${businessImpact.morale.label}</td></tr>
-            <tr><td>Staff Retention</td><td>${businessImpact.retention.value}</td><td>${businessImpact.retention.label}</td></tr>
-            <tr><td>LEAD Quality</td><td>${businessImpact.lead.value}</td><td>${businessImpact.lead.label}</td></tr>
-        </table>
-    </div>
-
-    <div class="section">
         <h2>Recommended Actions (Next 90 Days)</h2>
         <ol class="bullet-list">
-            ${this.generateActionPlan()
+            ${recommendedActions
               .map(
                 (action) =>
                   `<li><strong>${action.action}:</strong> ${action.detail}</li>`,
@@ -352,17 +515,8 @@ class ExecutiveSummaryGenerator {
         </ol>
     </div>
 
-    <div class="section">
-        <h2>Promotion Readiness</h2>
-        <p><strong>${promotionReadiness.status}</strong></p>
-        <p style="margin-top: 5px;">${promotionReadiness.rationale}</p>
-        ${promotionReadiness.conditions ? `<p style="margin-top: 5px;"><em>Conditions: ${promotionReadiness.conditions}</em></p>` : ""}
-    </div>
-
     <div class="footer">
-        <p><strong>JCB Leadership Development Programme</strong> | Assessment Version 2.0</p>
-        <p>This assessment is based on simulation performance and should be considered alongside 360 degree feedback, business results, and manager assessment.</p>
-        <p><em>See detailed appendix for full analysis, decision history, and psychometric validation.</em></p>
+        <p><strong>JCB Leadership Development Programme</strong> | Assessment Version 2.0 | See detailed appendix for full analysis.</p>
     </div>
 </body>
 </html>
@@ -387,6 +541,48 @@ class ExecutiveSummaryGenerator {
         `;
   }
 
+  /**
+   * Business Impact table. Extracted from generateExecutiveSummary() so the
+   * one-page summary can omit it while the detailed appendix still renders it.
+   * Delegates to calculateBusinessImpact() - no logic duplicated.
+   *
+   * @returns {string} HTML fragment.
+   */
+  renderBusinessImpactSection() {
+    const businessImpact = this.calculateBusinessImpact();
+    return `
+    <div class="section">
+        <h2>Business Impact (Simulation)</h2>
+        <table>
+            <tr><th>Metric</th><th>Value</th><th>Assessment</th></tr>
+            <tr><td>Revenue Growth</td><td>${businessImpact.growth.value}</td><td>${businessImpact.growth.label}</td></tr>
+            <tr><td>Team Morale</td><td>${businessImpact.morale.value}</td><td>${businessImpact.morale.label}</td></tr>
+            <tr><td>Staff Retention</td><td>${businessImpact.retention.value}</td><td>${businessImpact.retention.label}</td></tr>
+            <tr><td>LEAD Quality</td><td>${businessImpact.lead.value}</td><td>${businessImpact.lead.label}</td></tr>
+        </table>
+    </div>
+        `;
+  }
+
+  /**
+   * Promotion Readiness block. Extracted from generateExecutiveSummary() so the
+   * one-page summary can omit it while the detailed appendix still renders it.
+   * Delegates to assessPromotionReadiness() - no logic duplicated.
+   *
+   * @returns {string} HTML fragment.
+   */
+  renderPromotionReadinessSection() {
+    const promotionReadiness = this.assessPromotionReadiness();
+    return `
+    <div class="section">
+        <h2>Promotion Readiness</h2>
+        <p><strong>${promotionReadiness.status}</strong></p>
+        <p style="margin-top: 5px;">${promotionReadiness.rationale}</p>
+        ${promotionReadiness.conditions ? `<p style="margin-top: 5px;"><em>Conditions: ${promotionReadiness.conditions}</em></p>` : ""}
+    </div>
+        `;
+  }
+
   calculateOverallAssessment() {
     const leadRatio = this.calculateAverageLEADRatio();
     const escaped = this.results.escaped;
@@ -394,39 +590,62 @@ class ExecutiveSummaryGenerator {
     const morale = this.gameState.morale;
     const attrition = this.gameState.attrition;
 
+    // ISSUE A: plain-fact LEAD wording. We no longer say "X% of benchmark";
+    // instead we state the capped percentage and the raw score against the
+    // round-aware cumulative target (e.g. "142 / 171 target"). The underlying
+    // ratio is unchanged - only the wording and the displayed clamp differ.
+    const leadPct = this.formatPercent(this.clampPercent(leadRatio * 100), 0);
+    const leadTarget = this.getCumulativeTarget();
+    const leadScore = this.getCumulativeLeadScore();
+    const leadFact = `${leadScore} / ${leadTarget} target (${leadPct}%)`;
+
     // High Potential: Escaped + High LEAD + Balanced
-    if (escaped && leadRatio >= 0.85 && this.results.optimal) {
+    // BUGFIX (audit H4): use the canonical exceptional threshold (0.78), the
+    // SAME value scoring.js uses for exceptionalLEAD, so a run cannot be
+    // "exceptional" to the scoring engine but only "Strong" here.
+    if (
+      escaped &&
+      leadRatio >= EXEC_LEAD_CONSTANTS.exceptionalLEAD &&
+      this.results.optimal
+    ) {
       return {
         level: "HIGH POTENTIAL",
         color: "#d4edda",
-        summary: `Demonstrates exceptional leadership capability across all LEAD dimensions (${(leadRatio * 100).toFixed(0)}% of benchmark). Achieved strong business results (${growth.toFixed(1)}% growth) while maintaining team health (${morale.toFixed(0)}% morale). Shows balanced, adaptive leadership with strategic thinking. Ready for increased responsibility.`,
+        summary: `Demonstrates exceptional leadership capability across all LEAD dimensions (LEAD score: ${leadFact}). Achieved strong business results (${growth.toFixed(1)}% growth) while maintaining team health (${morale.toFixed(0)}% morale). Shows balanced, adaptive leadership with strategic thinking. Ready for increased responsibility.`,
       };
     }
 
     // Solid Performer: Escaped + Good LEAD
-    if (escaped && leadRatio >= 0.65) {
+    if (escaped && leadRatio >= EXEC_LEAD_CONSTANTS.solidLEAD) {
       return {
         level: "SOLID PERFORMER",
         color: "#d1ecf1",
-        summary: `Demonstrates strong leadership competencies (${(leadRatio * 100).toFixed(0)}% of benchmark) and achieved business objectives (${growth.toFixed(1)}% growth, ${morale.toFixed(0)}% morale). Shows clear strengths but has identifiable development areas. Performing well in current role with potential for growth.`,
+        summary: `Demonstrates strong leadership competencies (LEAD score: ${leadFact}) and achieved business objectives (${growth.toFixed(1)}% growth, ${morale.toFixed(0)}% morale). Shows clear strengths but has identifiable development areas. Performing well in current role with potential for growth.`,
       };
     }
 
     // Developing: Escaped but Lower LEAD OR Failed narrowly
-    if (escaped || (leadRatio >= 0.5 && growth >= 15)) {
+    if (
+      escaped ||
+      (leadRatio >= EXEC_LEAD_CONSTANTS.strongLEAD &&
+        growth >= EXEC_LEAD_CONSTANTS.growthTarget)
+    ) {
       return {
         level: "DEVELOPING",
         color: "#fff3cd",
-        summary: `Shows leadership potential but needs development in key areas. ${escaped ? `Met objectives but` : `Narrowly missed objectives -`} LEAD competencies at ${(leadRatio * 100).toFixed(0)}% of benchmark suggest gaps in leadership effectiveness. Requires targeted development and coaching to reach full potential.`,
+        summary: `Shows leadership potential but needs development in key areas. ${escaped ? `Met objectives but` : `Narrowly missed objectives -`} LEAD competencies at ${leadFact} suggest gaps in leadership effectiveness. Requires targeted development and coaching to reach full potential.`,
       };
     }
 
     // Needs Development: Failed with moderate issues
-    if (leadRatio >= 0.35 || growth >= 12) {
+    if (
+      leadRatio >= EXEC_LEAD_CONSTANTS.minimumDimensionRatio ||
+      growth >= 12
+    ) {
       return {
         level: "NEEDS DEVELOPMENT",
         color: "#f8d7da",
-        summary: `Significant gaps in leadership competencies identified (${(leadRatio * 100).toFixed(0)}% of benchmark). ${growth < 15 ? "Failed to achieve viable growth targets." : "Growth achieved but at cost to team health or quality."} Requires immediate development intervention and close coaching. Not ready for increased responsibility without support.`,
+        summary: `Significant gaps in leadership competencies identified (LEAD score: ${leadFact}). ${growth < 15 ? "Failed to achieve viable growth targets." : "Growth achieved but at cost to team health or quality."} Requires immediate development intervention and close coaching. Not ready for increased responsibility without support.`,
       };
     }
 
@@ -434,7 +653,7 @@ class ExecutiveSummaryGenerator {
     return {
       level: "AT RISK",
       color: "#f5c6cb",
-      summary: `Critical leadership deficiencies identified (${(leadRatio * 100).toFixed(0)}% of benchmark). Failed to meet basic objectives (${growth.toFixed(1)}% growth, ${morale.toFixed(0)}% morale, ${attrition.toFixed(1)}% attrition). Approach is unsustainable and poses risk to team and business. Urgent intervention required - consider role fit assessment.`,
+      summary: `Critical leadership deficiencies identified (LEAD score: ${leadFact}). Failed to meet basic objectives (${growth.toFixed(1)}% growth, ${morale.toFixed(0)}% morale, ${attrition.toFixed(1)}% attrition). Approach is unsustainable and poses risk to team and business. Urgent intervention required - consider role fit assessment.`,
     };
   }
 
@@ -445,34 +664,35 @@ class ExecutiveSummaryGenerator {
     const infoRequests = this.gameState.infoRequests?.length || 0;
 
     // Check each LEAD dimension
+    // ISSUE A: state the capped percentage as a plain fact (no "benchmark").
     if (leadRatios.leadership >= 0.8) {
       const balancedStyles = Object.values(styles).filter(
         (v) => v >= 20 && v <= 40,
       ).length;
       strengths.push({
         title: "Exceptional Leadership Style Variety",
-        detail: `${(leadRatios.leadership * 100).toFixed(0)}% of benchmark - Uses ${balancedStyles} different leadership styles effectively, demonstrating high adaptability and contextual awareness.`,
+        detail: `Leadership at ${this.formatPercent(this.clampPercent(leadRatios.leadership * 100), 0)}% - Uses ${balancedStyles} different leadership styles effectively, demonstrating high adaptability and contextual awareness.`,
       });
     }
 
     if (leadRatios.excellence >= 0.8) {
       strengths.push({
         title: "Evidence-Based Decision Making",
-        detail: `${(leadRatios.excellence * 100).toFixed(0)}% of benchmark - Sought additional information ${infoRequests} times, showing strong commitment to data-driven leadership and intellectual rigor.`,
+        detail: `Excellence at ${this.formatPercent(this.clampPercent(leadRatios.excellence * 100), 0)}% - Sought additional information ${infoRequests} times, showing strong commitment to data-driven leadership and intellectual rigor.`,
       });
     }
 
     if (leadRatios.agility >= 0.8) {
       strengths.push({
         title: "Strategic Agility in Ambiguity",
-        detail: `${(leadRatios.agility * 100).toFixed(0)}% of benchmark - Navigates uncertain situations effectively, adapts approach based on context, and synthesizes conflicting information well.`,
+        detail: `Agility at ${this.formatPercent(this.clampPercent(leadRatios.agility * 100), 0)}% - Navigates uncertain situations effectively, adapts approach based on context, and synthesises conflicting information well.`,
       });
     }
 
     if (leadRatios.determination >= 0.8) {
       strengths.push({
         title: "Strong Growth Orientation",
-        detail: `${(leadRatios.determination * 100).toFixed(0)}% of benchmark - Demonstrates persistence, growth mindset, and willingness to tackle challenging objectives. Drives for results consistently.`,
+        detail: `Determination at ${this.formatPercent(this.clampPercent(leadRatios.determination * 100), 0)}% - Demonstrates persistence, growth mindset, and willingness to tackle challenging objectives. Drives for results consistently.`,
       });
     }
 
@@ -508,7 +728,7 @@ class ExecutiveSummaryGenerator {
           dimension.charAt(0).toUpperCase() + dimension.slice(1);
         strengths.push({
           title: `Relative Strength in ${dimensionName}`,
-          detail: `${(maxRatio * 100).toFixed(0)}% of benchmark - strongest of your LEAD dimensions, though still has room for development.`,
+          detail: `${this.formatPercent(this.clampPercent(maxRatio * 100), 0)}% - strongest of your LEAD dimensions, though still has room for development.`,
         });
       }
     }
@@ -559,7 +779,7 @@ class ExecutiveSummaryGenerator {
     } else if (leadRatios.agility < 0.6) {
       areas.push({
         title: "Adaptability in Uncertainty",
-        detail: `Agility at ${(leadRatios.agility * 100).toFixed(0)}% - Room to improve how you handle ambiguous situations and changing priorities. Need to become more comfortable with "gray areas."`,
+        detail: `Agility at ${(leadRatios.agility * 100).toFixed(0)}% - Room to improve how you handle ambiguous situations and changing priorities. Need to become more comfortable with "grey areas."`,
       });
     }
 
@@ -586,7 +806,7 @@ class ExecutiveSummaryGenerator {
     if (this.gameState.morale < 65) {
       areas.push({
         title: "Team Engagement",
-        detail: `${this.gameState.morale.toFixed(0)}% morale (need 65%+) - Team is not fully engaged or motivated. Need to balance results-focus with people-centered leadership.`,
+        detail: `${this.gameState.morale.toFixed(0)}% morale (need 65%+) - Team is not fully engaged or motivated. Need to balance results-focus with people-centred leadership.`,
       });
     }
 
@@ -648,7 +868,7 @@ class ExecutiveSummaryGenerator {
       risks.push({
         icon: "",
         title: "IMMEDIATE RISK: Team Exodus",
-        detail: `${this.gameState.attrition.toFixed(1)}% attrition is critically high. At this rate, you're losing institutional knowledge, damaging team capability, and creating reputation risk. Requires urgent intervention.`,
+        detail: `${this.gameState.attrition.toFixed(1)}% attrition is critically high. At this rate, you are losing institutional knowledge, damaging team capability, and creating reputation risk. Requires urgent intervention.`,
       });
     }
 
@@ -740,25 +960,27 @@ class ExecutiveSummaryGenerator {
       lead: {
         // LEAD quality is a ratio of benchmark; cap the displayed percentage
         // at 100 while the raw avgLEAD still drives the label/colour below.
+        // BUGFIX (audit H4): thresholds now come from the canonical
+        // LEAD_CONSTANTS so the label matches scoring.js exactly.
         value: `${this.formatPercent(this.clampPercent(avgLEAD * 100), 0)}%`,
         label:
-          avgLEAD >= 0.85
-            ? "Exceptional (>85%)"
-            : avgLEAD >= 0.7
-              ? "Strong (70%+)"
-              : avgLEAD >= 0.5
-                ? "Adequate (50%+)"
-                : avgLEAD >= 0.4
-                  ? "Minimum (40%+)"
+          avgLEAD >= EXEC_LEAD_CONSTANTS.exceptionalLEAD
+            ? `Exceptional (${Math.round(EXEC_LEAD_CONSTANTS.exceptionalLEAD * 100)}%+)`
+            : avgLEAD >= EXEC_LEAD_CONSTANTS.solidLEAD
+              ? `Strong (${Math.round(EXEC_LEAD_CONSTANTS.solidLEAD * 100)}%+)`
+              : avgLEAD >= EXEC_LEAD_CONSTANTS.strongLEAD
+                ? `Adequate (${Math.round(EXEC_LEAD_CONSTANTS.strongLEAD * 100)}%+)`
+                : avgLEAD >= EXEC_LEAD_CONSTANTS.minimumDimensionRatio
+                  ? `Minimum (${Math.round(EXEC_LEAD_CONSTANTS.minimumDimensionRatio * 100)}%+)`
                   : "Below Standard",
         color:
-          avgLEAD >= 0.85
+          avgLEAD >= EXEC_LEAD_CONSTANTS.exceptionalLEAD
             ? "#2e7d32"
-            : avgLEAD >= 0.7
+            : avgLEAD >= EXEC_LEAD_CONSTANTS.solidLEAD
               ? "#388e3c"
-              : avgLEAD >= 0.5
+              : avgLEAD >= EXEC_LEAD_CONSTANTS.strongLEAD
                 ? "#f57c00"
-                : avgLEAD >= 0.4
+                : avgLEAD >= EXEC_LEAD_CONSTANTS.minimumDimensionRatio
                   ? "#ff9800"
                   : "#d32f2f",
       },
@@ -851,12 +1073,12 @@ class ExecutiveSummaryGenerator {
     } else if (dimensionName === "agility" && dimensionRatio < 0.6) {
       actions.push({
         action: "PRIORITY 1: Build Comfort with Ambiguity",
-        detail: `When facing uncertainty, resist urge to decide immediately. Spend 24 hours gathering diverse perspectives. Practice: "I don't know yet, but here's how I'll figure it out." Read: "Thinking in Bets" by Annie Duke.`,
+        detail: `When facing uncertainty, resist urge to decide immediately. Spend 24 hours gathering diverse perspectives. Practice: "I do not know yet, but here is how I will figure it out." Read: ${this._recommendationText("dimension:agility", "agility-ambiguity", '"Thinking in Bets" by Annie Duke - improve decision quality under uncertainty.')}`,
       });
     } else if (dimensionName === "determination" && dimensionRatio < 0.6) {
       actions.push({
         action: "PRIORITY 1: Strengthen Growth Orientation",
-        detail: `Set one ambitious "stretch goal" for next quarter (20% above comfortable target). When facing obstacles, ask: "What would I do if failure wasn't an option?" Track persistence through setbacks.`,
+        detail: `Set one ambitious "stretch goal" for next quarter (20% above comfortable target). When facing obstacles, ask: "What would I do if failure was not an option?" Track persistence through setbacks.`,
       });
     }
 
@@ -867,7 +1089,7 @@ class ExecutiveSummaryGenerator {
         .map(([k, _]) => k);
       actions.push({
         action: "Address Leadership Style Overuse",
-        detail: `You're overusing ${dominantStyleName} (${maxStyle}%). Deliberately practice ${underusedStyles[0] || "complementary styles"} in low-stakes situations. Ask: "What would [different style] look like here?"`,
+        detail: `You are overusing ${dominantStyleName} (${maxStyle}%). Deliberately practice ${underusedStyles[0] || "complementary styles"} in low-stakes situations. Ask: "What would [different style] look like here?"`,
       });
     }
 
@@ -877,25 +1099,25 @@ class ExecutiveSummaryGenerator {
       detail: `Ask 5 direct reports, 3 peers, and your manager: "Rate me 1-10 on: (1) Data-driven decisions, (2) Style adaptability, (3) Comfort with ambiguity, (4) Drive for results." Compare to self-assessment. Identify blind spots.`,
     });
 
-    // Priority 4: Specific behavior change based on gaps
+    // Priority 4: Specific behaviour change based on gaps
     if (infoRequests === 0) {
       actions.push({
         action: 'Implement "Data Check" Habit',
-        detail: `For next 30 days, before ANY decision >£100k or affecting >5 people, pause and gather ONE additional data point you don't currently have. Build the habit of evidence-seeking.`,
+        detail: `For next 30 days, before ANY decision >£100k or affecting >5 people, pause and gather ONE additional data point you do not currently have. Build the habit of evidence-seeking.`,
       });
     }
 
     if (this.gameState.morale < 65) {
       actions.push({
-        action: "Increase People-Centered Touchpoints",
-        detail: `Schedule weekly 1-on-1s with direct reports (30 min each). Use 70/30 rule: 70% listening, 30% directing. Ask: "What's blocking your success?" and "How can I help?" Track morale shifts.`,
+        action: "Increase People-Centred Touchpoints",
+        detail: `Schedule weekly 1-on-1s with direct reports (30 min each). Use 70/30 rule: 70% listening, 30% directing. Ask: "What is blocking your success?" and "How can I help?" Track morale shifts.`,
       });
     }
 
     // Priority 5: Retake assessment
     actions.push({
       action: "90-Day Follow-Up: Retake Assessment",
-      detail: `After implementing above actions for 90 days, retake this simulation. Compare scores. Target: +15% improvement in your lowest LEAD dimension. Track: Did specific actions translate to behavior change?`,
+      detail: `After implementing above actions for 90 days, retake this simulation. Compare scores. Target: +15% improvement in your lowest LEAD dimension. Track: Did specific actions translate to behaviour change?`,
     });
 
     return actions.slice(0, 5); // Top 5 actions maximum
@@ -918,10 +1140,10 @@ class ExecutiveSummaryGenerator {
     // cumulative target is 9 x 19 = 171 for Round 1 and 6 x 19 = 114 for
     // Round 2. Only the divisor (scenarioCount) changes with the round.
     const benchmarks = {
-      leadership: 19,
-      excellence: 19,
-      agility: 19,
-      determination: 19,
+      leadership: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
+      excellence: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
+      agility: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
+      determination: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
     };
     const scenarioCount = this.getScenarioCount();
 
@@ -957,11 +1179,16 @@ class ExecutiveSummaryGenerator {
             margin: 15mm;
         }
         body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            font-size: 10pt;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 10.5pt;
             line-height: 1.4;
             color: #000;
+            margin: 0;
         }
+        h1 { font-size: 20pt; }
+        h2 { font-size: 15pt; }
+        h3 { font-size: 12.5pt; }
+        h4 { font-size: 11.5pt; }
         .header {
             border-bottom: 4px solid #FFCB00;
             padding-bottom: 10px;
@@ -972,7 +1199,7 @@ class ExecutiveSummaryGenerator {
             page-break-inside: avoid;
         }
         .section-title {
-            font-size: 12pt;
+            font-size: 15pt;
             font-weight: bold;
             border-bottom: 2px solid #FFCB00;
             padding-bottom: 3px;
@@ -1040,7 +1267,18 @@ class ExecutiveSummaryGenerator {
     ${this.generateDecisionHistory()}
     ${this.generatePsychometricValidation()}
     ${this.generateComparisonToBenchmarks()}
+    ${this.generateCohortComparisonSection()}
     ${this.generateDetailedActionPlan()}
+
+    ${
+      /* ONE-PAGE SUMMARY: sections moved out of the executive summary so it
+         fits a single page. Reuse the existing helpers so no logic is
+         duplicated and no information is lost. */ ""
+    }
+    ${this.generateCohortHeadline()}
+    ${this.identifyCareerRisks().length > 0 ? this.renderCareerRisks(this.identifyCareerRisks()) : ""}
+    ${this.renderBusinessImpactSection()}
+    ${this.renderPromotionReadinessSection()}
 
 </body>
 </html>
@@ -1052,17 +1290,17 @@ class ExecutiveSummaryGenerator {
     // ROUND-AWARE: canonical 19-point per-scenario scale (see calculateLEADRatios).
     // Divisor is 9 for Round 1 and 6 for Round 2.
     const benchmarks = {
-      leadership: 19,
-      excellence: 19,
-      agility: 19,
-      determination: 19,
+      leadership: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
+      excellence: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
+      agility: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
+      determination: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
     };
     const scenarioCount = this.getScenarioCount();
 
     return `
     <div class="section">
         <h2>LEAD Competency Breakdown — ${this.getRoundLabel()}</h2>
-        <p style="font-size: 9pt; color: #666; margin-top: 0;">${scenarioCount} scenarios played; per-dimension benchmark 19 points/scenario (cumulative target ${this.getCumulativeTarget()}).</p>
+        <p style="font-size: 9pt; color: #666; margin-top: 0;">${scenarioCount} scenarios played; per-dimension target 19 points/scenario (cumulative target ${this.getCumulativeTarget()}).</p>
 
         <div class="lead-grid">
             <div class="lead-dimension">
@@ -1087,7 +1325,7 @@ class ExecutiveSummaryGenerator {
             </div>
         </div>
 
-        <p><strong>Overall LEAD Quality:</strong> ${this.formatPercent(this.clampPercent(this.calculateAverageLEADRatio() * 100), 0)}% of benchmark</p>
+        <p><strong>Overall LEAD Quality:</strong> ${this.formatPercent(this.clampPercent(this.calculateAverageLEADRatio() * 100), 0)}% (${this.getCumulativeLeadScore()} / ${this.getCumulativeTarget()} target)</p>
     </div>
         `;
   }
@@ -1147,7 +1385,7 @@ class ExecutiveSummaryGenerator {
         <p><strong>Jung Personality Model Validation:</strong></p>
         <p>${jungAlignment}</p>
 
-        <p style="margin-top: 10px;"><strong>Goleman's Six Styles Validation:</strong></p>
+        <p style="margin-top: 10px;"><strong>Six Styles Validation by Goleman:</strong></p>
         <p>${golemanAlignment}</p>
 
         <p style="margin-top: 10px;"><strong>Self-Awareness Assessment:</strong></p>
@@ -1167,11 +1405,11 @@ class ExecutiveSummaryGenerator {
     const dominantPct = styles[dominantStyle];
 
     if (stylesUsed >= 5) {
-      return `OK: Strong alignment with Goleman's research - You demonstrated ${stylesUsed} different leadership styles (target: 4+). This suggests high contextual intelligence and adaptability, which Goleman identifies as key to leadership effectiveness.`;
+      return `OK: Strong alignment with research by Goleman - You demonstrated ${stylesUsed} different leadership styles (target: 4+). This suggests high contextual intelligence and adaptability, which Goleman identifies as key to leadership effectiveness.`;
     } else if (stylesUsed >= 3) {
-      return `WARNING: Moderate alignment with Goleman's research - You used ${stylesUsed} styles (target: 4+). Goleman's research shows leaders who master 4+ styles are more effective across diverse situations. Consider developing ${6 - stylesUsed} additional style(s).`;
+      return `WARNING: Moderate alignment with research by Goleman - You used ${stylesUsed} styles (target: 4+). Research by Goleman shows leaders who master 4+ styles are more effective across diverse situations. Consider developing ${6 - stylesUsed} additional style(s).`;
     } else {
-      return `GAP: Misalignment with Goleman's research - You primarily used ${stylesUsed} style(s), with ${dominantPct}% ${dominantStyle}. Goleman's HBR research demonstrates leaders with limited style repertoires struggle in complex environments. This is a critical development area.`;
+      return `GAP: Misalignment with research by Goleman - You primarily used ${stylesUsed} style(s), with ${dominantPct}% ${dominantStyle}. HBR research by Goleman demonstrates leaders with limited style repertoires struggle in complex environments. This is a critical development area.`;
     }
   }
 
@@ -1196,7 +1434,7 @@ class ExecutiveSummaryGenerator {
     const lowMatch = leadRatios[pattern.low] < 0.65;
 
     if (highMatch && lowMatch) {
-      return `OK: Strong Jung model alignment - Your ${jungColor} personality shows expected pattern: high ${pattern.high} (${(leadRatios[pattern.high] * 100).toFixed(0)}%), lower ${pattern.low} (${(leadRatios[pattern.low] * 100).toFixed(0)}%). This consistency suggests you're playing to natural strengths but may be over-indexed on comfort zone.`;
+      return `OK: Strong Jung model alignment - Your ${jungColor} personality shows expected pattern: high ${pattern.high} (${(leadRatios[pattern.high] * 100).toFixed(0)}%), lower ${pattern.low} (${(leadRatios[pattern.low] * 100).toFixed(0)}%). This consistency suggests you are playing to natural strengths but may be over-indexed on comfort zone.`;
     } else if (highMatch) {
       return `WARNING: Partial Jung alignment - Strong ${pattern.high} matches ${jungColor} profile, but ${pattern.low} higher than expected. You may have developed beyond natural temperament or assessment captured atypical performance. Consider: Is this your authentic style or adapting to role demands?`;
     } else {
@@ -1217,11 +1455,11 @@ class ExecutiveSummaryGenerator {
     const selfPct = actual[selfID] || 0;
 
     if (selfID === actualDominant) {
-      return `OK: Strong self-awareness - You identified as ${this.gameState.selfIdentifiedStyle} and used it ${selfPct}% (your dominant style). This self-perception/behavior alignment suggests you understand how others experience your leadership. Self-aware leaders are more coachable and develop faster.`;
+      return `OK: Strong self-awareness - You identified as ${this.gameState.selfIdentifiedStyle} and used it ${selfPct}% (your dominant style). This self-perception/behaviour alignment suggests you understand how others experience your leadership. Self-aware leaders are more coachable and develop faster.`;
     } else if (selfPct >= 25) {
-      return `WARNING: Moderate self-awareness gap - You identified as ${this.gameState.selfIdentifiedStyle} (${selfPct}% usage) but your dominant style was actually ${actualDominant} (${actual[actualDominant]}%). Small gap suggests minor blind spot - you may not fully recognize your behavioral patterns. Recommend 360 degree feedback to calibrate self-perception.`;
+      return `WARNING: Moderate self-awareness gap - You identified as ${this.gameState.selfIdentifiedStyle} (${selfPct}% usage) but your dominant style was actually ${actualDominant} (${actual[actualDominant]}%). Small gap suggests minor blind spot - you may not fully recognise your behavioural patterns. Recommend 360 degree feedback to calibrate self-perception.`;
     } else {
-      return `GAP: Significant self-awareness gap - You identified as ${this.gameState.selfIdentifiedStyle} but only used it ${selfPct}% of the time. Actual dominant style: ${actualDominant} (${actual[actualDominant]}%). This suggests you don't recognize how others experience your leadership. CRITICAL: Lack of self-awareness is #1 predictor of derailment in senior leaders. URGENTLY recommend 360 degree feedback and executive coaching.`;
+      return `GAP: Significant self-awareness gap - You identified as ${this.gameState.selfIdentifiedStyle} but only used it ${selfPct}% of the time. Actual dominant style: ${actualDominant} (${actual[actualDominant]}%). This suggests you do not recognise how others experience your leadership. CRITICAL: Lack of self-awareness is #1 predictor of derailment in senior leaders. URGENTLY recommend 360 degree feedback and executive coaching.`;
     }
   }
 
@@ -1294,7 +1532,7 @@ class ExecutiveSummaryGenerator {
     <div class="section">
         <h2>Round 1 vs Round 2 — Awareness Change</h2>
 
-        <p style="font-size: 9pt; color: #666; margin-top: 0;">Compares this player's Round 2 run against their most recent Round 1 record. Ratios are expressed against each round's own benchmark (Round 1: 9 scenarios / 171 cumulative; Round 2: 6 scenarios / 114 cumulative), so the deltas are like-for-like.</p>
+        <p style="font-size: 9pt; color: #666; margin-top: 0;">Compares the Round 2 run of this player against their most recent Round 1 record. Ratios are expressed against the target for each round (Round 1: 9 scenarios / 171 cumulative; Round 2: 6 scenarios / 114 cumulative), so the deltas are like-for-like.</p>
 
         <table>
             <tr>
@@ -1422,7 +1660,7 @@ class ExecutiveSummaryGenerator {
     const parts = [];
     if (adaptation && adaptation.weakestDimension) {
       parts.push(
-        `moved toward the weakest Round 1 LEAD dimension (${adaptation.weakestDimension})`,
+        `moved towards the weakest Round 1 LEAD dimension (${adaptation.weakestDimension})`,
       );
     }
     if (
@@ -1535,6 +1773,41 @@ class ExecutiveSummaryGenerator {
     return null;
   }
 
+  /**
+   * One-line course-impact headline for the 1-page executive summary. Returns
+   * an empty string when no reliable comparison exists (either side below
+   * minCohortSize), so existing reports render unchanged. Descriptive, not
+   * causal.
+   *
+   * @returns {string} HTML `<div class="section">` or "".
+   */
+  generateCohortHeadline() {
+    const byCohort = this.computeCohortStatsByCohort(this.getCohort());
+    const min = this.minCohortSize;
+    const course = byCohort.course;
+    const none = byCohort.none;
+    if (!course || !none || course.n < min || none.n < min) return "";
+
+    const leadDelta = (course.avgLEAD - none.avgLEAD) * 100;
+    const balanceDelta = none.maxStyle - course.maxStyle;
+    const y2025 = byCohort["2025"];
+    const y2026 = byCohort["2026"];
+
+    let yoyLine = "";
+    if (y2025 && y2026 && y2025.n >= min && y2026.n >= min) {
+      const yoy = (y2026.avgLEAD - y2025.avgLEAD) * 100;
+      yoyLine = ` 2026 vs 2025: ${yoy >= 0 ? "+" : ""}${yoy.toFixed(0)} LEAD.`;
+    }
+
+    return `
+    <div class="section">
+        <h2>LEAD Course Impact</h2>
+        <p><strong>Course participants average ${leadDelta >= 0 ? "+" : ""}${leadDelta.toFixed(0)} LEAD points vs non-participants</strong> (n=${course.n} vs n=${none.n}), with ${balanceDelta >= 0 ? "+" : ""}${balanceDelta.toFixed(0)} points better style balance.${yoyLine}</p>
+        <p style="font-size: 9pt; color: #666;"><em>This compares observed outcomes between groups; it does not by itself establish that the course caused the difference.</em></p>
+    </div>
+        `;
+  }
+
   generateComparisonToBenchmarks() {
     // Prefer REAL cohort figures derived from getCultureData(). Only when no
     // usable cohort exists do we fall back to clearly-labelled ILLUSTRATIVE
@@ -1568,13 +1841,25 @@ class ExecutiveSummaryGenerator {
       ? "Top Quartile (illustrative)"
       : "Top Quartile (illustrative)";
 
+    // LOW fix: mark every illustrative cell with an asterisk so no fabricated
+    // figure can be mistaken for a measured one, even when the footnote is
+    // skimmed or the table is copied out of context.
     const footnote = stats
-      ? `<em>Cohort column is derived from ${stats.n} recorded run(s) in this deployment (getCultureData). Industry and top-quartile columns are ILLUSTRATIVE reference figures drawn from leadership research (Goleman 2000; CCL 2022; DDI Global Leadership Forecast 2023) and are not measured from this cohort.</em>`
-      : `<em>No cohort data is available in this deployment, so ALL comparison figures below are ILLUSTRATIVE reference values drawn from leadership research (Goleman 2000; CCL 2022; DDI Global Leadership Forecast 2023). They are not measured from this cohort.</em>`;
+      ? `<em>* = ILLUSTRATIVE reference figure, not measured from this cohort. Cohort column is derived from ${stats.n} recorded run(s) in this deployment (getCultureData). Industry and top-quartile columns are drawn from leadership research (Goleman 2000; CCL 2022; DDI Global Leadership Forecast 2023).</em>`
+      : `<em>* = ILLUSTRATIVE reference figure. No cohort data is available in this deployment, so ALL comparison figures below are reference values drawn from leadership research (Goleman 2000; CCL 2022; DDI Global Leadership Forecast 2023). They are not measured from this cohort.</em>`;
+
+    // Body-level disclosure: stated prominently next to the figures, not only
+    // in the footnote, so an executive reading the table cannot mistake the
+    // benchmark values for measured external data.
+    const bodyDisclosure = stats
+      ? `<p><strong>Note on the benchmark values below:</strong> the Industry Benchmark and Top Quartile columns are illustrative reference points for this simulation. They are not drawn from an external dataset and are not measured from this cohort. The JCB Cohort Avg column is derived from the recorded runs in this deployment.</p>`
+      : `<p><strong>Note on the benchmark values below:</strong> every comparison figure in this table is an illustrative reference point for this simulation. None of these values are drawn from an external dataset, and none are measured from this cohort.</p>`;
 
     return `
     <div class="section">
         <h2>Comparison to Benchmarks</h2>
+
+        ${bodyDisclosure}
 
         <table>
             <tr>
@@ -1586,33 +1871,35 @@ class ExecutiveSummaryGenerator {
             </tr>
             <tr>
                 <td>Overall LEAD Quality</td>
-                <td>${(avgLEAD * 100).toFixed(0)}%</td>
-                <td>${cohortLead}</td>
-                <td>68%</td>
-                <td>82%</td>
+                <td>${this.formatPercent(this.clampPercent(avgLEAD * 100), 0)}%</td>
+                <td>${cohortLead}${stats ? "" : "*"}</td>
+                <td>68%*</td>
+                <td>82%*</td>
             </tr>
             <tr>
                 <td>Leadership (Style Variety)</td>
-                <td>${(leadRatios.leadership * 100).toFixed(0)}%</td>
-                <td>${cohortLeadership}</td>
-                <td>65%</td>
-                <td>85%</td>
+                <td>${this.formatPercent(this.clampPercent(leadRatios.leadership * 100), 0)}%</td>
+                <td>${cohortLeadership}${stats ? "" : "*"}</td>
+                <td>65%*</td>
+                <td>85%*</td>
             </tr>
             <tr>
                 <td>Excellence (Evidence-Based)</td>
-                <td>${(leadRatios.excellence * 100).toFixed(0)}%</td>
-                <td>${cohortExcellence}</td>
-                <td>72%</td>
-                <td>88%</td>
+                <td>${this.formatPercent(this.clampPercent(leadRatios.excellence * 100), 0)}%</td>
+                <td>${cohortExcellence}${stats ? "" : "*"}</td>
+                <td>72%*</td>
+                <td>88%*</td>
             </tr>
             <tr>
                 <td>Style Balance</td>
-                <td>${maxStyle}% max</td>
-                <td>${cohortBalance}</td>
-                <td>45% max</td>
-                <td>35% max</td>
+                <td>${this.formatPercent(this.clampPercent(maxStyle), 0)}% max</td>
+                <td>${cohortBalance}${stats ? "" : "*"}</td>
+                <td>45% max*</td>
+                <td>35% max*</td>
             </tr>
         </table>
+
+        <p style="font-size: 9pt; color: #666; margin-top: 10px;"><strong>Legend:</strong> an asterisk (*) marks an illustrative reference figure. It is a simulation reference point, not a measured value and not drawn from an external dataset.</p>
 
         <p style="font-size: 9pt; color: #666; margin-top: 10px;">${footnote}</p>
     </div>
@@ -1674,6 +1961,134 @@ class ExecutiveSummaryGenerator {
     };
   }
 
+  /**
+   * Group the already-filtered/anonymised cohort by LEAD course cohort and
+   * reuse computeCohortStats() per group. Blank / legacy / unexpected values
+   * are treated as "none" (non-participant). Mixed rounds compare like-for-like
+   * because computeCohortStats() derives ratios per record.
+   *
+   * @param {Array<Object>} cohort
+   * @returns {{"2025":?Object,"2026":?Object,none:?Object,course:?Object,
+   *            counts:{ "2025":number,"2026":number,none:number,course:number }}}
+   */
+  computeCohortStatsByCohort(cohort) {
+    const groups = { 2025: [], 2026: [], none: [] };
+    (Array.isArray(cohort) ? cohort : []).forEach((p) => {
+      const key = this.leadCohortOf(p) || "none";
+      if (groups[key]) groups[key].push(p);
+    });
+    const course = groups["2025"].concat(groups["2026"]);
+    return {
+      2025: this.computeCohortStats(groups["2025"]),
+      2026: this.computeCohortStats(groups["2026"]),
+      none: this.computeCohortStats(groups.none),
+      course: this.computeCohortStats(course),
+      counts: {
+        2025: groups["2025"].length,
+        2026: groups["2026"].length,
+        none: groups.none.length,
+        course: course.length,
+      },
+    };
+  }
+
+  /**
+   * Render the LEAD course cohort comparison section for the detailed appendix.
+   * Rows below minCohortSize are suppressed. The impact line is only shown when
+   * both sides meet the minimum. Descriptive, not causal.
+   *
+   * @returns {string} HTML `<div class="section">` (empty string when no cohort
+   *                   segment meets the minimum sample size).
+   */
+  generateCohortComparisonSection() {
+    const cohort = this.getCohort();
+    const byCohort = this.computeCohortStatsByCohort(cohort);
+    const min = this.minCohortSize;
+
+    const rows = [
+      { key: "2025", label: "2025 cohort", stats: byCohort["2025"] },
+      { key: "2026", label: "2026 cohort", stats: byCohort["2026"] },
+      { key: "none", label: "Non-participants", stats: byCohort.none },
+      {
+        key: "course",
+        label: "All course participants",
+        stats: byCohort.course,
+      },
+    ].filter((r) => r.stats && r.stats.n >= min);
+
+    // Backwards compatible: render nothing unless actual course data exists
+    // (a 2025/2026/course segment meets the minimum). An all-blank cohort would
+    // otherwise render a table containing only "Non-participants".
+    const hasCourseData = rows.some((r) => r.key !== "none");
+    if (rows.length === 0 || !hasCourseData) return "";
+
+    const pct = (v) => (v * 100).toFixed(0) + "%";
+    const body = rows
+      .map(
+        (r) => `
+            <tr>
+                <td>${r.label}</td>
+                <td>${r.stats.n}</td>
+                <td>${pct(r.stats.avgLEAD)}</td>
+                <td>${pct(r.stats.leadership)}</td>
+                <td>${pct(r.stats.excellence)}</td>
+                <td>${r.stats.maxStyle.toFixed(0)}% max</td>
+            </tr>`,
+      )
+      .join("");
+
+    // Impact line: course participants vs non-participants (headline), plus
+    // year-on-year when both course years meet the minimum.
+    let impact = "";
+    const course = byCohort.course;
+    const none = byCohort.none;
+    const y2025 = byCohort["2025"];
+    const y2026 = byCohort["2026"];
+    if (course && none && course.n >= min && none.n >= min) {
+      const leadDelta = (course.avgLEAD - none.avgLEAD) * 100;
+      const balanceDelta = none.maxStyle - course.maxStyle;
+      impact +=
+        `<p><strong>Course participants vs non-participants:</strong> ` +
+        `${leadDelta >= 0 ? "+" : ""}${leadDelta.toFixed(0)} LEAD, ` +
+        `${balanceDelta >= 0 ? "+" : ""}${balanceDelta.toFixed(0)} style balance ` +
+        `(n=${course.n} vs n=${none.n}).</p>`;
+    }
+    if (y2025 && y2026 && y2025.n >= min && y2026.n >= min) {
+      const yoy = (y2026.avgLEAD - y2025.avgLEAD) * 100;
+      impact +=
+        `<p><strong>2026 cohort vs 2025 cohort:</strong> ` +
+        `${yoy >= 0 ? "+" : ""}${yoy.toFixed(0)} LEAD ` +
+        `(n=${y2026.n} vs n=${y2025.n}).</p>`;
+    }
+    if (!impact) {
+      impact =
+        `<p><em>Insufficient data for a reliable comparison ` +
+        `(minimum ${min} leaders per cohort).</em></p>`;
+    }
+
+    return `
+    <div class="section">
+        <h2>LEAD Course Impact — Cohort Comparison</h2>
+
+        <table>
+            <tr>
+                <th>Cohort</th>
+                <th>Leaders</th>
+                <th>Overall LEAD</th>
+                <th>Leadership</th>
+                <th>Excellence</th>
+                <th>Style Balance</th>
+            </tr>
+            ${body}
+        </table>
+
+        ${impact}
+
+        <p style="font-size: 9pt; color: #666; margin-top: 10px;"><em>Cohorts with fewer than ${min} leaders are not shown. A blank cohort means the leader is not part of the LEAD course. This compares observed outcomes between groups; it does not by itself establish that the course caused the difference.</em></p>
+    </div>
+        `;
+  }
+
   generateDetailedActionPlan() {
     const actions = this.generateActionPlan();
 
@@ -1708,7 +2123,13 @@ class ExecutiveSummaryGenerator {
         `;
   }
 
-  // Method to save both files to a folder
+  // Method to save both files to a folder.
+  //
+  // Wired to the layered results writer (v2/RESULTS_PERSISTENCE_DESIGN.md §5):
+  // when a ResultsStore is available the generated report is persisted through
+  // the same feature-detected path as run records (server -> File System Access
+  // API -> download). The generated HTML is always returned so existing callers
+  // keep working unchanged.
   async saveToFolder(folderPath = "./player_reports") {
     // Preserve the round/prior-record context already resolved on this instance
     // so a re-generation from saveToFolder() stays round-aware.
@@ -1723,10 +2144,52 @@ class ExecutiveSummaryGenerator {
       },
     );
 
-    // In browser environment, trigger downloads
-    // In Node environment, could use fs.writeFile
+    // Persist the combined report through the layered writer when available.
+    // This is best-effort: a failure must never break report generation.
+    try {
+      const store = typeof window !== "undefined" ? window.ResultsStore : null;
+      if (store && typeof store.persistRun === "function") {
+        const name = (this.playerData && this.playerData.name) || "Player";
+        const cleanName =
+          String(name)
+            .replace(/[^a-z0-9]+/gi, "_")
+            .replace(/^_+|_+$/g, "")
+            .slice(0, 40) || "Player";
+        const reportRecord = {
+          schemaVersion: store.SCHEMA_VERSION,
+          runId:
+            "report_" +
+            Date.now().toString(36) +
+            "_" +
+            Math.random().toString(36).slice(2, 10),
+          machineId: store.getMachineId ? store.getMachineId() : "",
+          sessionId: store.getSessionId ? store.getSessionId() : "",
+          recordedAt: new Date().toISOString(),
+          timestamp: Date.now(),
+          appVersion: store.APP_VERSION,
+          kind: "executive-summary",
+          player: { name: name },
+          narrative: {
+            criticalImprovement: "",
+            feedback: "",
+            recommendations: [],
+          },
+          report: {
+            filename: report.filename,
+            round: report.round,
+            roundLabel: report.roundLabel,
+            html: report.combined || report.summary || "",
+          },
+        };
+        await store.persistRun(reportRecord);
+      }
+    } catch (e) {
+      // Non-fatal: the report HTML is still returned below.
+      if (typeof console !== "undefined") {
+        console.warn("saveToFolder: layered write skipped:", e);
+      }
+    }
 
-    // For now, return the HTML that can be saved
     return {
       summary: report.summary,
       detailed: report.detailed,

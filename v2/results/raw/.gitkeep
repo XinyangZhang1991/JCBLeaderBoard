@@ -1,0 +1,3 @@
+# Keeps results/raw/ in version control while it is empty.
+# One immutable JSON file per completed run is written here:
+#   run_<base36 timestamp>_<8-char random>.json

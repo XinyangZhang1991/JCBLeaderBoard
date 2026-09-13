@@ -1,0 +1,427 @@
+{
+  "runsPerPolicy": 1000,
+  "rounds": [
+    {
+      "round": 1,
+      "runsPerPolicy": 1000,
+      "results": [
+        {
+          "name": "SmartBalanced",
+          "runs": 1000,
+          "wins": 1000,
+          "losses": 0,
+          "winRate": 1,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 24.92650599140095,
+          "avgMorale": 95,
+          "avgAttrition": 5,
+          "avgCapability": 250,
+          "avgLeadRatio": 1.169590643274868,
+          "avgMaxStyle": 34,
+          "pathCounts": {
+            "Excellence": 1000,
+            "People": 1000,
+            "Balanced": 1000,
+            "Capability": 1000,
+            "Growth": 1000
+          }
+        },
+        {
+          "name": "RealisticBalanced",
+          "runs": 1000,
+          "wins": 483,
+          "losses": 517,
+          "winRate": 0.483,
+          "ci95": 0.030972403484392362,
+          "winRateStdDev": 0.49996095943680025,
+          "avgGrowth": 10.534067841973837,
+          "avgMorale": 90.84323959899638,
+          "avgAttrition": 5.0196520467836265,
+          "avgCapability": 250,
+          "avgLeadRatio": 0.9815277777777855,
+          "avgMaxStyle": 53,
+          "pathCounts": {
+            "none": 517,
+            "People": 483,
+            "Capability": 483,
+            "Excellence": 244
+          }
+        },
+        {
+          "name": "StrawmanBalanced (style-blind)",
+          "runs": 1000,
+          "wins": 213,
+          "losses": 787,
+          "winRate": 0.213,
+          "ci95": 0.0253765886123411,
+          "winRateStdDev": 0.4096325167742384,
+          "avgGrowth": 8.125424260425964,
+          "avgMorale": 63.990562632441446,
+          "avgAttrition": 11.748626431978797,
+          "avgCapability": 150.1285,
+          "avgLeadRatio": 0.5871812865497079,
+          "avgMaxStyle": 21.75,
+          "pathCounts": {
+            "Growth": 125,
+            "none": 787,
+            "Balanced": 167,
+            "Capability": 147,
+            "People": 89,
+            "Excellence": 12
+          }
+        },
+        {
+          "name": "Pure Democratic",
+          "runs": 1000,
+          "wins": 0,
+          "losses": 1000,
+          "winRate": 0,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 8.35651374522324,
+          "avgMorale": 94.99590643274632,
+          "avgAttrition": 5,
+          "avgCapability": 217,
+          "avgLeadRatio": 0.760233918128649,
+          "avgMaxStyle": 65,
+          "pathCounts": {
+            "none": 1000
+          }
+        },
+        {
+          "name": "Pure Pacesetting",
+          "runs": 1000,
+          "wins": 0,
+          "losses": 1000,
+          "winRate": 0,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 4.329524118914727,
+          "avgMorale": 0,
+          "avgAttrition": 76.28626857009783,
+          "avgCapability": 72.25,
+          "avgLeadRatio": 0.46783625730995093,
+          "avgMaxStyle": 60,
+          "pathCounts": {
+            "none": 1000
+          }
+        },
+        {
+          "name": "Coaching+Democratic",
+          "runs": 1000,
+          "wins": 1000,
+          "losses": 0,
+          "winRate": 1,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 11.953919100330937,
+          "avgMorale": 91.25683959899594,
+          "avgAttrition": 5,
+          "avgCapability": 250,
+          "avgLeadRatio": 1.0087719298245492,
+          "avgMaxStyle": 53,
+          "pathCounts": {
+            "People": 1000,
+            "Capability": 1000
+          }
+        },
+        {
+          "name": "Random",
+          "runs": 1000,
+          "wins": 262,
+          "losses": 738,
+          "winRate": 0.262,
+          "ci95": 0.027254291581327153,
+          "winRateStdDev": 0.43994266620726064,
+          "avgGrowth": 8.953645550057475,
+          "avgMorale": 55.550008913904485,
+          "avgAttrition": 14.155568732731455,
+          "avgCapability": 152.82425,
+          "avgLeadRatio": 0.6617777777777768,
+          "avgMaxStyle": 28.643,
+          "pathCounts": {
+            "none": 738,
+            "People": 165,
+            "Balanced": 200,
+            "Capability": 187,
+            "Growth": 163,
+            "Excellence": 76
+          }
+        },
+        {
+          "name": "Poor / One-dimensional",
+          "runs": 1000,
+          "wins": 0,
+          "losses": 1000,
+          "winRate": 0,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 4.960431220026365,
+          "avgMorale": 0,
+          "avgAttrition": 62.4002686615199,
+          "avgCapability": 80,
+          "avgLeadRatio": 0.5336257309941592,
+          "avgMaxStyle": 45,
+          "pathCounts": {
+            "none": 1000
+          }
+        }
+      ],
+      "ranked": [
+        {
+          "name": "SmartBalanced",
+          "winRate": 1
+        },
+        {
+          "name": "Coaching+Democratic",
+          "winRate": 1
+        },
+        {
+          "name": "RealisticBalanced",
+          "winRate": 0.483
+        },
+        {
+          "name": "Random",
+          "winRate": 0.262
+        },
+        {
+          "name": "StrawmanBalanced (style-blind)",
+          "winRate": 0.213
+        },
+        {
+          "name": "Pure Democratic",
+          "winRate": 0
+        },
+        {
+          "name": "Pure Pacesetting",
+          "winRate": 0
+        },
+        {
+          "name": "Poor / One-dimensional",
+          "winRate": 0
+        }
+      ],
+      "checks": {
+        "balancedNearTop": true,
+        "poorIsWorst": true,
+        "oneDimensionalHarder": true,
+        "poorMateriallyBelow": true,
+        "differentiated": true,
+        "randomMidPack": true,
+        "correctedBeatsStrawman": true
+      },
+      "allPass": true
+    },
+    {
+      "round": 2,
+      "runsPerPolicy": 1000,
+      "results": [
+        {
+          "name": "SmartBalanced",
+          "runs": 1000,
+          "wins": 1000,
+          "losses": 0,
+          "winRate": 1,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 26.438745225564173,
+          "avgMorale": 95,
+          "avgAttrition": 5,
+          "avgCapability": 250,
+          "avgLeadRatio": 1.6688596491228345,
+          "avgMaxStyle": 36,
+          "pathCounts": {
+            "Excellence": 1000,
+            "People": 1000,
+            "Balanced": 1000,
+            "Capability": 1000,
+            "Growth": 1000
+          }
+        },
+        {
+          "name": "RealisticBalanced",
+          "runs": 1000,
+          "wins": 1000,
+          "losses": 0,
+          "winRate": 1,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 21.778624868420852,
+          "avgMorale": 95,
+          "avgAttrition": 5,
+          "avgCapability": 250,
+          "avgLeadRatio": 1.2763157894736832,
+          "avgMaxStyle": 100,
+          "pathCounts": {
+            "People": 1000,
+            "Growth": 1000
+          }
+        },
+        {
+          "name": "StrawmanBalanced (style-blind)",
+          "runs": 1000,
+          "wins": 126,
+          "losses": 874,
+          "winRate": 0.126,
+          "ci95": 0.02056823663807863,
+          "winRateStdDev": 0.3320154126456125,
+          "avgGrowth": 6.281614278775059,
+          "avgMorale": 94.01865573310407,
+          "avgAttrition": 5.695588115646555,
+          "avgCapability": 185.4185,
+          "avgLeadRatio": 1.111087719298245,
+          "avgMaxStyle": 21.506,
+          "pathCounts": {
+            "none": 874,
+            "Growth": 117,
+            "Excellence": 53,
+            "People": 55,
+            "Balanced": 55,
+            "Capability": 52
+          }
+        },
+        {
+          "name": "Pure Democratic",
+          "runs": 1000,
+          "wins": 0,
+          "losses": 1000,
+          "winRate": 0,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 1.0516673684210427,
+          "avgMorale": 95,
+          "avgAttrition": 5,
+          "avgCapability": 243.25,
+          "avgLeadRatio": 1.627192982456122,
+          "avgMaxStyle": 88,
+          "pathCounts": {
+            "none": 1000
+          }
+        },
+        {
+          "name": "Pure Pacesetting",
+          "runs": 1000,
+          "wins": 0,
+          "losses": 1000,
+          "winRate": 0,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 0.30859083333333437,
+          "avgMorale": 0,
+          "avgAttrition": 66.3803861024045,
+          "avgCapability": 110.75,
+          "avgLeadRatio": 0.5307017543859702,
+          "avgMaxStyle": 59,
+          "pathCounts": {
+            "none": 1000
+          }
+        },
+        {
+          "name": "Coaching+Democratic",
+          "runs": 1000,
+          "wins": 1000,
+          "losses": 0,
+          "winRate": 1,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 21.778624868420852,
+          "avgMorale": 95,
+          "avgAttrition": 5,
+          "avgCapability": 250,
+          "avgLeadRatio": 1.2763157894736832,
+          "avgMaxStyle": 100,
+          "pathCounts": {
+            "People": 1000,
+            "Growth": 1000
+          }
+        },
+        {
+          "name": "Random",
+          "runs": 1000,
+          "wins": 313,
+          "losses": 687,
+          "winRate": 0.313,
+          "ci95": 0.028741313289409726,
+          "winRateStdDev": 0.4639463829433844,
+          "avgGrowth": 9.693926483501313,
+          "avgMorale": 67.89860897313008,
+          "avgAttrition": 13.676774640658039,
+          "avgCapability": 181.33475,
+          "avgLeadRatio": 1.2123179824561385,
+          "avgMaxStyle": 34.795,
+          "pathCounts": {
+            "Growth": 263,
+            "none": 687,
+            "Excellence": 153,
+            "People": 174,
+            "Balanced": 164,
+            "Capability": 172
+          }
+        },
+        {
+          "name": "Poor / One-dimensional",
+          "runs": 1000,
+          "wins": 0,
+          "losses": 1000,
+          "winRate": 0,
+          "ci95": 0,
+          "winRateStdDev": 0,
+          "avgGrowth": 0.12766978070175217,
+          "avgMorale": 0,
+          "avgAttrition": 68.21282008606865,
+          "avgCapability": 95.5,
+          "avgLeadRatio": 0.4276315789473584,
+          "avgMaxStyle": 59,
+          "pathCounts": {
+            "none": 1000
+          }
+        }
+      ],
+      "ranked": [
+        {
+          "name": "SmartBalanced",
+          "winRate": 1
+        },
+        {
+          "name": "RealisticBalanced",
+          "winRate": 1
+        },
+        {
+          "name": "Coaching+Democratic",
+          "winRate": 1
+        },
+        {
+          "name": "Random",
+          "winRate": 0.313
+        },
+        {
+          "name": "StrawmanBalanced (style-blind)",
+          "winRate": 0.126
+        },
+        {
+          "name": "Pure Democratic",
+          "winRate": 0
+        },
+        {
+          "name": "Pure Pacesetting",
+          "winRate": 0
+        },
+        {
+          "name": "Poor / One-dimensional",
+          "winRate": 0
+        }
+      ],
+      "checks": {
+        "balancedNearTop": true,
+        "poorIsWorst": true,
+        "oneDimensionalHarder": true,
+        "poorMateriallyBelow": true,
+        "differentiated": true,
+        "randomMidPack": true,
+        "correctedBeatsStrawman": true
+      },
+      "allPass": true
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+# Keeps results/archive/ in version control while it is empty.
+# Optional: processed source folders can be moved here after a merge.

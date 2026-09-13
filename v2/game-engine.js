@@ -6,6 +6,18 @@
 // in use (0.4, 0.5, 0.25) so the full allocation is always reachable.
 const SLIDER_SCALE = 20;
 
+// BUGFIX (B7): single dev flag for the engine's diagnostic logging, matching
+// the flag defined in app.js. Enable with ?debug=1 in the URL or by setting
+// window.__JCB_DEBUG__ = true before the scripts run. When false, every
+// console.log below is suppressed so the live demo console stays quiet.
+// console.error / console.warn are deliberately NOT gated.
+const DEBUG_ENABLED =
+  (typeof window !== "undefined" &&
+    (window.__JCB_DEBUG__ === true ||
+      (window.location &&
+        /[?&]debug=1(?:&|$)/.test(window.location.search)))) ||
+  false;
+
 class GameEngine {
   constructor() {
     this.state = {
@@ -14,6 +26,7 @@ class GameEngine {
       seniority: "",
       selfIdentifiedStyle: "",
       consentGiven: false,
+      consentCapturedAt: null,
       currentScenario: 0,
       round: 1,
 
@@ -53,7 +66,7 @@ class GameEngine {
 
       // Timing
       startTime: null,
-      timeRemaining: 600, // 10 minutes in seconds (9 scenarios, ~60s each)
+      timeRemaining: 900, // 15 minutes in seconds (9 scenarios, ~100s each)
       timerInterval: null,
 
       // Submission control
@@ -72,13 +85,54 @@ class GameEngine {
   }
 
   init() {
-    console.log("JCB Leadership in Action initialized");
+    if (DEBUG_ENABLED) console.log("JCB Leadership in Action initialized");
     this.loadLeaderboard();
     this.showScreen("welcome-screen");
   }
 
+  // Strict total-order comparator shared with tools/merge-results.js so the
+  // live leaderboard matches the merged leaderboard exactly.
+  //   growth DESC, leadTotal DESC, timestamp ASC, runId ASC
+  // Falls back to a local implementation when ResultsStore is unavailable.
+  compareLeaderboardRecords(a, b) {
+    if (
+      typeof window !== "undefined" &&
+      window.ResultsStore &&
+      typeof window.ResultsStore.compareRecords === "function"
+    ) {
+      return window.ResultsStore.compareRecords(a, b);
+    }
+    const growthA = Number(a && a.growth) || 0;
+    const growthB = Number(b && b.growth) || 0;
+    if (growthB !== growthA) return growthB - growthA;
+    const leadTotal = (r) =>
+      (Number(r && r.leadership) || 0) +
+      (Number(r && r.excellence) || 0) +
+      (Number(r && r.agility) || 0) +
+      (Number(r && r.determination) || 0);
+    const la = leadTotal(a);
+    const lb = leadTotal(b);
+    if (lb !== la) return lb - la;
+    const ta = Number(a && a.timestamp) || 0;
+    const tb = Number(b && b.timestamp) || 0;
+    if (ta !== tb) return ta - tb;
+    const ra = String((a && a.runId) || "");
+    const rb = String((b && b.runId) || "");
+    if (ra < rb) return -1;
+    if (ra > rb) return 1;
+    return 0;
+  }
+
   loadLeaderboard() {
-    const leaderboardData = this.getLeaderboardData();
+    // Issue 1: consent is applied at DISPLAY time only. The cache retains all
+    // runs; this view filters to publicly displayable records (legacy rows with
+    // no consent object are grandfathered as displayable).
+    //
+    // BUGFIX (#7): the cache now persists the FULL sorted list, so the top-10
+    // slice must happen HERE, at render time. Previously the cache itself was
+    // truncated to 10 on write, which silently dropped any run that did not
+    // crack the top 10 (e.g. a returning player's lower-scoring new run).
+    const leaderboardData = this.getDisplayableLeaderboard().slice(0, 10);
     const container = document.getElementById("leaderboard-container");
 
     if (!container) return;
@@ -156,14 +210,115 @@ class GameEngine {
       .join("");
   }
 
+  // ------------------------------------------------------------------
+  // Consent & segmentation predicates
+  //
+  // Thin wrappers over the shared ResultsStore helpers so the browser and the
+  // Node merge tool apply EXACTLY the same rules. Each falls back to a local
+  // implementation when ResultsStore is unavailable (e.g. a bare file:// load
+  // that failed to include results-store.js).
+  // ------------------------------------------------------------------
+
+  // Display-time consent predicate.
+  //
+  // Delegates to the shared ResultsStore helper so the browser and the Node
+  // merge tool apply EXACTLY the same rule. Fail-safe: a missing/legacy
+  // consent object means NOT publicly displayable. The local fallback mirrors
+  // the canonical ResultsStore.isPubliclyDisplayable() behaviour.
+  isPubliclyDisplayable(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.isPubliclyDisplayable === "function") {
+      return store.isPubliclyDisplayable(record);
+    }
+    return !!(
+      record &&
+      record.consent &&
+      record.consent.publicDisplay === true
+    );
+  }
+
+  hasJcbBusinessFunction(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.hasJcbBusinessFunction === "function") {
+      return store.hasJcbBusinessFunction(record);
+    }
+    const fn = record && record.jobFunction;
+    return (
+      [
+        "Engineering",
+        "Manufacturing",
+        "Commercial",
+        "Finance",
+        "Human Resources",
+        "Operations",
+        "Product Development",
+        "Marketing",
+        "IT / Digital",
+      ].indexOf(fn) !== -1
+    );
+  }
+
+  isCultureEligible(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.isCultureEligible === "function") {
+      return store.isCultureEligible(record);
+    }
+    return this.hasJcbBusinessFunction(record);
+  }
+
+  // LEAD course cohort predicate. Delegates to the shared ResultsStore helper
+  // when available; falls back to a local canonical-values-only implementation.
+  leadCohortOf(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.leadCohortOf === "function") {
+      return store.leadCohortOf(record);
+    }
+    if (!record) return "";
+    const raw =
+      record.player && typeof record.player === "object"
+        ? record.player.leadCohort
+        : record.leadCohort;
+    const v = raw === null || raw === undefined ? "" : String(raw).trim();
+    return v === "2025" || v === "2026" ? v : "";
+  }
+
+  anonymiseForCulture(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.anonymiseForCulture === "function") {
+      return store.anonymiseForCulture(record);
+    }
+    if (!record) return record;
+    const clone = JSON.parse(JSON.stringify(record));
+    if (!this.isPubliclyDisplayable(clone)) {
+      clone.name = "Anonymous";
+      clone.anonymised = true;
+    }
+    return clone;
+  }
+
+  // Raw cached leaderboard rows (ALL runs, regardless of consent).
+  //
+  // Issue 1: the consent filter was moved OUT of this read path and into the
+  // display path (loadLeaderboard / getDisplayableLeaderboard). The cache must
+  // RETAIN every run so it stays transferable; only rendering is gated.
   getLeaderboardData() {
     try {
       const data = localStorage.getItem("jcb_leaderboard");
-      return data ? JSON.parse(data) : [];
+      const parsed = data ? JSON.parse(data) : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed;
     } catch (e) {
       console.error("Error loading leaderboard:", e);
       return [];
     }
+  }
+
+  // Display-time view of the leaderboard: applies the consent predicate to the
+  // raw cache. Non-consenting runs are retained in the cache but hidden here.
+  getDisplayableLeaderboard() {
+    return this.getLeaderboardData().filter((r) =>
+      this.isPubliclyDisplayable(r),
+    );
   }
 
   // Full cohort of every player who has completed the game.
@@ -182,6 +337,25 @@ class GameEngine {
       return data ? JSON.parse(data) : [];
     } catch (e) {
       console.error("Error loading culture data:", e);
+      return [];
+    }
+  }
+
+  // Culture/executive-analysis view of the cohort:
+  //   1. keep only records with a valid JCB business function
+  //      (isCultureEligible) - non-JCB players are excluded entirely;
+  //   2. anonymise every non-consenting record (anonymiseForCulture) so
+  //      declined-consent JCB players are included but not identifiable.
+  // getCultureData() still returns the RAW cohort for admin/export use.
+  getCultureDataForAnalysis() {
+    try {
+      const cohort = this.getCultureData();
+      if (!Array.isArray(cohort)) return [];
+      return cohort
+        .filter((r) => this.isCultureEligible(r))
+        .map((r) => this.anonymiseForCulture(r));
+    } catch (e) {
+      console.error("Error building culture analysis data:", e);
       return [];
     }
   }
@@ -288,35 +462,200 @@ class GameEngine {
         localStorage.setItem("jcb_culture_data", JSON.stringify(cohort));
       }
 
-      // 2. Maintain the top-10 display leaderboard (also idempotent)
+      // 2. Maintain the top-10 display leaderboard (also idempotent).
+      //    Issue 1: cache ALL runs regardless of consent so the scoreboard
+      //    RETAINS information and stays transferable. The consent gate is
+      //    applied at DISPLAY time only (loadLeaderboard / getDisplayableLeaderboard).
+      const displayable = this.isPubliclyDisplayable(playerData);
       const leaderboard = this.getLeaderboardData();
       if (!leaderboard.some((p) => p.runId === playerData.runId)) {
         leaderboard.push(playerData);
       }
 
-      // Sort by growth percentage (descending)
-      leaderboard.sort((a, b) => b.growth - a.growth);
+      // Sort using the SAME strict total order as tools/merge-results.js so the
+      // live leaderboard is deterministic and matches the merged leaderboard.
+      leaderboard.sort((a, b) => this.compareLeaderboardRecords(a, b));
 
-      // Keep only top 10 for display
-      const top10 = leaderboard.slice(0, 10);
-
-      localStorage.setItem("jcb_leaderboard", JSON.stringify(top10));
+      // BUGFIX (#7): persist the FULL sorted list, not a top-10 slice. The
+      // top-10 limit is a DISPLAY concern and is applied at render time in
+      // loadLeaderboard(). Truncating here silently dropped any run that did
+      // not crack the top 10, so a returning player's new run could be saved
+      // (and publicly displayable) yet never appear on the scoreboard.
+      localStorage.setItem("jcb_leaderboard", JSON.stringify(leaderboard));
 
       // 3. Report the player's placement for the results-screen reveal.
-      //    Rank is computed against the FULL cohort so it is always truthful,
-      //    even when the player falls outside the displayed top 10.
-      const sortedCohort = [...cohort].sort((a, b) => b.growth - a.growth);
-      const rank =
-        sortedCohort.findIndex((p) => p.runId === playerData.runId) + 1;
+      //    Rank is computed ONLY against publicly displayable records, so a
+      //    non-consenting player never consumes a rank slot invisibly. A
+      //    non-consenting player gets a hidden placement (rank: null).
+      const publicCohort = cohort.filter((p) => this.isPubliclyDisplayable(p));
+      const sortedPublic = [...publicCohort].sort((a, b) =>
+        this.compareLeaderboardRecords(a, b),
+      );
+      const rank = displayable
+        ? sortedPublic.findIndex((p) => p.runId === playerData.runId) + 1
+        : 0;
+      // 4. ALSO write the run to the portable results folder via the layered
+      //    strategy (server -> File System Access API -> download). This is
+      //    fire-and-forget: localStorage above remains the local cache and the
+      //    game must never block or fail because a file write is unavailable.
+      this.persistRunToResultsFolder(playerData);
+
       return {
         rank: rank > 0 ? rank : null,
-        total: cohort.length,
+        total: publicCohort.length,
         inTop10: rank > 0 && rank <= 10,
+        hidden: !displayable,
       };
     } catch (e) {
       console.error("Error saving to leaderboard:", e);
       return null;
     }
+  }
+
+  // Persist a completed run to the portable results folder using the layered
+  // write path defined in v2/RESULTS_PERSISTENCE_DESIGN.md §5. Never throws.
+  // Returns a Promise resolving to the layer descriptor, or null when the
+  // ResultsStore module is unavailable.
+  persistRunToResultsFolder(playerData) {
+    try {
+      const store = typeof window !== "undefined" ? window.ResultsStore : null;
+      if (!store || typeof store.recordAndPersist !== "function") {
+        return null;
+      }
+      return store
+        .recordAndPersist(playerData)
+        .then((out) => {
+          if (out && out.result && out.result.ok) {
+            if (DEBUG_ENABLED)
+              console.log(
+                "Results folder write via layer: " + out.result.layer,
+              );
+          }
+          return out;
+        })
+        .catch((e) => {
+          console.warn("Results folder write failed (non-fatal):", e);
+          return null;
+        });
+    } catch (e) {
+      console.warn("Results folder write failed (non-fatal):", e);
+      return null;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Migration UI (design doc §8, Option D)
+  // Export the existing localStorage cohort to a JSON file and import a
+  // results file back in, so historical data is never lost.
+  // ------------------------------------------------------------------
+
+  // Export the full localStorage cohort as a portable JSON file. The payload
+  // is a { schemaVersion, exportedAt, recordCount, records: [...] } wrapper in
+  // the canonical schema, so it can be fed straight to the merge tool.
+  exportResults() {
+    try {
+      const store = typeof window !== "undefined" ? window.ResultsStore : null;
+      const cohort = this.getCultureData();
+      if (!cohort || cohort.length === 0) {
+        alert("No results to export yet.");
+        return;
+      }
+
+      const records = store ? store.normaliseMany(cohort) : cohort;
+
+      const payload = {
+        schemaVersion: store ? store.SCHEMA_VERSION : 1,
+        exportedAt: new Date().toISOString(),
+        recordCount: records.length,
+        records: records,
+      };
+
+      const date = new Date().toISOString().slice(0, 10);
+      const filename = "jcb_cohort_export_" + date + ".json";
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      this._downloadBlob(blob, filename);
+      if (DEBUG_ENABLED)
+        console.log("Exported " + records.length + " records to " + filename);
+    } catch (e) {
+      console.error("Error exporting results:", e);
+      alert("Could not export results: " + e.message);
+    }
+  }
+
+  // Import a results file (canonical cohort wrapper, a flat array, or a single
+  // run record) and merge it into the localStorage cache. De-duplicates by
+  // runId (legacy fallback timestamp|name) so re-importing is safe.
+  importResults(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        const store =
+          typeof window !== "undefined" ? window.ResultsStore : null;
+        const incoming = store
+          ? store.normaliseMany(parsed)
+          : Array.isArray(parsed)
+            ? parsed
+            : parsed && Array.isArray(parsed.records)
+              ? parsed.records
+              : [parsed];
+
+        if (!incoming || incoming.length === 0) {
+          alert("No records found in that file.");
+          return;
+        }
+
+        const cohort = this.getCultureData();
+        const seen = new Set(
+          cohort.map((p) => (p && p.runId ? p.runId : this.legacyRecordKey(p))),
+        );
+
+        let added = 0;
+        incoming.forEach((rec) => {
+          const flat = store ? store.canonicalToFlat(rec) : rec;
+          const key = flat.runId ? flat.runId : this.legacyRecordKey(flat);
+          if (seen.has(key)) return;
+          seen.add(key);
+          cohort.push(flat);
+          added++;
+        });
+
+        localStorage.setItem("jcb_culture_data", JSON.stringify(cohort));
+
+        // Rebuild the leaderboard cache with the shared comparator.
+        // BUGFIX (B2): persist the FULL sorted list, consistent with
+        // saveToLeaderboard(). The top-10 limit is a DISPLAY concern applied
+        // at render time in loadLeaderboard(); truncating here silently
+        // dropped any imported run outside the top 10 from the cache.
+        const sorted = [...cohort].sort((a, b) =>
+          this.compareLeaderboardRecords(a, b),
+        );
+        localStorage.setItem("jcb_leaderboard", JSON.stringify(sorted));
+
+        this.loadLeaderboard();
+        alert(
+          "Imported " +
+            added +
+            " new record(s). " +
+            cohort.length +
+            " total in the local cohort.",
+        );
+      } catch (e) {
+        console.error("Error importing results:", e);
+        alert("Could not import results: " + e.message);
+      }
+    };
+    reader.onerror = () => alert("Could not read that file.");
+    reader.readAsText(file);
+  }
+
+  // Wire the hidden file input used by the Import button.
+  triggerImportResults() {
+    const input = document.getElementById("import-results-input");
+    if (input) input.click();
   }
 
   showScreen(screenId) {
@@ -327,9 +666,9 @@ class GameEngine {
   }
 
   startRegistration() {
-    console.log("startRegistration called");
+    if (DEBUG_ENABLED) console.log("startRegistration called");
     this.showScreen("registration-screen");
-    console.log("registration screen should now be visible");
+    if (DEBUG_ENABLED) console.log("registration screen should now be visible");
   }
 
   selectLeadershipStyle(style) {
@@ -359,7 +698,17 @@ class GameEngine {
     const nameInput = document.getElementById("player-name");
     const functionInput = document.getElementById("player-function");
     const seniorityInput = document.getElementById("player-seniority");
+    const cohortInput = document.getElementById("player-cohort");
     const consentCheckbox = document.getElementById("consent-checkbox");
+
+    // BUGFIX (#7 latent hazard): capture consent FIRST, before any validation
+    // early-return. Previously consentGiven was only assigned after all the
+    // validation checks, so any early return (e.g. the returning-player branch
+    // below) left it at its default `false`, which flowed to
+    // `consent.publicDisplay:false` and silently hid the run. Capturing it here
+    // guarantees every path that reaches the game has the player's real choice.
+    this.state.consentGiven = !!(consentCheckbox && consentCheckbox.checked);
+    this.state.consentCapturedAt = new Date().toISOString();
 
     if (!nameInput.value.trim()) {
       alert("Please enter your name");
@@ -381,15 +730,14 @@ class GameEngine {
       return;
     }
 
-    if (!consentCheckbox.checked) {
-      alert("Please consent to public results display");
-      return;
-    }
-
+    // Consent is NON-BLOCKING: a player who does not consent can still play.
+    // The value only controls whether the run appears on the public
+    // scoreboard (see saveToLeaderboard / getLeaderboardData). Default false.
     this.state.playerName = nameInput.value.trim();
     this.state.jobFunction = functionInput.value;
     this.state.seniority = seniorityInput.value;
-    this.state.consentGiven = true;
+    // #1: optional LEAD course cohort (2025 / 2026 / blank).
+    this.state.leadCohort = cohortInput ? cohortInput.value : "";
 
     // Returning-player detection: if this name matches a previous completed
     // run, offer the choice of replaying Round 1 or advancing to Round 2.
@@ -524,7 +872,7 @@ class GameEngine {
 
     // Timing
     this.state.startTime = null;
-    this.state.timeRemaining = 600;
+    this.state.timeRemaining = 900;
     if (this.state.timerInterval) {
       clearInterval(this.state.timerInterval);
       this.state.timerInterval = null;
@@ -596,8 +944,37 @@ class GameEngine {
     this.startBriefing();
   }
 
+  // Applies the correct briefing narrative and heading for the given round.
+  // Round 1 shows #briefing-round1, Round 2 shows #briefing-round2.
+  // Guards against missing elements so it never throws.
+  _applyBriefingForRound(round) {
+    const round1 = document.querySelector("#briefing-round1");
+    const round2 = document.querySelector("#briefing-round2");
+
+    // If either container is absent, do nothing rather than throwing.
+    if (!round1 || !round2) {
+      return;
+    }
+
+    // Default to Round 1 when the round is undefined or not 2.
+    const isRound2 = round === 2;
+
+    round1.style.display = isRound2 ? "none" : "block";
+    round2.style.display = isRound2 ? "block" : "none";
+
+    const heading = document.querySelector("#briefing-heading");
+    if (heading) {
+      heading.textContent = isRound2
+        ? "ROUND 2 MISSION BRIEFING"
+        : "MISSION BRIEFING";
+    }
+  }
+
   startBriefing() {
     this.showScreen("briefing-screen");
+
+    // Show the briefing narrative that matches the current round.
+    this._applyBriefingForRound(this.state.round || 1);
 
     // Start countdown
     let countdown = 90;
@@ -723,7 +1100,8 @@ class GameEngine {
   // Flash a metric value and show a floating +/- delta chip.
   // For attrition, a decrease is good (green) and an increase is bad (red).
   animateMetricDelta(elementId, delta, unit, decimals) {
-    if (!delta || Math.abs(delta) < 0.05) return;
+    // Issue 2: only suppress TRUE zero so small fractional deltas still show.
+    if (!delta || Math.abs(delta) < 0.005) return;
 
     const el = document.getElementById(elementId);
     if (!el) return;
@@ -742,7 +1120,9 @@ class GameEngine {
     // Floating chip
     const chip = document.createElement("span");
     chip.className = `metric-delta-chip ${cls}`;
-    chip.textContent = `${sign}${delta.toFixed(decimals)}${unit}`;
+    // Issue 2: render at 1 decimal (matching the impact card) so a +0.4 delta
+    // shows as "+0.4" rather than rounding to "0".
+    chip.textContent = `${sign}${delta.toFixed(1)}${unit}`;
     el.parentElement.style.position = "relative";
     el.parentElement.appendChild(chip);
 
@@ -751,7 +1131,9 @@ class GameEngine {
   }
 
   animateMoraleDelta(delta) {
-    if (!delta || Math.abs(delta) < 0.5) return;
+    // Issue 2: stop suppressing morale chips below 0.5 so small morale moves
+    // are still surfaced to the player.
+    if (!delta || Math.abs(delta) < 0.005) return;
 
     const bar = document.getElementById("morale-bar");
     if (!bar) return;
@@ -766,7 +1148,7 @@ class GameEngine {
 
     const chip = document.createElement("span");
     chip.className = `metric-delta-chip ${cls}`;
-    chip.textContent = `${sign}${delta.toFixed(0)}%`;
+    chip.textContent = `${sign}${delta.toFixed(1)}%`;
     bar.parentElement.style.position = "relative";
     bar.parentElement.appendChild(chip);
 
@@ -821,7 +1203,7 @@ class GameEngine {
         state.attrition >= attritionThreshold
       ) {
         // Poor performance - keep original crisis scenario but make it clear
-        scenario.description = `Your top-performing regional sales manager just resigned, citing "unsustainable pressure and lack of support." Two other high-performers are rumored to be interviewing elsewhere. Team attrition is now at ${Math.round(state.attrition)}% (healthy is <10%) and morale is ${Math.round(state.morale)}% (concerning). You've hit ${state.growth.toFixed(1)}% growth but at what cost? An anonymous employee survey reveals burnout and feeling undervalued.`;
+        scenario.description = `Your top-performing regional sales manager just resigned, citing "unsustainable pressure and lack of support." Two other high-performers are rumoured to be interviewing elsewhere. Team attrition is now at ${Math.round(state.attrition)}% (healthy is <10%) and morale is ${Math.round(state.morale)}% (concerning). You have hit ${state.growth.toFixed(1)}% growth, but at what cost? An anonymous employee survey reveals burnout and a sense of being undervalued.`;
       } else {
         // Mixed performance - moderate scenario
         scenario.description = `A valued regional sales manager has resigned, citing work-life balance concerns. While team morale (${Math.round(state.morale)}%) and attrition (${Math.round(state.attrition)}%) are in acceptable ranges, this departure has raised questions about your leadership approach. How do you respond?`;
@@ -832,7 +1214,7 @@ class GameEngine {
     if (scenario.id === "difficult_conversation") {
       if (state.morale >= 75) {
         // High morale - make it about coaching excellence, not crisis
-        scenario.description = `Your team is thriving overall (morale: ${Math.round(state.morale)}%). However, one senior team member (20 years at JCB) is underperforming at 25% below target for two quarters. They're respected and well-liked, but their team's morale is starting to drop. This is about elevating performance, not damage control.`;
+        scenario.description = `Your team is thriving overall (morale: ${Math.round(state.morale)}%). However, one senior team member (20 years at JCB) is underperforming at 25% below target for two quarters. They are respected and well-liked, but the morale of their team is starting to drop.`;
       } else if (state.morale < 60) {
         // Low morale - make it a symptom of broader issues
         scenario.description = `Your team morale is at ${Math.round(state.morale)}%, and now a senior team member (20 years at JCB) is underperforming at 25% below target. Others wonder if this is a sign of broader problems. This conversation could be a turning point - will you address only the individual, or the systemic issues?`;
@@ -843,22 +1225,22 @@ class GameEngine {
     if (scenario.id === "ambiguous_signal") {
       if (state.growth > 15) {
         // Strong growth - frame as maintaining momentum
-        scenario.description = `Despite strong growth of ${state.growth.toFixed(1)}%, your sales team reports that customer sentiment is "changing" but can't pinpoint why. Sales velocity has slowed 8% month-over-month. You need to address this before it impacts your momentum.
+        scenario.description = `Despite strong growth of ${state.growth.toFixed(1)}%, your sales team reports that customer sentiment is "changing" but the team cannot pinpoint why. Sales velocity has slowed 8% month-over-month. You need to address this before it impacts your momentum.
 
-**Sales Director:** "Competitor launched new hydraulic feature we don't have"
+**Sales Director:** "A competitor launched a new hydraulic feature we do not have"
 **Finance Director:** "Economic uncertainty making buyers delay decisions"
-**Your gut:** "Our team's approach has gone stale - we're not listening to customers"
+**Your gut:** "The approach of our team has gone stale - we are not listening to customers"
 
 Data is incomplete and contradictory. Your CFO demands immediate action. Your strategy lead wants 3 weeks to research properly.`;
       } else if (state.growth < 10) {
         // Poor growth - frame as critical pivot point
-        scenario.description = `Your growth is only ${state.growth.toFixed(1)}%, well below target, and now customer sentiment is "changing." Sales velocity has slowed another 8%. You can't afford to get this wrong.
+        scenario.description = `Your growth is only ${state.growth.toFixed(1)}%, well below target, and now customer sentiment is "changing." Sales velocity has slowed another 8%. You cannot afford to get this wrong.
 
-**Sales Director:** "Competitor launched new hydraulic feature we don't have"
+**Sales Director:** "A competitor launched a new hydraulic feature we do not have"
 **Finance Director:** "Economic uncertainty making buyers delay decisions"
-**Your gut:** "Our team's approach has gone stale - we're not listening to customers"
+**Your gut:** "The approach of our team has gone stale - we are not listening to customers"
 
-Data is incomplete. Every week of delay costs £50K in lost sales. What do you do?`;
+Data is incomplete. Every week of delay costs £5K in lost sales. What do you do?`;
       }
     }
 
@@ -866,12 +1248,12 @@ Data is incomplete. Every week of delay costs £50K in lost sales. What do you d
     if (scenario.id === "competitor_threat") {
       if (state.growth > 15) {
         // Strong growth - competitor targets YOUR success
-        scenario.description = `You've achieved strong ${state.growth.toFixed(1)}% growth, which has drawn competitive attention. A major competitor just announced aggressive price cuts (15% below JCB) and exclusive dealer incentives. They're specifically targeting YOUR top accounts.
+        scenario.description = `You have achieved strong ${state.growth.toFixed(1)}% growth, which has drawn competitive attention. A major competitor just announced price cuts (15% below JCB) and exclusive dealer incentives. They are specifically targeting your top accounts.
 
 Your Board wants immediate response. You have £400K to allocate. How do you defend your position?`;
       } else if (state.growth < 10) {
         // Poor growth - you're already vulnerable
-        scenario.description = `Your growth is struggling at ${state.growth.toFixed(1)}%, and now a major competitor announces aggressive price cuts (15% below JCB) and exclusive dealer incentives. You're already behind - this could be devastating.
+        scenario.description = `Your growth is struggling at ${state.growth.toFixed(1)}%, and now a major competitor announces aggressive price cuts (15% below JCB) and exclusive dealer incentives. You are already behind - this could be devastating.
 
 Your Board is concerned. You have £400K to allocate. How do you respond?`;
       }
@@ -881,9 +1263,9 @@ Your Board is concerned. You have £400K to allocate. How do you respond?`;
     if (scenario.id === "innovation_gamble") {
       if (state.morale > 75 && state.attrition < 10) {
         // Strong team - ready for bold moves
-        scenario.description = `Your energized team (morale: ${Math.round(state.morale)}%, attrition: ${Math.round(state.attrition)}%) has developed a revolutionary hydraulic innovation 9 months ahead of schedule. Market testing shows 40% efficiency gain - unprecedented. Board is thrilled but cautious.
+        scenario.description = `Your energized team (morale: ${Math.round(state.morale)}%, attrition: ${Math.round(state.attrition)}%) has developed a revolutionary hydraulic innovation 9 months ahead of schedule. Market testing shows 40% efficiency gain - unprecedented. The Board is thrilled but cautious.
 
-**Engineering:** "Ready now - we've tested it thoroughly"
+**Engineering:** "Ready now - we have tested it thoroughly"
 **Sales:** "Dealers want it immediately"
 **Manufacturing:** "12-week delay gives us time to scale properly"
 **CFO:** "Early launch = £500K revenue this year, delayed launch = £250K risk if competitor beats us"
@@ -893,10 +1275,10 @@ Your team has the energy for a sprint. When do you launch?`;
         // Exhausted team - risky to push them
         scenario.description = `Your exhausted team (morale: ${Math.round(state.morale)}%, attrition: ${Math.round(state.attrition)}%) has developed a hydraulic innovation that shows promise. Market testing suggests strong potential, but your people are burned out.
 
-**Engineering:** "We can rush it, but we're stretched thin"
+**Engineering:** "We can rush it, but we are stretched thin"
 **Sales:** "Dealers want it, but honestly, our team needs a break"
 **Manufacturing:** "We NEED 12 weeks to do this right and not kill our people"
-**CFO:** "Early launch = £500K revenue this year, but if we break the team, what's next year worth?"
+**CFO:** "Early launch = £500K revenue this year, but if we break the team, what is next year worth?"
 
 Your team is fragile. When do you launch?`;
       }
@@ -915,9 +1297,9 @@ Your team is fragile. When do you launch?`;
 
       if (aggressiveCount >= 2) {
         // Pattern of pressure - make that explicit
-        scenario.description = `After months of aggressive targets and pressure to deliver (growth: ${state.growth.toFixed(1)}%), a forklift operator at your Leicester depot suffered serious injuries loading equipment. Initial investigation suggests corners were cut to meet deadlines. HSE is investigating.
+        scenario.description = `After months of aggressive targets and pressure to deliver (growth: ${state.growth.toFixed(1)}%), a forklift driver in the factory suffered serious injuries loading equipment. Initial investigation suggests corners were cut to meet deadlines. HSE is investigating.
 
-Your team is shaken. Some privately wonder if the relentless pace you set contributed to this. What's your response?`;
+Your team is shaken. Some privately wonder if the relentless pace you set contributed to this. What is your response?`;
       }
     }
   }
@@ -930,7 +1312,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     }
 
     if (scenarioIndex >= this.scenarios.length) {
-      console.log("All scenarios complete, ending game");
+      if (DEBUG_ENABLED) console.log("All scenarios complete, ending game");
       this.endGame();
       return;
     }
@@ -944,7 +1326,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // Adapt scenario based on current game state
     this.adaptScenarioToState(scenario);
 
-    console.log("Loading scenario:", scenario.id);
+    if (DEBUG_ENABLED) console.log("Loading scenario:", scenario.id);
 
     // Scroll to top of scenario container
     const scenarioContainer = document.getElementById("scenario-container");
@@ -968,6 +1350,15 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     this.initScenarioInteractions(scenario);
   }
 
+  // Issue 3: scenario descriptions contain literal Markdown emphasis (`**x**`)
+  // but are injected via innerHTML with no Markdown renderer, so the asterisks
+  // leaked into the UI. This single formatter converts `**x**` -> `<strong>x</strong>`
+  // so every current and future occurrence renders cleanly.
+  formatInlineMarkdown(text) {
+    if (typeof text !== "string") return text;
+    return text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  }
+
   renderScenario(scenario) {
     return `
             <div class="scenario-header">
@@ -979,7 +1370,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 <div class="jcb-logo-small"></div>
                 <h4>SCENARIO BRIEFING</h4>
                 <div class="scenario-brief-text">
-                    <p>${scenario.description}</p>
+                    <p>${this.formatInlineMarkdown(scenario.description)}</p>
                 </div>
             </div>
 
@@ -1047,7 +1438,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   // instead of rounding £250K up to a misleading "£0.3M".
   formatMoney(millions) {
     const value = Number(millions) || 0;
-    if (value > 0 && value < 1) {
+    if (value < 1) {
       return `£${Math.round(value * 1000)}K`;
     }
     return `£${value.toFixed(1)}M`;
@@ -1061,13 +1452,14 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                     <div class="slider-label">
                         <span class="slider-name">${slider.label}</span>
                         <span class="slider-value" id="slider-value-${decisionIndex}-${i}">
-                            £0M
+                            ${this.formatMoney(0)}
                         </span>
                     </div>
                     <input type="range"
                            class="slider"
                            min="0"
                            max="${slider.max * SLIDER_SCALE}"
+                           step="${(slider.step || 1 / SLIDER_SCALE) * SLIDER_SCALE}"
                            value="0"
                            data-decision="${decisionIndex}"
                            data-slider="${i}"
@@ -1175,9 +1567,18 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       });
 
       // If this change would exceed the budget, prevent it. The tolerance is
-      // half a slider step so floating-point noise never blocks a legal move,
-      // while still rejecting any genuine overspend.
-      const tolerance = 0.5 / SLIDER_SCALE;
+      // half the MOVED slider's own step so floating-point noise never blocks a
+      // legal move, while still rejecting any genuine overspend.
+      //
+      // TOLERANCE FIX: this previously used the global default step (1/20 =
+      // £50K), i.e. a £25K tolerance. On a fine-grained slider (the £5K-step
+      // celebration slider) that tolerance exceeded the slider's entire £10K
+      // range, so the clamp never engaged and the budget could be overspent by
+      // up to £25K. Deriving the tolerance from the moved slider's own step
+      // keeps it proportional to the granularity actually in play.
+      const movedStep =
+        (decision.sliders[sliderIndex].step || 1 / SLIDER_SCALE) * SLIDER_SCALE;
+      const tolerance = movedStep / 2 / SLIDER_SCALE;
       if (total > budgetLimit + tolerance) {
         // Clamp the moved slider to the exact maximum allowed at this
         // granularity. Because SLIDER_SCALE divides every budget evenly,
@@ -1186,9 +1587,21 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         const currentSlider = sliders[sliderIndex];
         const maxAllowed =
           budgetLimit - (total - parseFloat(value) / SLIDER_SCALE);
-        // The tiny epsilon absorbs floating-point error (e.g. 0.5 - 0.3)
-        // so a legal step is never floored away.
-        currentSlider.value = Math.floor(maxAllowed * SLIDER_SCALE + 1e-9);
+        // Snap the clamped value to the slider's own step so fractional steps
+        // (e.g. a £5K step on a £10K-capped slider) land on a reachable value.
+        // The tiny epsilon absorbs floating-point error (e.g. 0.5 - 0.3) so a
+        // legal step is never floored away.
+        //
+        // UNIT FIX: `maxAllowed` is expressed in £ millions while `step` is in
+        // native slider units (0..max*SLIDER_SCALE). Dividing millions by a
+        // native step collapsed the clamp to 0 for every sub-£1M budget (i.e.
+        // always), so an overspend snapped the slider to zero instead of the
+        // largest reachable value. Convert maxAllowed to native units first.
+        const step =
+          (decision.sliders[sliderIndex].step || 1 / SLIDER_SCALE) *
+          SLIDER_SCALE;
+        currentSlider.value =
+          Math.floor((maxAllowed * SLIDER_SCALE) / step + 1e-9) * step;
         value = currentSlider.value;
       }
     }
@@ -1357,7 +1770,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       selected.push(index);
     });
 
-    console.log("Selected info requests:", selected);
+    if (DEBUG_ENABLED) console.log("Selected info requests:", selected);
 
     if (selected.length === 0) {
       alert("Please select at least one information source.");
@@ -1365,7 +1778,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     }
 
     const scenario = this.scenarios[this.state.currentScenario];
-    console.log("Current scenario:", scenario.title);
+    if (DEBUG_ENABLED) console.log("Current scenario:", scenario.title);
 
     this.state.infoRequests.push({
       scenario: this.state.currentScenario,
@@ -1377,7 +1790,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       '<h3>ADDITIONAL INFORMATION</h3><div style="text-align: left;">';
     selected.forEach((index) => {
       const info = scenario.additionalInfo[index];
-      console.log("Showing info:", info.label, info.content);
+      if (DEBUG_ENABLED) console.log("Showing info:", info.label, info.content);
       infoContent += `
                 <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 203, 0, 0.1); border-left: 3px solid var(--jcb-yellow);">
                     <h4 style="color: var(--jcb-yellow); margin-bottom: 10px;">${info.label}</h4>
@@ -1398,7 +1811,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             </div>
         `;
 
-    console.log("Info modal updated with content");
+    if (DEBUG_ENABLED) console.log("Info modal updated with content");
   }
 
   closeInfoModal() {
@@ -1412,34 +1825,39 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   submitDecision() {
     // Prevent multiple submissions
     if (this.state.isSubmitting) {
-      console.log("Submission already in progress, ignoring duplicate click");
+      if (DEBUG_ENABLED)
+        console.log("Submission already in progress, ignoring duplicate click");
       return;
     }
 
     const scenario = this.scenarios[this.state.currentScenario];
 
-    console.log("Submit button clicked for scenario:", scenario.id);
-    console.log("Scenario decisions count:", scenario.decisions.length);
+    if (DEBUG_ENABLED)
+      console.log("Submit button clicked for scenario:", scenario.id);
+    if (DEBUG_ENABLED)
+      console.log("Scenario decisions count:", scenario.decisions.length);
 
     // Validate all decisions have been made
     if (!this.validateAllDecisionsMade(scenario)) {
-      console.log("Validation failed: Not all decisions made");
+      if (DEBUG_ENABLED)
+        console.log("Validation failed: Not all decisions made");
       alert("Please make all decisions before continuing.");
       return;
     }
 
-    console.log("All decisions validated successfully");
+    if (DEBUG_ENABLED) console.log("All decisions validated successfully");
 
     // Validate budget constraints before submitting
     if (!this.validateBudgetConstraints(scenario)) {
-      console.log("Validation failed: Budget constraint exceeded");
+      if (DEBUG_ENABLED)
+        console.log("Validation failed: Budget constraint exceeded");
       alert(
         "You have exceeded the allocated budget. Please adjust your spending allocation.",
       );
       return;
     }
 
-    console.log("Budget constraints validated successfully");
+    if (DEBUG_ENABLED) console.log("Budget constraints validated successfully");
 
     // Underspend feedback: never block submission, but let the player know
     // money is still on the table so they can choose to allocate it.
@@ -1449,9 +1867,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         `You have ${this.formatMoney(underspend)} unallocated. Submit anyway?`,
       );
       if (!proceed) {
-        console.log(
-          "Submission cancelled: player chose to allocate remaining budget",
-        );
+        if (DEBUG_ENABLED)
+          console.log(
+            "Submission cancelled: player chose to allocate remaining budget",
+          );
         return;
       }
     }
@@ -1502,9 +1921,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     ) {
       const decision = scenario.decisions[decisionIndex];
 
-      console.log(
-        `Checking decision ${decisionIndex}: ${decision.title}, type: ${decision.type}`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `Checking decision ${decisionIndex}: ${decision.title}, type: ${decision.type}`,
+        );
 
       switch (decision.type) {
         case "choice":
@@ -1512,27 +1932,32 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             `.choice-option.selected[data-decision="${decisionIndex}"]`,
           );
           if (!selected) {
-            console.log(
-              `Decision ${decisionIndex} (${decision.title}) - NO SELECTION FOUND`,
-            );
+            if (DEBUG_ENABLED)
+              console.log(
+                `Decision ${decisionIndex} (${decision.title}) - NO SELECTION FOUND`,
+              );
             return false;
           }
-          console.log(`Decision ${decisionIndex} - Choice selected`);
+          if (DEBUG_ENABLED)
+            console.log(`Decision ${decisionIndex} - Choice selected`);
           break;
 
         case "slider":
           // Sliders have default values, so they're always "made"
-          console.log(`Decision ${decisionIndex} - Slider (auto-valid)`);
+          if (DEBUG_ENABLED)
+            console.log(`Decision ${decisionIndex} - Slider (auto-valid)`);
           break;
 
         case "ranking":
           // Rankings are pre-populated, so they're always "made"
-          console.log(`Decision ${decisionIndex} - Ranking (auto-valid)`);
+          if (DEBUG_ENABLED)
+            console.log(`Decision ${decisionIndex} - Ranking (auto-valid)`);
           break;
 
         case "timeline":
           // Timeline sliders have default values, so they're always "made"
-          console.log(`Decision ${decisionIndex} - Timeline (auto-valid)`);
+          if (DEBUG_ENABLED)
+            console.log(`Decision ${decisionIndex} - Timeline (auto-valid)`);
           break;
       }
     }
@@ -1594,9 +2019,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
         const budgetLimit = decision.sliders[0].budgetConstraint;
 
-        console.log(
-          `Budget validation - Decision ${decisionIndex}: total = ${total.toFixed(2)}, limit = ${budgetLimit}`,
-        );
+        if (DEBUG_ENABLED)
+          console.log(
+            `Budget validation - Decision ${decisionIndex}: total = ${total.toFixed(2)}, limit = ${budgetLimit}`,
+          );
 
         // Allow half a slider step of margin for floating point errors.
         // Overspend beyond that is still rejected.
@@ -1672,9 +2098,13 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
           const timeline = document.querySelector(
             `input.slider[data-decision="${index}"]`,
           );
+          // BUGFIX (B1): guard against a missing timeline element, consistent
+          // with the `choice` case above. Without this, a null dereference
+          // threw a TypeError and aborted submitDecision(), stranding the
+          // player mid-scenario. 0 is the sensible default timeline position.
           data.choices.push({
             type: "timeline",
-            value: parseInt(timeline.value),
+            value: timeline ? parseInt(timeline.value) : 0,
           });
           break;
       }
@@ -1773,9 +2203,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
           (this.state.attrition - 8) * 0.8,
         );
         this.state.morale -= attritionMoralePenalty;
-        console.log(
-          `High attrition (${this.state.attrition.toFixed(0)}%) reduced morale by ${attritionMoralePenalty}%`,
-        );
+        if (DEBUG_ENABLED)
+          console.log(
+            `High attrition (${this.state.attrition.toFixed(0)}%) reduced morale by ${attritionMoralePenalty}%`,
+          );
       }
 
       // Similarly, very high morale should reduce attrition somewhat
@@ -1784,9 +2215,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       if (this.state.morale > 75 && this.state.attrition > 0) {
         const moraleRetentionBonus = Math.floor((this.state.morale - 75) * 0.1);
         this.state.attrition -= moraleRetentionBonus;
-        console.log(
-          `High morale (${this.state.morale.toFixed(0)}%) reduced attrition by ${moraleRetentionBonus}%`,
-        );
+        if (DEBUG_ENABLED)
+          console.log(
+            `High morale (${this.state.morale.toFixed(0)}%) reduced attrition by ${moraleRetentionBonus}%`,
+          );
       }
 
       // MORALE DRIFT: Teams naturally regress toward a baseline culture over time.
@@ -1801,9 +2233,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
           Math.round((this.state.morale - moraleBaseline) * 0.08),
         );
         this.state.morale -= drift;
-        console.log(
-          `Morale drift toward baseline ${moraleBaseline}: -${drift} (now ${this.state.morale.toFixed(0)})`,
-        );
+        if (DEBUG_ENABLED)
+          console.log(
+            `Morale drift toward baseline ${moraleBaseline}: -${drift} (now ${this.state.morale.toFixed(0)})`,
+          );
       }
 
       // PROFIT MARGIN REALISM: Link to attrition, morale, and growth
@@ -1811,27 +2244,30 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       if (this.state.attrition > 15) {
         const attritionProfitPenalty = (this.state.attrition - 15) * 0.3;
         this.state.profitMargin -= attritionProfitPenalty;
-        console.log(
-          `High attrition (${this.state.attrition.toFixed(0)}%) reduced profit margin by ${attritionProfitPenalty.toFixed(1)}%`,
-        );
+        if (DEBUG_ENABLED)
+          console.log(
+            `High attrition (${this.state.attrition.toFixed(0)}%) reduced profit margin by ${attritionProfitPenalty.toFixed(1)}%`,
+          );
       }
 
       // Low morale reduces productivity and profit
       if (this.state.morale < 60) {
         const moraleProfitPenalty = (60 - this.state.morale) * 0.2;
         this.state.profitMargin -= moraleProfitPenalty;
-        console.log(
-          `Low morale (${this.state.morale.toFixed(0)}%) reduced profit margin by ${moraleProfitPenalty.toFixed(1)}%`,
-        );
+        if (DEBUG_ENABLED)
+          console.log(
+            `Low morale (${this.state.morale.toFixed(0)}%) reduced profit margin by ${moraleProfitPenalty.toFixed(1)}%`,
+          );
       }
 
       // High growth can improve profit margin (economies of scale)
       if (this.state.growth > 25) {
         const growthProfitBonus = (this.state.growth - 25) * 0.15;
         this.state.profitMargin += growthProfitBonus;
-        console.log(
-          `High growth (${this.state.growth.toFixed(1)}%) improved profit margin by ${growthProfitBonus.toFixed(1)}%`,
-        );
+        if (DEBUG_ENABLED)
+          console.log(
+            `High growth (${this.state.growth.toFixed(1)}%) improved profit margin by ${growthProfitBonus.toFixed(1)}%`,
+          );
       }
 
       // Update leadership style tracking
@@ -1862,6 +2298,45 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       this.state.agility += impact.agility || 0;
       this.state.determination += impact.determination || 0;
 
+      // BALANCE TUNING (PART B): one-dimensional leadership is unsustainable.
+      // A leader who leans on a single Goleman style for most of the run builds
+      // a brittle culture: the team has no repertoire to draw on when the
+      // situation changes. We model this as a small, compounding morale drag
+      // and attrition creep once a single style dominates the profile.
+      // This is deliberately gentle per-decision (it accumulates over the run)
+      // so it tunes rather than rewrites the existing behaviour.
+      if (impact.leadershipStyles) {
+        const styleTotal = Object.values(this.state.leadershipStyles).reduce(
+          (sum, v) => sum + v,
+          0,
+        );
+        if (styleTotal > 0) {
+          const dominantShare =
+            Math.max(...Object.values(this.state.leadershipStyles)) /
+            styleTotal;
+          // Only bite once one style exceeds the canonical "balanced" ceiling.
+          const balanceCeiling =
+            typeof LEAD_CONSTANTS !== "undefined" &&
+            LEAD_CONSTANTS.isBalancedMax
+              ? LEAD_CONSTANTS.isBalancedMax / 100
+              : 0.6;
+          if (dominantShare > balanceCeiling) {
+            const overConcentration = dominantShare - balanceCeiling;
+            // Up to ~0.8 morale and ~0.6 attrition per decision at extreme
+            // concentration (100% one style). Small enough to preserve the
+            // existing feel, large enough to matter across 9 scenarios.
+            const concentrationMoraleDrag = overConcentration * 8;
+            const concentrationAttritionCreep = overConcentration * 6;
+            this.state.morale -= concentrationMoraleDrag;
+            this.state.attrition += concentrationAttritionCreep;
+            if (DEBUG_ENABLED)
+              console.log(
+                `⚖️ One-dimensional style concentration (${(dominantShare * 100).toFixed(0)}% single style): -${concentrationMoraleDrag.toFixed(1)} morale, +${concentrationAttritionCreep.toFixed(1)} attrition`,
+              );
+          }
+        }
+      }
+
       // CRITICAL FIX #2: Handle Delayed Payoffs
       // Strategic investments (R&D, dealer relationships) tracked for future benefit
       if (impact.delayedGrowth) {
@@ -1884,9 +2359,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             amount: delayedAmount,
             triggerScenario: delayedTrigger,
           });
-          console.log(
-            `📅 Delayed growth payoff scheduled: +${delayedAmount}% growth at scenario ${delayedTrigger}`,
-          );
+          if (DEBUG_ENABLED)
+            console.log(
+              `📅 Delayed growth payoff scheduled: +${delayedAmount}% growth at scenario ${delayedTrigger}`,
+            );
         } else {
           console.warn(
             "⚠️ Ignored invalid delayed growth payoff (NaN or non-positive):",
@@ -1907,9 +2383,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
           0,
         );
         this.state.growth += totalDelayedGrowth;
-        console.log(
-          `✅ STRATEGIC INVESTMENT PAYOFF: +${totalDelayedGrowth.toFixed(1)}% growth from prior R&D/dealer investments`,
-        );
+        if (DEBUG_ENABLED)
+          console.log(
+            `✅ STRATEGIC INVESTMENT PAYOFF: +${totalDelayedGrowth.toFixed(1)}% growth from prior R&D/dealer investments`,
+          );
 
         // Remove applied payoffs
         this.state.delayedGrowthPayoffs =
@@ -1958,10 +2435,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // the "poor LEAD" penalties almost unreachable and the bonuses fire too easily,
     // so the in-game multipliers disagreed with the win conditions.
     const benchmarks = {
-      leadership: 19,
-      excellence: 19,
-      agility: 19,
-      determination: 19,
+      leadership: LEAD_CONSTANTS.benchmarkPerScenario,
+      excellence: LEAD_CONSTANTS.benchmarkPerScenario,
+      agility: LEAD_CONSTANTS.benchmarkPerScenario,
+      determination: LEAD_CONSTANTS.benchmarkPerScenario,
     };
     // Round-aware divisor: Round 1 plays 9 scenarios, Round 2 plays 6. Using 9
     // for a Round 2 run would deflate every LEAD ratio by ~33% and mis-fire the
@@ -1984,58 +2461,116 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         leadRatios.determination) /
       4;
 
-    console.log("=== LEAD MULTIPLIERS & PENALTIES ===");
-    console.log(
-      `Leadership ratio: ${leadRatios.leadership.toFixed(2)} (${(this.state.leadership / avgScenarios).toFixed(0)} vs ${benchmarks.leadership})`,
-    );
-    console.log(
-      `Excellence ratio: ${leadRatios.excellence.toFixed(2)} (${(this.state.excellence / avgScenarios).toFixed(0)} vs ${benchmarks.excellence})`,
-    );
-    console.log(
-      `Agility ratio: ${leadRatios.agility.toFixed(2)} (${(this.state.agility / avgScenarios).toFixed(0)} vs ${benchmarks.agility})`,
-    );
-    console.log(
-      `Determination ratio: ${leadRatios.determination.toFixed(2)} (${(this.state.determination / avgScenarios).toFixed(0)} vs ${benchmarks.determination})`,
-    );
-    console.log(`Average LEAD quality: ${avgLEADRatio.toFixed(2)}`);
+    if (DEBUG_ENABLED) {
+      console.log("=== LEAD MULTIPLIERS & PENALTIES ===");
+      console.log(
+        `Leadership ratio: ${leadRatios.leadership.toFixed(2)} (${(this.state.leadership / avgScenarios).toFixed(0)} vs ${benchmarks.leadership})`,
+      );
+      console.log(
+        `Excellence ratio: ${leadRatios.excellence.toFixed(2)} (${(this.state.excellence / avgScenarios).toFixed(0)} vs ${benchmarks.excellence})`,
+      );
+      console.log(
+        `Agility ratio: ${leadRatios.agility.toFixed(2)} (${(this.state.agility / avgScenarios).toFixed(0)} vs ${benchmarks.agility})`,
+      );
+      console.log(
+        `Determination ratio: ${leadRatios.determination.toFixed(2)} (${(this.state.determination / avgScenarios).toFixed(0)} vs ${benchmarks.determination})`,
+      );
+      console.log(`Average LEAD quality: ${avgLEADRatio.toFixed(2)}`);
+    }
 
     // BONUSES: Apply LEAD-based multipliers to business outcomes
     // UPDATED 2026-05-17: Reduced by 75% to ensure realistic outcomes
 
     // 1. DETERMINATION drives GROWTH (determined leaders push for results)
     if (leadRatios.determination > 0.8) {
-      const determinationBonus = (leadRatios.determination - 0.8) * 2; // REDUCED from 8 to 2 (max +2% growth)
+      const determinationBonus = (leadRatios.determination - 0.8) * 1; // CALIBRATED: max +1% growth (was +2%)
       this.state.growth += determinationBonus;
-      console.log(
-        `✅ Determination bonus: +${determinationBonus.toFixed(1)}% growth`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `✅ Determination bonus: +${determinationBonus.toFixed(1)}% growth`,
+        );
     }
 
     // 2. LEADERSHIP quality improves MORALE (people follow great leaders)
     if (leadRatios.leadership > 0.8) {
-      const leadershipMoraleBonus = (leadRatios.leadership - 0.8) * 3; // REDUCED from 10 to 3 (max +3% morale)
+      const leadershipMoraleBonus = (leadRatios.leadership - 0.8) * 1.5; // CALIBRATED: max +1.5% morale (was +3%)
       this.state.morale += leadershipMoraleBonus;
-      console.log(
-        `✅ Leadership morale bonus: +${leadershipMoraleBonus.toFixed(1)}% morale`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `✅ Leadership morale bonus: +${leadershipMoraleBonus.toFixed(1)}% morale`,
+        );
     }
 
     // 3. EXCELLENCE reduces ATTRITION (good decision-making retains talent)
     if (leadRatios.excellence > 0.8) {
-      const excellenceRetention = (leadRatios.excellence - 0.8) * 2; // REDUCED from 5 to 2 (max -2% attrition)
+      const excellenceRetention = (leadRatios.excellence - 0.8) * 1; // CALIBRATED: max -1% attrition (was -2%)
       this.state.attrition -= excellenceRetention;
-      console.log(
-        `✅ Excellence retention: -${excellenceRetention.toFixed(1)}% attrition`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `✅ Excellence retention: -${excellenceRetention.toFixed(1)}% attrition`,
+        );
     }
 
     // 4. AGILITY improves PROFIT MARGIN (adaptability optimizes operations)
     if (leadRatios.agility > 0.8) {
-      const agilityProfitBonus = (leadRatios.agility - 0.8) * 1; // REDUCED from 3 to 1 (max +1% profit margin)
+      const agilityProfitBonus = (leadRatios.agility - 0.8) * 0.5; // CALIBRATED: max +0.5% profit margin (was +1%)
       this.state.profitMargin += agilityProfitBonus;
-      console.log(
-        `✅ Agility profit bonus: +${agilityProfitBonus.toFixed(1)}% profit margin`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `✅ Agility profit bonus: +${agilityProfitBonus.toFixed(1)}% profit margin`,
+        );
+    }
+
+    // BALANCE TUNING (PART B): reward genuine balance, penalise one-dimensional
+    // leadership. The four LEAD dimensions are the strategic expression of a
+    // leader's repertoire; when they are all developed, the leader can flex to
+    // the situation and the culture compounds. When one dimension is starved
+    // (a "one-trick" leader), the culture is brittle and the business suffers.
+    //
+    // We measure balance as the spread of the four LEAD ratios: the closer the
+    // weakest dimension is to the strongest, the more balanced the leader.
+    // balanceRatio = min(ratios) / max(ratios)  → 1.0 = perfectly balanced.
+    const ratioValues = [
+      leadRatios.leadership,
+      leadRatios.excellence,
+      leadRatios.agility,
+      leadRatios.determination,
+    ];
+    const maxRatio = Math.max(...ratioValues);
+    const minRatio = Math.min(...ratioValues);
+    const balanceRatio = maxRatio > 0 ? minRatio / maxRatio : 0;
+
+    // Only reward balance when the leader is actually performing (avg >= 0.5),
+    // so a uniformly weak leader does not get a balance bonus for being
+    // consistently poor.
+    if (avgLEADRatio >= 0.5 && balanceRatio >= 0.6) {
+      // CALIBRATED: up to +1% growth and +1% morale for a fully balanced,
+      // high-performing leader (halved from +2%/+2%).
+      const balanceStrength = (balanceRatio - 0.6) / 0.4; // 0..1
+      const balanceGrowthBonus = balanceStrength * 1;
+      const balanceMoraleBonus = balanceStrength * 1;
+      this.state.growth += balanceGrowthBonus;
+      this.state.morale += balanceMoraleBonus;
+      if (DEBUG_ENABLED)
+        console.log(
+          `✅ Balanced leadership bonus (spread ${(balanceRatio * 100).toFixed(0)}%): +${balanceGrowthBonus.toFixed(1)}% growth, +${balanceMoraleBonus.toFixed(1)}% morale`,
+        );
+    }
+
+    // One-dimensional penalty: a leader whose weakest dimension is far below
+    // their strongest (balanceRatio < 0.4) is relying on a single strength.
+    // This is the "one-dimensional play is harder" requirement — it bites via
+    // morale and attrition, not just a score deduction.
+    if (maxRatio > 0 && balanceRatio < 0.4) {
+      const imbalance = 0.4 - balanceRatio; // 0..0.4
+      const imbalanceMoralePenalty = imbalance * 20; // up to -8 morale
+      const imbalanceAttritionPenalty = imbalance * 15; // up to +6 attrition
+      this.state.morale -= imbalanceMoralePenalty;
+      this.state.attrition += imbalanceAttritionPenalty;
+      if (DEBUG_ENABLED)
+        console.log(
+          `❌ One-dimensional leadership penalty (spread ${(balanceRatio * 100).toFixed(0)}%): -${imbalanceMoralePenalty.toFixed(1)} morale, +${imbalanceAttritionPenalty.toFixed(1)} attrition`,
+        );
     }
 
     // NEW: PENALTIES for poor LEAD quality (enforcement mechanism)
@@ -2045,64 +2580,74 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       // Poor leadership quality causes compounding problems
       const leadDeficit = 0.5 - avgLEADRatio; // How far below 50% of benchmark
 
-      console.log(
-        `⚠️ LOW LEAD QUALITY DETECTED (${(avgLEADRatio * 100).toFixed(0)}% of benchmark)`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `⚠️ LOW LEAD QUALITY DETECTED (${(avgLEADRatio * 100).toFixed(0)}% of benchmark)`,
+        );
 
       // Penalty 1: Attrition increases (poor leadership drives talent away)
       const attritionPenalty = leadDeficit * 12; // Up to +6% attrition if LEAD ratio is 0
       this.state.attrition += attritionPenalty;
-      console.log(
-        `❌ Poor leadership attrition penalty: +${attritionPenalty.toFixed(1)}% attrition`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `❌ Poor leadership attrition penalty: +${attritionPenalty.toFixed(1)}% attrition`,
+        );
 
       // Penalty 2: Morale decreases (people feel the pressure/lack of support)
       const moralePenalty = leadDeficit * 16; // Up to -8% morale
       this.state.morale -= moralePenalty;
-      console.log(
-        `❌ Poor leadership morale penalty: -${moralePenalty.toFixed(1)}% morale`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `❌ Poor leadership morale penalty: -${moralePenalty.toFixed(1)}% morale`,
+        );
 
       // Penalty 3: Growth degrades (unsustainable approaches fail to compound)
       // Even if you hit targets early, poor LEAD quality means execution degrades
       const growthPenalty = leadDeficit * 10; // Up to -5% growth
       this.state.growth -= growthPenalty;
-      console.log(
-        `❌ Unsustainable execution penalty: -${growthPenalty.toFixed(1)}% growth`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `❌ Unsustainable execution penalty: -${growthPenalty.toFixed(1)}% growth`,
+        );
 
       // Penalty 4: Profit margin suffers (firefighting, inefficiency, mistakes)
       const profitPenalty = leadDeficit * 6; // Up to -3% profit margin
       this.state.profitMargin -= profitPenalty;
-      console.log(
-        `❌ Poor decision quality penalty: -${profitPenalty.toFixed(1)}% profit margin`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `❌ Poor decision quality penalty: -${profitPenalty.toFixed(1)}% profit margin`,
+        );
     }
 
     // NEW: SEVERE PENALTIES for extremely poor LEAD quality (< 0.3 of benchmark)
     if (avgLEADRatio < 0.3) {
       // This represents truly terrible leadership - near-certain failure
-      console.log(
-        `⚠️ EXTREMELY POOR LEAD QUALITY (${(avgLEADRatio * 100).toFixed(0)}% of benchmark) - SEVERE PENALTIES`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `⚠️ EXTREMELY POOR LEAD QUALITY (${(avgLEADRatio * 100).toFixed(0)}% of benchmark) - SEVERE PENALTIES`,
+        );
 
       // Additional attrition from toxic environment
       this.state.attrition += 8;
-      console.log(`❌ Toxic environment attrition: +8% attrition`);
+      if (DEBUG_ENABLED)
+        console.log(`❌ Toxic environment attrition: +8% attrition`);
 
       // Additional morale collapse
       this.state.morale -= 12;
-      console.log(`❌ Leadership crisis morale collapse: -12% morale`);
+      if (DEBUG_ENABLED)
+        console.log(`❌ Leadership crisis morale collapse: -12% morale`);
     }
 
     // CRITICAL FIX #1: Team Health Multipliers (from AUDIT #4)
     // High-performing teams with strong morale and low attrition deliver superior results
     // This makes team health strategically valuable (fixes "balanced leader fails" bug)
 
-    console.log("=== APPLYING TEAM HEALTH MULTIPLIERS ===");
-    console.log(
-      `Pre-multiplier - Growth: ${this.state.growth.toFixed(1)}%, Morale: ${this.state.morale.toFixed(0)}%, Attrition: ${this.state.attrition.toFixed(1)}%`,
-    );
+    if (DEBUG_ENABLED) {
+      console.log("=== APPLYING TEAM HEALTH MULTIPLIERS ===");
+      console.log(
+        `Pre-multiplier - Growth: ${this.state.growth.toFixed(1)}%, Morale: ${this.state.morale.toFixed(0)}%, Attrition: ${this.state.attrition.toFixed(1)}%`,
+      );
+    }
 
     // Apply caps BEFORE multipliers to get accurate team health state
     let cappedMorale = Math.max(0, Math.min(95, this.state.morale));
@@ -2117,20 +2662,23 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       const teamHealthMultiplier = 1.35;
       const growthBefore = this.state.growth;
       this.state.growth = this.state.growth * teamHealthMultiplier;
-      console.log(
-        `✅ EXCEPTIONAL TEAM HEALTH: ${teamHealthMultiplier}x growth multiplier (+${(this.state.growth - growthBefore).toFixed(1)}% growth)`,
-      );
-      console.log(
-        `   Morale: ${cappedMorale}% (≥85%), Attrition: ${cappedAttrition.toFixed(1)}% (<8%)`,
-      );
+      if (DEBUG_ENABLED) {
+        console.log(
+          `✅ EXCEPTIONAL TEAM HEALTH: ${teamHealthMultiplier}x growth multiplier (+${(this.state.growth - growthBefore).toFixed(1)}% growth)`,
+        );
+        console.log(
+          `   Morale: ${cappedMorale}% (≥85%), Attrition: ${cappedAttrition.toFixed(1)}% (<8%)`,
+        );
+      }
     } else if (cappedMorale >= 75 && cappedAttrition < 12) {
       // Healthy teams deliver 15% more results
       const teamHealthMultiplier = 1.15;
       const growthBefore = this.state.growth;
       this.state.growth = this.state.growth * teamHealthMultiplier;
-      console.log(
-        `✅ Healthy team multiplier: ${teamHealthMultiplier}x growth (+${(this.state.growth - growthBefore).toFixed(1)}% growth)`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `✅ Healthy team multiplier: ${teamHealthMultiplier}x growth (+${(this.state.growth - growthBefore).toFixed(1)}% growth)`,
+        );
     }
 
     // CRITICAL FIX #4: Attrition Mechanically Constrains Growth
@@ -2140,17 +2688,19 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       const attritionDrag = 0.5; // 50% reduction in growth capability
       const growthBefore = this.state.growth;
       this.state.growth = this.state.growth * attritionDrag;
-      console.log(
-        `❌ SEVERE ATTRITION PENALTY: ${cappedAttrition.toFixed(1)}% attrition → 50% growth reduction (-${(growthBefore - this.state.growth).toFixed(1)}% growth)`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `❌ SEVERE ATTRITION PENALTY: ${cappedAttrition.toFixed(1)}% attrition → 50% growth reduction (-${(growthBefore - this.state.growth).toFixed(1)}% growth)`,
+        );
     } else if (cappedAttrition > 30) {
       // High attrition creates execution gaps
       const attritionDrag = 0.75; // 25% reduction in growth capability
       const growthBefore = this.state.growth;
       this.state.growth = this.state.growth * attritionDrag;
-      console.log(
-        `❌ High attrition penalty: ${cappedAttrition.toFixed(1)}% attrition → 25% growth reduction (-${(growthBefore - this.state.growth).toFixed(1)}% growth)`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `❌ High attrition penalty: ${cappedAttrition.toFixed(1)}% attrition → 25% growth reduction (-${(growthBefore - this.state.growth).toFixed(1)}% growth)`,
+        );
     }
 
     // Check for team collapse (morale <40% OR attrition >40%)
@@ -2159,12 +2709,14 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       const crisisMultiplier = 0.5; // 50% reduction in growth
       const growthBefore = this.state.growth;
       this.state.growth = this.state.growth * crisisMultiplier;
-      console.log(
-        `❌ TEAM COLLAPSE: ${crisisMultiplier}x growth multiplier (-${(growthBefore - this.state.growth).toFixed(1)}% growth)`,
-      );
-      console.log(
-        `   Morale: ${cappedMorale}% (<40%), Attrition: ${cappedAttrition.toFixed(1)}% (>40%)`,
-      );
+      if (DEBUG_ENABLED) {
+        console.log(
+          `❌ TEAM COLLAPSE: ${crisisMultiplier}x growth multiplier (-${(growthBefore - this.state.growth).toFixed(1)}% growth)`,
+        );
+        console.log(
+          `   Morale: ${cappedMorale}% (<40%), Attrition: ${cappedAttrition.toFixed(1)}% (>40%)`,
+        );
+      }
     }
 
     // CRITICAL FIX #3: Morale Cap Waste → Productivity Bonus
@@ -2174,9 +2726,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       const excessMorale = this.state.morale - 95;
       const productivityBonus = excessMorale * 0.1; // 10 morale = 1% growth
       this.state.growth += productivityBonus;
-      console.log(
-        `✅ Excess morale productivity bonus: ${excessMorale.toFixed(0)} excess morale → +${productivityBonus.toFixed(1)}% growth`,
-      );
+      if (DEBUG_ENABLED)
+        console.log(
+          `✅ Excess morale productivity bonus: ${excessMorale.toFixed(0)} excess morale → +${productivityBonus.toFixed(1)}% growth`,
+        );
     }
 
     // Re-apply bounds after multipliers and penalties
@@ -2189,11 +2742,13 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     );
     this.state.growth = Math.max(0, this.state.growth); // Growth can't go negative but no upper cap
 
-    console.log("=== FINAL METRICS AFTER LEAD MULTIPLIERS ===");
-    console.log(`Growth: ${this.state.growth.toFixed(1)}%`);
-    console.log(`Morale: ${this.state.morale.toFixed(0)}%`);
-    console.log(`Attrition: ${this.state.attrition.toFixed(1)}%`);
-    console.log(`Profit Margin: ${this.state.profitMargin.toFixed(1)}%`);
+    if (DEBUG_ENABLED) {
+      console.log("=== FINAL METRICS AFTER LEAD MULTIPLIERS ===");
+      console.log(`Growth: ${this.state.growth.toFixed(1)}%`);
+      console.log(`Morale: ${this.state.morale.toFixed(0)}%`);
+      console.log(`Attrition: ${this.state.attrition.toFixed(1)}%`);
+      console.log(`Profit Margin: ${this.state.profitMargin.toFixed(1)}%`);
+    }
   }
 
   showConsequence(scenario, decision, deltas) {
@@ -2215,7 +2770,9 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     const impactItems = [];
     const pushImpact = (label, value, unit, decimals, invert) => {
       const v = typeof value === "number" && isFinite(value) ? value : 0;
-      const negligible = Math.abs(v) < 0.05;
+      // Issue 2: only suppress TRUE zero. The old 0.05 threshold hid real
+      // fractional impacts (e.g. +0.4 morale) and made decisions look inert.
+      const negligible = Math.abs(v) < 0.005;
       const isGood = invert ? v < 0 : v > 0;
       const cls = negligible ? "neutral" : isGood ? "good" : "bad";
       const sign = v > 0 ? "+" : "";
@@ -2229,15 +2786,17 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     };
 
     if (deltas) {
+      // Issue 2: render ALL metrics at 1 decimal (matching Growth) so small
+      // fractional impacts are visible instead of rounding to "0".
       pushImpact("Growth", deltas.growth, "%", 1, false);
-      pushImpact("Profit", deltas.profitMargin, "%", 0, false);
-      pushImpact("Morale", deltas.morale, "%", 0, false);
-      pushImpact("Attrition", deltas.attrition, "%", 0, true);
+      pushImpact("Profit", deltas.profitMargin, "%", 1, false);
+      pushImpact("Morale", deltas.morale, "%", 1, false);
+      pushImpact("Attrition", deltas.attrition, "%", 1, true);
       pushImpact(
         "Capability",
         deltas.organizationalCapability,
         " pts",
-        0,
+        1,
         false,
       );
     }
@@ -2252,7 +2811,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     if (bodyEl) {
       bodyEl.innerHTML = `
                 <div class="impact-card">
-                    <div class="impact-card-header">DECISION RECORDED</div>
+                    <div class="impact-card-header">SCENARIO NET IMPACT</div>
                     <p class="impact-consequence">${consequenceText}</p>
                     ${impactStrip}
                 </div>
@@ -2349,7 +2908,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     // Calculate final results using scoring engine
     if (window.scoringEngine) {
-      console.log("Calculating final results...");
+      if (DEBUG_ENABLED) console.log("Calculating final results...");
       try {
         // Pass the Round 1 record (if any) so the scoring engine can compute
         // the Round 2 adaptation bonus. Round 1 runs pass null and are unaffected.
@@ -2357,9 +2916,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
           this.state,
           this.returningPlayer || null,
         );
-        console.log("Results calculated:", results);
+        if (DEBUG_ENABLED) console.log("Results calculated:", results);
         this.finalResults = results; // Store for detailed feedback view
-        console.log("this.finalResults set to:", this.finalResults);
+        if (DEBUG_ENABLED)
+          console.log("this.finalResults set to:", this.finalResults);
         this.displayResults(results);
       } catch (error) {
         console.error("ERROR in calculateFinalScore:", error);
@@ -2432,7 +2992,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
           round: this.state.round,
           priorRound1Record: priorRound1Record,
           // Reuse the engine's cohort store rather than inventing a new one.
-          cultureDataProvider: () => this.getCultureData(),
+          // Use the FILTERED + ANONYMISED view so the executive report only
+          // reflects JCB business functions and never names non-consenting
+          // players.
+          cultureDataProvider: () => this.getCultureDataForAnalysis(),
         },
       );
 
@@ -2628,9 +3191,12 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       "<!DOCTYPE html><html><head><meta charset='utf-8'/>" +
       "<title>JCB Leadership Assessment — Individual Feedback</title>" +
       "<style>" +
-      "body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:24px;line-height:1.5;}" +
-      "h1{font-size:22px;margin:0 0 4px 0;}" +
-      "h2{font-size:16px;margin:22px 0 8px 0;border-bottom:2px solid #FFCB00;padding-bottom:4px;}" +
+      "@page{margin:15mm;}" +
+      "body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;line-height:1.4;font-size:10.5pt;}" +
+      "h1{font-size:20pt;margin:0 0 4px 0;}" +
+      "h2{font-size:15pt;margin:22px 0 8px 0;border-bottom:2px solid #FFCB00;padding-bottom:4px;}" +
+      "h3{font-size:12.5pt;margin:12px 0 4px 0;}" +
+      "h4{font-size:11.5pt;margin:8px 0 4px 0;}" +
       "p{margin:4px 0;}" +
       "table{border-collapse:collapse;width:100%;margin:8px 0;}" +
       "td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:13px;}" +
@@ -2955,8 +3521,115 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 ${
                   success
                     ? `You achieved ${this.state.growth.toFixed(1)}% growth and met your target!`
-                    : `You achieved ${this.state.growth.toFixed(1)}% growth. Target was 15%.`
+                    : `You achieved ${this.state.growth.toFixed(1)}% growth. Target was ${this._growthTarget()}%.`
                 }
+            </div>
+        `;
+
+    setTimeout(() => {
+      this.showBusinessImpact(results);
+    }, 900);
+  }
+
+  // FIX 3a: Executive-grade business-impact summary.
+  //
+  // Speaks the language of a divisional MD (revenue, morale, retention, LEAD
+  // quality) rather than a personality quiz. Built entirely from the already
+  // computed `results` object plus `this.state` - it deliberately does NOT call
+  // the executive-summary generator, so the on-screen payoff stays self-contained.
+  //
+  // Field sources (verified against calculateFinalScore):
+  //   - growth / morale / attrition / profitMargin live on this.state
+  //   - avgLEADRatio lives on results (average LEAD ratio vs benchmark)
+  //   - meetsGrowth / meetsCapability live on results
+  showBusinessImpact(results) {
+    const impactContainer = document.getElementById("results-business-impact");
+    if (!impactContainer) {
+      // Container missing (older markup) - skip straight to the next stage so
+      // the animation chain never stalls.
+      this.showLeadershipBreakdown(results);
+      return;
+    }
+
+    const growth = this.state.growth;
+    const morale = this.state.morale;
+    const attrition = this.state.attrition;
+    const retention = 100 - attrition;
+    const leadPct = (results.avgLEADRatio || 0) * 100;
+
+    // Assessment labels - plain, executive language. No apostrophes.
+    const growthLabel =
+      growth >= this._growthTarget()
+        ? "Ahead of target"
+        : growth >= this._growthTarget() - 3
+          ? "On target"
+          : "Below target";
+
+    const moraleLabel =
+      morale >= 75 ? "Strong" : morale >= 65 ? "Healthy" : "At risk";
+
+    const retentionLabel =
+      retention >= 90 ? "Strong" : retention >= 85 ? "Stable" : "At risk";
+
+    // BUGFIX (B3): derive the LEAD thresholds from the canonical
+    // LEAD_CONSTANTS rather than hard-coding 78/65/50, so this screen can
+    // never silently disagree with the scoring engine if the values are tuned.
+    const leadConstants =
+      (typeof window !== "undefined" && window.LEAD_CONSTANTS) ||
+      (typeof LEAD_CONSTANTS !== "undefined" ? LEAD_CONSTANTS : null);
+    const exceptionalLeadPct = leadConstants
+      ? leadConstants.exceptionalLEAD * 100
+      : 78;
+    const solidLeadPct = leadConstants ? leadConstants.solidLEAD * 100 : 65;
+    const strongLeadPct = leadConstants ? leadConstants.strongLEAD * 100 : 50;
+
+    const leadLabel =
+      leadPct >= exceptionalLeadPct
+        ? "Exceptional"
+        : leadPct >= solidLeadPct
+          ? "Strong"
+          : leadPct >= strongLeadPct
+            ? "Adequate"
+            : "Below benchmark";
+
+    const rows = [
+      {
+        label: "Revenue Growth",
+        value: `${growth.toFixed(1)}%`,
+        assessment: growthLabel,
+      },
+      {
+        label: "Team Morale",
+        value: `${morale.toFixed(0)}%`,
+        assessment: moraleLabel,
+      },
+      {
+        label: "Staff Retention",
+        value: `${retention.toFixed(0)}%`,
+        assessment: retentionLabel,
+      },
+      {
+        label: "LEAD Quality (vs benchmark)",
+        value: `${leadPct.toFixed(0)}%`,
+        assessment: leadLabel,
+      },
+    ];
+
+    const rowsHtml = rows
+      .map(
+        (row) => `
+                <div class="business-impact-row">
+                    <span class="business-impact-label">${row.label}</span>
+                    <span class="business-impact-value">${row.value}</span>
+                    <span class="business-impact-assessment">${row.assessment}</span>
+                </div>`,
+      )
+      .join("");
+
+    impactContainer.innerHTML = `
+            <div class="business-impact">
+                <h3>BUSINESS IMPACT</h3>
+                ${rowsHtml}
             </div>
         `;
 
@@ -2998,9 +3671,13 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             `;
     });
 
+    // FIX 3b: the colour is demoted from headline to a secondary "leadership
+    // signature" descriptor. The business impact above is the headline; the
+    // colour is supporting colour (pun intended).
     html += `
             <div class="personality-color">
-                <h4>YOUR LEADERSHIP COLOR: ${results.personalityColor}</h4>
+                <h4>YOUR LEADERSHIP SIGNATURE</h4>
+                <p class="signature-color">${results.personalityColor}</p>
                 <p>${results.personalityDescription}</p>
             </div>
         </div>`;
@@ -3038,7 +3715,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     if (adaptation.weakestDimension) {
       flagged = `Your Round 1 feedback flagged <strong>${adaptation.weakestDimension}</strong> as your weakest LEAD dimension`;
       if (typeof adaptation.round1WeakestRatio === "number") {
-        flagged += ` (${(adaptation.round1WeakestRatio * 100).toFixed(0)}% of benchmark)`;
+        flagged += ` (${(adaptation.round1WeakestRatio * 100).toFixed(0)}% of target)`;
       }
       flagged += ".";
     } else {
@@ -3058,7 +3735,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       adaptation.weakestDimension &&
       typeof adaptation.round2WeakestRatio === "number"
     ) {
-      did += `In Round 2 your ${adaptation.weakestDimension} moved to <strong>${(adaptation.round2WeakestRatio * 100).toFixed(0)}%</strong> of benchmark. `;
+      did += `In Round 2 your ${adaptation.weakestDimension} moved to <strong>${(adaptation.round2WeakestRatio * 100).toFixed(0)}%</strong> of target. `;
     }
     if (
       adaptation.round2MaxStyleName &&
@@ -3151,6 +3828,8 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       // Segmentation (for culture analysis)
       jobFunction: this.state.jobFunction,
       seniority: this.state.seniority,
+      // #1: optional LEAD course cohort (2025 / 2026 / blank).
+      leadCohort: this.state.leadCohort,
       // Game metrics
       growth: this.state.growth,
       morale: this.state.morale,
@@ -3188,6 +3867,12 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         typeof results.adaptationBonus === "number"
           ? results.adaptationBonus
           : 0,
+      // Consent to public display. Default false (fail-safe) when the player
+      // did not tick the box. Controls scoreboard visibility only.
+      consent: {
+        publicDisplay: !!this.state.consentGiven,
+        capturedAt: this.state.consentCapturedAt || new Date().toISOString(),
+      },
       timestamp: Date.now(),
     });
 
@@ -3209,7 +3894,25 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   // Uses the truthful rank computed against the full cohort.
   showLeaderboardPlacement(placement) {
     const container = document.getElementById("results-placement");
-    if (!container || !placement || !placement.rank) return;
+    if (!container || !placement) return;
+
+    // #5: the private-results card was removed. A non-consenting player has
+    // `rank: null` and `hidden: true`, so the ranked reveal below would print
+    // "#null OF n". Fall back to a neutral, non-numeric message instead.
+    if (placement.hidden || !placement.rank) {
+      container.innerHTML = `
+            <div class="placement-card">
+                <div class="placement-medal">🏅</div>
+                <div class="placement-rank">RUN COMPLETE</div>
+                <div class="placement-sub">Thanks for playing — your results are saved.</div>
+            </div>
+        `;
+      requestAnimationFrame(() => {
+        const card = container.querySelector(".placement-card");
+        if (card) card.classList.add("revealed");
+      });
+      return;
+    }
 
     const { rank, total, inTop10 } = placement;
     const isPodium = rank <= 3;
@@ -3263,16 +3966,22 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   }
 
   renderLEADScoreBreakdown(results) {
-    // BUGFIX (audit): The game plays 9 scenarios, not 6. The previous maximums
-    // were calibrated for 6 scenarios, so every "% of maximum" shown to the player
-    // was inflated by ~50% (e.g. a genuine 50% read as 75%). These values are the
-    // 6-scenario maximums scaled by 9/6 = 1.5 to match the real 9-scenario run.
-    const maximums = {
-      leadership: 401, // 267 x 1.5 (9 scenarios)
-      excellence: 450, // 300 x 1.5 (9 scenarios)
-      agility: 233, // 155 x 1.5 (9 scenarios)
-      determination: 318, // 212 x 1.5 (9 scenarios)
-    };
+    // BUGFIX (audit H1): the maximums were hardcoded for a 9-scenario run, so a
+    // Round 2 player (6 scenarios) saw every "% of maximum" understated by ~33%
+    // (a genuine 60% read as 40%). They are now ROUND-AWARE, derived from the
+    // shared LEAD_CONSTANTS per-scenario ceilings scaled by the round's scenario
+    // count - mirroring the round-aware divisor used in calculateFinalScore().
+    const round = this.state && this.state.round === 2 ? 2 : 1;
+    const maximums =
+      typeof LEAD_CONSTANTS !== "undefined" &&
+      LEAD_CONSTANTS.breakdownMaximumsForRound
+        ? LEAD_CONSTANTS.breakdownMaximumsForRound(round)
+        : {
+            leadership: round === 2 ? 267 : 401,
+            excellence: round === 2 ? 300 : 450,
+            agility: round === 2 ? 155 : 233,
+            determination: round === 2 ? 212 : 318,
+          };
 
     // Track cumulative totals
     const cumulativeScores = {
@@ -3285,9 +3994,11 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     let html =
       '<div class="lead-score-breakdown" style="margin: 30px 0; padding: 25px; background: rgba(0, 0, 0, 0.3); border-radius: 12px;">';
     html +=
-      '<h3 style="color: var(--jcb-yellow); margin-top: 0;">YOUR LEAD FRAMEWORK SCORES</h3>';
+      '<h3 style="color: var(--jcb-yellow); margin-top: 0;">YOUR LEAD FRAMEWORK SCORES (% of maximum achievable)</h3>';
     html +=
       '<p style="color: rgba(255, 255, 255, 0.7); margin-bottom: 20px;">Your performance across all scenarios</p>';
+    html +=
+      '<p style="color: rgba(255, 255, 255, 0.6); font-size: 13px; margin-bottom: 20px;">These scores show each dimension as a percentage of its maximum achievable points. The "LEAD Quality" figure in your business impact summary is measured against the 19-point-per-scenario benchmark instead, so the two use different scales.</p>';
 
     html +=
       '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">';
@@ -3307,7 +4018,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);">
                     <div style="font-size: 16px; color: var(--jcb-yellow); margin-bottom: 10px; text-transform: uppercase; font-weight: bold;">${dimension}</div>
                     <div style="font-size: 32px; font-weight: bold; color: white; margin: 10px 0;">${totalScore}</div>
-                    <div style="font-size: 14px; color: rgba(255, 255, 255, 0.6); margin-bottom: 8px;">out of ${maximum} maximum</div>
+                    <div style="font-size: 14px; color: rgba(255, 255, 255, 0.6); margin-bottom: 8px;">out of ${maximum} maximum achievable</div>
                     <div style="font-size: 18px; font-weight: bold; color: ${performanceColor};">${percentOfMaximum}%</div>
                 </div>
             `;
@@ -3334,39 +4045,65 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   }
 
   extractCriticalImprovement(results) {
-    // Extract the critical improvement from the feedback
-    // The "Most Important Improvement" section is in the feedback HTML
-    const feedbackHTML = results.feedback;
+    // BUGFIX (audit C1): prefer the STRUCTURED field that generateFeedback()
+    // now stores on results. This removes the fragile HTML re-parsing entirely
+    // and guarantees the real, decision-linked improvement surfaces instead of
+    // the generic fallback.
+    if (
+      results &&
+      typeof results.criticalImprovement === "string" &&
+      results.criticalImprovement.trim().length > 0
+    ) {
+      return this._firstSentence(results.criticalImprovement.trim());
+    }
+
+    // FALLBACK: legacy HTML extraction. The regex previously looked for a 🎯
+    // emoji that generateFeedback() never emitted (it emits ⚠️), so it never
+    // matched. It now accepts EITHER emoji so older cached feedback still works.
+    const feedbackHTML = (results && results.feedback) || "";
 
     // Look for the Most Important Improvement section
     const improvementMatch = feedbackHTML.match(
-      /🎯 Most Important Improvement:<\/h4>[\s\S]*?<p[^>]*>(.*?)<\/p>/,
+      /(?:🎯|⚠️) Most Important Improvement:<\/h4>[\s\S]*?<p[^>]*>(.*?)<\/p>/,
     );
 
     if (improvementMatch && improvementMatch[1]) {
       // Remove HTML tags and get first sentence
-      let improvement = improvementMatch[1]
+      const improvement = improvementMatch[1]
         .replace(/<[^>]*>/g, "") // Remove HTML tags
         .replace(/&nbsp;/g, " ") // Replace &nbsp;
         .trim();
 
-      // BUGFIX 2026-05-17: Get first sentence (period not followed by digit to avoid truncating decimals like "11.2%")
-      // Old regex /^[^.]+\./ would match "but 11." and cut off at decimal point
-      // New regex /^.+?\.(?!\d)/ uses negative lookahead to skip decimals
-      const firstSentence = improvement.match(/^.+?\.(?!\d)/);
-      if (firstSentence) {
-        return firstSentence[0];
-      }
-
-      // Fallback: truncate at 150 chars
-      if (improvement.length > 150) {
-        return improvement.substring(0, 147) + "...";
-      }
-
-      return improvement;
+      return this._firstSentence(improvement);
     }
 
     return "Continue developing balanced leadership";
+  }
+
+  /**
+   * Extract the first sentence from a block of text, guarding against
+   * truncating decimals (e.g. "11.2%"). Shared by the structured and legacy
+   * paths of extractCriticalImprovement().
+   *
+   * BUGFIX 2026-05-17: the old regex /^[^.]+\./ would match "but 11." and cut
+   * off at the decimal point. /^.+?\.(?!\d)/ uses a negative lookahead to skip
+   * decimals.
+   */
+  _firstSentence(text) {
+    const improvement = (text || "").trim();
+    if (!improvement) return improvement;
+
+    const firstSentence = improvement.match(/^.+?\.(?!\d)/);
+    if (firstSentence) {
+      return firstSentence[0];
+    }
+
+    // Fallback: truncate at 150 chars
+    if (improvement.length > 150) {
+      return improvement.substring(0, 147) + "...";
+    }
+
+    return improvement;
   }
 
   capitalizeFirst(str) {
@@ -3412,19 +4149,23 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
   viewDetailedFeedback() {
     try {
-      console.log("=== viewDetailedFeedback called ===");
-      console.log("this:", this);
-      console.log("this.finalResults:", this.finalResults);
-      console.log("typeof this.finalResults:", typeof this.finalResults);
+      if (DEBUG_ENABLED) {
+        console.log("=== viewDetailedFeedback called ===");
+        console.log("this:", this);
+        console.log("this.finalResults:", this.finalResults);
+        console.log("typeof this.finalResults:", typeof this.finalResults);
+      }
 
       if (!this.finalResults) {
         console.error("CRITICAL: this.finalResults is undefined!");
-        console.log("this.state:", this.state);
-        console.log("window.game:", window.game);
-        console.log(
-          "window.game.finalResults:",
-          window.game ? window.game.finalResults : "N/A",
-        );
+        if (DEBUG_ENABLED) {
+          console.log("this.state:", this.state);
+          console.log("window.game:", window.game);
+          console.log(
+            "window.game.finalResults:",
+            window.game ? window.game.finalResults : "N/A",
+          );
+        }
         alert("No results available. Please complete the game first.");
         return;
       }
@@ -3483,7 +4224,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
               return `<span style="color: ${this.getColorHex(c)}; font-weight: bold;">${c} (${label})</span>`;
             })
             .join(", ");
-          detailedView += `<p style="margin-bottom: 8px;"><strong>Personality Color(s):</strong> ${colorLabels}</p>`;
+          detailedView += `<p style="margin-bottom: 8px;"><strong>Personality Colour(s):</strong> ${colorLabels}</p>`;
         }
 
         // Show impacts
@@ -3532,6 +4273,19 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       detailedView += "</div>";
 
       // JCB LEAD Framework Summary with North Star alignment
+      // #8 ALIGNMENT: resolve the player's dominant style once so the LEAD
+      // feedback below is style-aware (two players in the same band but with
+      // different dominant styles read different, resonant copy).
+      const dominantStyleName = (() => {
+        const profile =
+          (this.finalResults && this.finalResults.leadershipProfile) || {};
+        let best = null;
+        Object.keys(profile).forEach((s) => {
+          if (best === null || profile[s] > profile[best]) best = s;
+        });
+        return best;
+      })();
+
       detailedView +=
         '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.15); border-left: 4px solid var(--jcb-yellow);">';
       detailedView +=
@@ -3539,22 +4293,22 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
       detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
       detailedView += `<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">L</strong>eadership Quality: ${this.state.leadership} points</p>`;
-      detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback("leadership", this.state.leadership)}</p>`;
+      detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback("leadership", this.state.leadership, dominantStyleName)}</p>`;
       detailedView += `</div>`;
 
       detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
       detailedView += `<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">E</strong>xcellence Standards: ${this.state.excellence} points</p>`;
-      detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback("excellence", this.state.excellence)}</p>`;
+      detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback("excellence", this.state.excellence, dominantStyleName)}</p>`;
       detailedView += `</div>`;
 
       detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
       detailedView += `<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">A</strong>gility & Adaptability: ${this.state.agility} points</p>`;
-      detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback("agility", this.state.agility)}</p>`;
+      detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback("agility", this.state.agility, dominantStyleName)}</p>`;
       detailedView += `</div>`;
 
       detailedView += `<div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.2);">`;
       detailedView += `<p style="margin-bottom: 5px;"><strong style="color: var(--jcb-yellow); font-size: 18px;">D</strong>etermination to Succeed: ${this.state.determination} points</p>`;
-      detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback("determination", this.state.determination)}</p>`;
+      detailedView += `<p style="font-size: 13px; color: rgba(255,255,255,0.8); margin: 5px 0 0 0;">${this.getLeadFeedback("determination", this.state.determination, dominantStyleName)}</p>`;
       detailedView += `</div>`;
 
       detailedView += "</div>";
@@ -3564,11 +4318,11 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
       detailedView +=
         '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Final Performance Metrics</h4>';
-      detailedView += `<p><strong>Revenue Growth:</strong> ${this.state.growth.toFixed(1)}% (Target: 15%)</p>`;
+      detailedView += `<p><strong>Revenue Growth:</strong> ${this.state.growth.toFixed(1)}% (Target: ${this._growthTarget()}%)</p>`;
 
       // Morale with explanatory note if at cap
       if (this.state.morale >= 95) {
-        detailedView += `<p><strong>Team Morale:</strong> ${this.state.morale.toFixed(0)}% <span style="font-size: 13px; color: rgba(255,255,255,0.7);">(maximum achievable - top 1% of organizations)</span></p>`;
+        detailedView += `<p><strong>Team Morale:</strong> ${this.state.morale.toFixed(0)}% <span style="font-size: 13px; color: rgba(255,255,255,0.7);">(maximum achievable - top 1% of organisations)</span></p>`;
       } else {
         detailedView += `<p><strong>Team Morale:</strong> ${this.state.morale.toFixed(0)}%</p>`;
       }
@@ -3601,7 +4355,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
         detailedView += `<p><strong>${style.charAt(0).toUpperCase() + style.slice(1)}:</strong> ${percentage}%${annotation}</p>`;
       });
-      detailedView += `<p style="margin-top: 15px;"><strong>Personality Color:</strong> ${this.finalResults.personalityColor}</p>`;
+      detailedView += `<p style="margin-top: 15px;"><strong>Personality Colour:</strong> ${this.finalResults.personalityColor}</p>`;
       detailedView += `<p style="font-size: 14px; color: rgba(255,255,255,0.8);">${this.finalResults.personalityDescription}</p>`;
       detailedView += "</div>";
 
@@ -3610,7 +4364,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         detailedView +=
           '<div style="margin-bottom: 30px; padding: 20px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow);">';
         detailedView +=
-          '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Information Gathering Behavior</h4>';
+          '<h4 style="color: var(--jcb-yellow); margin-bottom: 15px;">Information Gathering Behaviour</h4>';
         detailedView += `<p>You requested additional information ${this.state.infoRequests.length} times during the game.</p>`;
         detailedView +=
           '<p style="font-size: 14px; color: rgba(255,255,255,0.8);">This demonstrates thoroughness in decision-making and willingness to seek data before acting.</p>';
@@ -3721,35 +4475,216 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     return hexColors[color] || "#7A7A7A";
   }
 
-  getLeadFeedback(attribute, score) {
+  // M3 fix: single source for the growth target so UI strings never drift
+  // from the canonical value in LEAD_CONSTANTS.
+  _growthTarget() {
+    return typeof LEAD_CONSTANTS !== "undefined" && LEAD_CONSTANTS.growthTarget
+      ? LEAD_CONSTANTS.growthTarget
+      : 15;
+  }
+
+  // #8 ALIGNMENT: getLeadFeedback() is now STYLE-AWARE. The optional third
+  // argument is the player's dominant style (e.g. "pacesetting", "democratic").
+  // When supplied, the "low" and "medium" bands return a variant that reflects
+  // that style, so two players in the SAME band but with DIFFERENT dominant
+  // styles read different, resonant feedback. When omitted (legacy callers /
+  // harnesses), the original generic copy is returned unchanged, so the public
+  // signature stays backwards compatible.
+  getLeadFeedback(attribute, score, dominantStyle) {
     const feedback = {
       leadership: {
         high: "You demonstrated strong leadership by building positive relationships, showing commercial acumen, and considering the bigger picture. Your decisions showed courage in motivating and influencing your team while adapting your style to different situations.",
         medium:
           "You showed leadership potential in some areas, particularly in decision-making and stakeholder management. To strengthen this, focus on building more inclusive relationships and consistently adapting your style to inspire and influence others.",
-        low: "Your leadership decisions were primarily transactional. To develop JCB leadership qualities, focus on: building positive relationships within and outside the organization, demonstrating commercial acumen by operating as if it's your own company, and being more ethical and sustainable in addressing both praise and performance issues.",
+        low: "Your leadership decisions were primarily transactional. To develop JCB leadership qualities, focus on: building positive relationships within and outside the organisation, demonstrating commercial acumen by operating as if it were your own company, and being more ethical and sustainable in addressing both praise and performance issues.",
       },
       excellence: {
         high: "You exemplified excellence through emotional intelligence, critical thinking, and informed decision-making. Your self-awareness and willingness to make courageous, data-driven decisions while owning the outcomes demonstrated mature leadership.",
         medium:
           "You showed good analytical capability in some decisions. To reach excellence, develop stronger self-awareness of your shadow as a leader, improve critical thinking by balancing short-term priorities with long-term strategic goals, and be more courageous in speaking up and learning from mistakes.",
-        low: "Your decisions lacked the critical thinking and emotional intelligence that define excellence at JCB. Focus on: developing self-awareness of your strengths and development areas, making more informed data-driven decisions, owning your choices, and creating allies by standing by others even when they're not present.",
+        low: "Your decisions lacked the critical thinking and emotional intelligence that define excellence at JCB. Focus on: developing self-awareness of your strengths and development areas, making more informed data-driven decisions, owning your choices, and creating allies by standing by others even when they are not present.",
       },
       agility: {
-        high: "You demonstrated exceptional agility by navigating ambiguity, adapting quickly to changing situations, and showing resilience in the face of setbacks. Your proactive approach and creative problem-solving reflected JCB's values of not giving up and moving quickly.",
+        high: "You demonstrated exceptional agility by navigating ambiguity, adapting quickly to changing situations, and showing resilience in the face of setbacks. Your proactive approach and creative problem-solving reflected the JCB values of not giving up and moving quickly.",
         medium:
-          "You showed some adaptability but could improve in handling ambiguity and recovering from setbacks. To strengthen agility, be more pragmatic in driving change quickly, don't overthink in evolving situations, and be more proactive in taking initiative without being asked.",
+          "You showed some adaptability but could improve in handling ambiguity and recovering from setbacks. To strengthen agility, be more pragmatic in driving change quickly, do not overthink in evolving situations, and be more proactive in taking initiative without being asked.",
         low: "Your decisions showed rigidity when faced with ambiguity and change. To develop agility: practice handling unclear situations without all the information, consider VUCA (volatility, uncertainty, complexity, ambiguity) impacts, build resilience to recover from setbacks, and take more initiative proactively.",
       },
       determination: {
-        high: "You displayed relentless determination through your drive to excel, growth mindset, and willingness to innovate. Your passion for achieving goals, openness to feedback, and view of failure as a learning opportunity embodied JCB's values.",
+        high: "You displayed relentless determination through your drive to excel, growth mindset, and willingness to innovate. Your passion for achieving goals, openness to feedback, and view of failure as a learning opportunity embodied the JCB values.",
         medium:
           "You showed drive in pursuing goals but could demonstrate more determination. To improve: communicate more openly and frequently, actively seek feedback to improve performance, challenge the way things are done more often, and maintain a more positive outlook when facing challenges.",
         low: "Your approach lacked the relentless determination to learn and grow that JCB values. Focus on: developing a stronger growth mindset, fostering continuous learning opportunities, innovating by challenging established ways, accepting that failure from innovation is a learning tool, and being a more positive thinking performer.",
       },
     };
 
-    const category = score >= 60 ? "high" : score >= 30 ? "medium" : "low";
+    // #8 ALIGNMENT: per-style variants for the development bands. Keyed by the
+    // dominant style so the same band reads differently for a coercive player
+    // vs a democratic one. Only "low" and "medium" are style-varied; "high" is
+    // already a strength affirmation that does not need a style caveat.
+    const styleVariants = {
+      leadership: {
+        low: {
+          pacesetting:
+            "Your leadership was transactional and pace-driven. You set the bar and pushed, but you did not bring people with you. Build relationships and commercial context, not just momentum.",
+          coercive:
+            "Your leadership leaned on control. Compliance is not commitment — invest in relationships, explain the 'why', and earn influence rather than command it.",
+          authoritative:
+            "You provided direction but did not connect it to people. Vision lands only when it is shared — build the relationships and commercial acumen that turn a plan into a movement.",
+          democratic:
+            "You consulted widely but did not lead. Consensus is a tool, not a substitute for direction — be willing to own the call and set the standard.",
+          affiliative:
+            "You prioritised harmony over leadership. Being liked is not the same as being followed — hold the bar and address performance honestly.",
+          coaching:
+            "You invested in development but under-led on direction and commercial edge. Pair your people-focus with clear standards and a results narrative.",
+        },
+        medium: {
+          pacesetting:
+            "You led with pace and got results, but leadership is more than momentum. Balance your drive with relationships and a wider commercial view.",
+          coercive:
+            "You can command a room, but influence beats control. Work on building genuine relationships and explaining the reasoning behind your calls.",
+          authoritative:
+            "You set direction well; now connect it to people. Build the relationships and commercial acumen that make your vision land.",
+          democratic:
+            "You involve people well; now practise decisive leadership. Sometimes the team needs you to choose, not to poll.",
+          affiliative:
+            "You build goodwill well; now add edge. Care personally AND hold the standard when performance slips.",
+          coaching:
+            "You develop people well; now add commercial direction. Make sure development serves a clear, ambitious goal.",
+        },
+      },
+      excellence: {
+        low: {
+          pacesetting:
+            "You moved fast on instinct. Speed without evidence is a gamble — slow down enough to gather data and own the quality of the call.",
+          coercive:
+            "You decided by authority, not analysis. Invite challenge, test your assumptions, and make the reasoning visible.",
+          authoritative:
+            "You trusted your vision over the evidence. Great strategy still needs rigorous, data-driven validation.",
+          democratic:
+            "You gathered opinions but not evidence. Consultation is not analysis — seek hard data and own the decision.",
+          affiliative:
+            "You avoided the uncomfortable analysis. Rigour is a form of care — make the evidence-based call even when it is hard.",
+          coaching:
+            "You invested in people but under-invested in decision quality. Bring the same rigour to your choices that you bring to development.",
+        },
+        medium: {
+          pacesetting:
+            "Your drive sometimes outran your analysis. Build in a deliberate evidence step before the big calls.",
+          coercive:
+            "You can be decisive, but decisions need testing. Invite dissent and check the data before you commit.",
+          authoritative:
+            "Your vision is strong; your evidence base can be stronger. Validate the strategy with data.",
+          democratic:
+            "You value input; now value evidence. Convert consultation into rigorous, owned decisions.",
+          affiliative:
+            "You protect relationships; now protect decision quality. Make the tough, evidence-based call.",
+          coaching:
+            "You develop others well; apply that same developmental rigour to your own decision-making.",
+        },
+      },
+      agility: {
+        low: {
+          pacesetting:
+            "You pushed a fixed plan through change. Adaptability is not weakness — read the signals and adjust course.",
+          coercive:
+            "You held the line rigidly. In ambiguity, control fails — practise experimenting and recovering from setbacks.",
+          authoritative:
+            "You stuck to the vision when the context shifted. Great direction still needs a willingness to pivot.",
+          democratic:
+            "You sought consensus when speed was needed. In ambiguity, decide, act, and learn — do not wait for certainty.",
+          affiliative:
+            "You avoided disruption to keep the peace. Change is not a threat to relationships; rigidity is a threat to results.",
+          coaching:
+            "You favoured the steady path. Build your tolerance for ambiguity and act before you have all the answers.",
+        },
+        medium: {
+          pacesetting:
+            "You adapt by pushing harder. Sometimes the answer is to change direction, not increase effort.",
+          coercive:
+            "You adapt by tightening control. Try loosening the reins and experimenting when the path is unclear.",
+          authoritative:
+            "You adapt by re-asserting the vision. Also practise genuinely changing course when the evidence demands it.",
+          democratic:
+            "You adapt by consulting. In fast-moving ambiguity, be willing to act on incomplete information.",
+          affiliative:
+            "You adapt by preserving harmony. Be willing to disrupt the comfortable when the situation calls for it.",
+          coaching:
+            "You adapt patiently. Add a bias for timely action when ambiguity demands a quick pivot.",
+        },
+      },
+      determination: {
+        low: {
+          pacesetting:
+            "You drove hard but lost resilience when it mattered. Determination is not just intensity — it is persistence through setbacks.",
+          coercive:
+            "You forced outcomes but did not build follow-through. Sustainable drive comes from commitment, not pressure.",
+          authoritative:
+            "You set a bold vision but wavered under pressure. Back your direction with relentless follow-through.",
+          democratic:
+            "You sought agreement but lacked the drive to push through. Decide, commit, and persist.",
+          affiliative:
+            "You avoided the hard push. Determination means holding the goal even when it costs you popularity.",
+          coaching:
+            "You developed others but under-drove your own goals. Bring the same persistence to results that you bring to people.",
+        },
+        medium: {
+          pacesetting:
+            "Your drive is real but uneven. Sustain it through setbacks, not just in the sprint.",
+          coercive:
+            "You push hard, but persistence beats pressure. Build commitment rather than compliance.",
+          authoritative:
+            "You have vision; now add relentless follow-through when obstacles appear.",
+          democratic:
+            "You build buy-in; now add the drive to push the decision through to results.",
+          affiliative:
+            "You sustain relationships; now sustain the goal. Hold the line when it gets uncomfortable.",
+          coaching:
+            "You grow people; now grow your own persistence towards hard targets.",
+        },
+      },
+    };
+
+    // M2 fix: convert the raw cumulative score to a ratio against the
+    // round-aware canonical benchmark (19 pts/dimension/scenario) before
+    // selecting the category. Previously absolute 60/30 thresholds were
+    // applied to a 250-point scale, so ~24% of the cap was labelled "high".
+    const round =
+      this.state && typeof this.state.round === "number" ? this.state.round : 1;
+    const benchmark =
+      typeof LEAD_CONSTANTS !== "undefined" &&
+      typeof LEAD_CONSTANTS.cumulativeBenchmarkForRound === "function"
+        ? LEAD_CONSTANTS.cumulativeBenchmarkForRound(round)
+        : (round === 2 ? 6 : 9) * 19;
+    const ratio = benchmark > 0 ? score / benchmark : 0;
+    const highThreshold =
+      typeof LEAD_CONSTANTS !== "undefined" && LEAD_CONSTANTS.solidLEAD
+        ? LEAD_CONSTANTS.solidLEAD
+        : 0.65;
+    const mediumThreshold =
+      typeof LEAD_CONSTANTS !== "undefined" &&
+      LEAD_CONSTANTS.minimumDimensionRatio
+        ? LEAD_CONSTANTS.minimumDimensionRatio
+        : 0.35;
+    const category =
+      ratio >= highThreshold
+        ? "high"
+        : ratio >= mediumThreshold
+          ? "medium"
+          : "low";
+
+    // #8 ALIGNMENT: prefer the style-specific variant when a dominant style was
+    // supplied AND a variant exists for this attribute/category. Otherwise fall
+    // back to the generic copy (preserving legacy behaviour exactly).
+    if (dominantStyle) {
+      const key = String(dominantStyle).toLowerCase();
+      const variant =
+        styleVariants[attribute] &&
+        styleVariants[attribute][category] &&
+        styleVariants[attribute][category][key];
+      if (variant) return variant;
+    }
+
     return feedback[attribute][category];
   }
 
@@ -3759,10 +4694,11 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
   // COMPANY CULTURE ANALYSIS METHODS
   showCultureDashboard() {
-    // Use the FULL cohort, not the truncated top-10 display leaderboard.
-    // getCultureData() reconciles jcb_culture_data against jcb_leaderboard
-    // first, so a stale culture store self-heals before analysis runs.
-    const cohort = this.getCultureData();
+    // Use the FILTERED + ANONYMISED cohort (JCB business functions only, with
+    // non-consenting runs anonymised), not the truncated top-10 display
+    // leaderboard. getCultureDataForAnalysis() reconciles jcb_culture_data
+    // against jcb_leaderboard first, so a stale culture store self-heals.
+    const cohort = this.getCultureDataForAnalysis();
 
     if (!window.CultureAnalysis) {
       alert("Culture analysis engine not loaded. Please refresh the page.");
@@ -3773,7 +4709,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     const analysis = analyzer.analyzeCulture(cohort);
 
     if (analysis.error) {
-      // Report the reconciled cohort length so the count is truthful even if
+      // Report the eligible cohort length so the count is truthful even if
       // the analyzer was handed a stale array.
       alert(analysis.message + "\n\nCurrent player count: " + cohort.length);
       return;
@@ -3798,7 +4734,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         return;
       }
 
-      const cohort = this.getCultureData();
+      const cohort = this.getCultureDataForAnalysis();
       const analyzer = new window.CultureAnalysis();
       const analysis = analyzer.analyzeCulture(cohort);
 
@@ -3848,15 +4784,27 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
    * @returns {string} Complete HTML document string
    */
   _buildCultureReportHtml(analysis) {
+    // EXEC-LEVEL SPLIT: mirror the executive-summary pattern — a concise
+    // one-page summary followed by a page break and a full data appendix.
+    // Nothing is deleted; every section is relocated to exactly one part.
+    const summaryHtml = this._buildCultureSummaryHtml(analysis);
+    const appendixHtml = this._buildCultureAppendixHtml(analysis);
+    return (
+      summaryHtml +
+      '<div style="page-break-before: always;"></div>' +
+      appendixHtml
+    );
+  }
+
+  /**
+   * Shared helpers for the culture report builders. Kept in one place so the
+   * summary and appendix render identically (escaping, number formatting,
+   * percentage clamping, capitalisation).
+   * @param {Object} analysis
+   * @returns {Object} helper functions
+   */
+  _cultureReportHelpers(analysis) {
     const a = analysis || {};
-    const metrics = a.metrics || {};
-    const leadership = a.leadership || {};
-    const lead = a.lead || {};
-    const segments = a.segments || {};
-    const decisions = a.decisions || {};
-    const observations = a.observations || [];
-    const recommendations = a.recommendations || [];
-    const playerCount = a.playerCount || 0;
 
     const esc = (v) =>
       String(v === undefined || v === null ? "" : v)
@@ -3887,6 +4835,25 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       day: "numeric",
     });
 
+    return { a, esc, num, pct, cap, generated };
+  }
+
+  /**
+   * Exec-level, one-page culture summary. Contains only the headline sections:
+   * header + opening, Executive Summary table, a condensed Leadership Style
+   * Distribution, the first 3 observations and the first 3 focus areas.
+   * @param {Object} analysis
+   * @returns {string} HTML fragment (closing body/html tags included)
+   */
+  _buildCultureSummaryHtml(analysis) {
+    const { a, esc, pct, cap, generated } =
+      this._cultureReportHelpers(analysis);
+    const metrics = a.metrics || {};
+    const leadership = a.leadership || {};
+    const observations = a.observations || [];
+    const recommendations = a.recommendations || [];
+    const playerCount = a.playerCount || 0;
+
     // --- 1. Title + meta -----------------------------------------------------
     // Plain-language opening summary (2-3 sentences).
     const openingSummary =
@@ -3901,13 +4868,15 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       "<!DOCTYPE html><html><head><meta charset='utf-8'/>" +
       "<title>JCB Leadership Assessment — Company Culture Analysis</title>" +
       "<style>" +
-      "body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:24px;line-height:1.5;}" +
-      "h1{font-size:22px;margin:0 0 4px 0;}" +
-      "h2{font-size:16px;margin:22px 0 8px 0;border-bottom:2px solid #FFCB00;padding-bottom:4px;}" +
-      "h3{font-size:14px;margin:12px 0 4px 0;}" +
+      "@page{margin:15mm;}" +
+      "body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;line-height:1.4;font-size:10.5pt;}" +
+      "h1{font-size:20pt;margin:0 0 4px 0;}" +
+      "h2{font-size:15pt;margin:22px 0 8px 0;border-bottom:2px solid #FFCB00;padding-bottom:4px;}" +
+      "h3{font-size:12.5pt;margin:12px 0 4px 0;}" +
+      "h4{font-size:11.5pt;margin:8px 0 4px 0;}" +
       "p{margin:4px 0;}" +
       "table{border-collapse:collapse;width:100%;margin:8px 0;}" +
-      "td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:13px;}" +
+      "td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;}" +
       "th{background:#f4f4f4;}" +
       ".meta{color:#555;font-size:13px;margin-bottom:12px;}" +
       ".block{margin:10px 0;padding:8px 10px;border-left:3px solid #FFCB00;background:#fafafa;}" +
@@ -3923,7 +4892,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // --- 2. Executive Summary ------------------------------------------------
     html +=
       "<h2>Executive Summary</h2>" +
-      "<table>" +
+      "<table data-width='40,60'>" +
       "<tr><th>Measure</th><th>Value</th></tr>" +
       "<tr><td>Leaders analysed</td><td>" +
       esc(playerCount) +
@@ -3943,10 +4912,127 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       "</td></tr>" +
       "</table>";
 
-    // --- 3. Performance Ranges ----------------------------------------------
+    // --- 3. Leadership Style Distribution (CONDENSED) -----------------------
+    // Keep the diversity index and most/least used lines, but show only the
+    // top-2 and bottom-1 styles rather than all six. The full distribution
+    // remains in the appendix.
+    const aggregate = leadership.aggregate || {};
+    const styleEntries = Object.keys(aggregate)
+      .map((style) => [style, aggregate[style]])
+      .sort((x, y) => (y[1] || 0) - (x[1] || 0));
+    let condensedStyles = styleEntries;
+    if (styleEntries.length > 3) {
+      condensedStyles = styleEntries.slice(0, 2).concat(styleEntries.slice(-1));
+    }
+    let styleRows = "";
+    condensedStyles.forEach(([style, share]) => {
+      styleRows +=
+        "<tr><td>" +
+        esc(cap(style)) +
+        "</td><td>" +
+        pct(share, 0) +
+        "%</td></tr>";
+    });
+    if (!styleRows) {
+      styleRows = "<tr><td colspan='2'>No style data</td></tr>";
+    }
+    const mostUsed = leadership.mostUsed || ["n/a", 0];
+    const leastUsed = leadership.leastUsed || ["n/a", 0];
+    html +=
+      "<h2>Leadership Style Distribution</h2>" +
+      "<table data-width='60,40'><tr><th>Style</th><th>Aggregate Share</th></tr>" +
+      styleRows +
+      "</table>" +
+      "<p><strong>Diversity index:</strong> " +
+      pct((leadership.diversity || 0) * 100, 0) +
+      "%</p>" +
+      "<p><strong>Most Used:</strong> " +
+      esc(cap(mostUsed[0])) +
+      " (" +
+      pct(mostUsed[1], 0) +
+      "%) &nbsp; <strong>Least Used:</strong> " +
+      esc(cap(leastUsed[0])) +
+      " (" +
+      pct(leastUsed[1], 0) +
+      "%)</p>";
+
+    // --- 4. What the Data Shows (capped to 3) -------------------------------
+    // ONE-PAGE SUMMARY: cap the observations so the summary stays exec-level.
+    // The full list remains in the appendix.
+    const summaryObservations = observations.slice(0, 3);
+    if (summaryObservations.length > 0) {
+      html += "<h2>What the Data Shows</h2>";
+      summaryObservations.forEach((obs) => {
+        const o = obs || {};
+        html +=
+          "<div class='block'>" +
+          "<div class='category'>" +
+          esc(o.category || "") +
+          "</div>" +
+          "<h3>" +
+          esc(o.headline || "") +
+          "</h3>" +
+          "<p>" +
+          esc(o.detail || "") +
+          "</p>" +
+          "</div>";
+      });
+    }
+
+    // --- 5. Suggested Focus Areas (capped to 3, actions capped to 3) --------
+    const summaryRecommendations = recommendations.slice(0, 3);
+    if (summaryRecommendations.length > 0) {
+      html += "<h2>Suggested Focus Areas</h2>";
+      summaryRecommendations.forEach((rec, index) => {
+        const r = rec || {};
+        const actions = (r.actions || []).slice(0, 3);
+        html +=
+          "<div class='block'>" +
+          "<h3>Focus " +
+          esc(index + 1) +
+          ": " +
+          esc(r.title || "") +
+          "</h3>" +
+          "<p><strong>Why:</strong> " +
+          esc(r.rationale || "") +
+          "</p>";
+        if (actions.length > 0) {
+          html += "<p><strong>Suggested actions:</strong></p><ol>";
+          actions.forEach((action) => {
+            html += "<li>" + esc(action) + "</li>";
+          });
+          html += "</ol>";
+        }
+        html += "</div>";
+      });
+    }
+
+    html += "</body></html>";
+    return html;
+  }
+
+  /**
+   * Detailed culture appendix. Contains every data-dump section plus any
+   * observations/recommendations beyond the first three shown in the summary,
+   * so no data is lost.
+   * @param {Object} analysis
+   * @returns {string} HTML fragment
+   */
+  _buildCultureAppendixHtml(analysis) {
+    const { a, esc, num, pct, cap } = this._cultureReportHelpers(analysis);
+    const metrics = a.metrics || {};
+    const lead = a.lead || {};
+    const segments = a.segments || {};
+    const decisions = a.decisions || {};
+    const observations = a.observations || [];
+    const recommendations = a.recommendations || [];
+
+    let html = "<h2>Detailed Appendix</h2>";
+
+    // --- Performance Ranges --------------------------------------------------
     html +=
       "<h2>Performance Ranges</h2>" +
-      "<table>" +
+      "<table data-width='40,30,30'>" +
       "<tr><th>Metric</th><th>Median</th><th>Range</th></tr>" +
       "<tr><td>Revenue Growth</td><td>" +
       num(metrics.medianGrowth, 1) +
@@ -3974,8 +5060,8 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       "%</td><td>Median across the cohort</td></tr>" +
       "</table>";
 
-    // --- 4. Leadership Style Distribution -----------------------------------
-    const aggregate = leadership.aggregate || {};
+    // --- Full Leadership Style Distribution ---------------------------------
+    const aggregate = (a.leadership || {}).aggregate || {};
     let styleRows = "";
     Object.keys(aggregate).forEach((style) => {
       styleRows +=
@@ -3988,27 +5074,13 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     if (!styleRows) {
       styleRows = "<tr><td colspan='2'>No style data</td></tr>";
     }
-    const mostUsed = leadership.mostUsed || ["n/a", 0];
-    const leastUsed = leadership.leastUsed || ["n/a", 0];
     html +=
-      "<h2>Leadership Style Distribution</h2>" +
-      "<table><tr><th>Style</th><th>Aggregate Share</th></tr>" +
+      "<h2>Leadership Style Distribution (Full)</h2>" +
+      "<table data-width='60,40'><tr><th>Style</th><th>Aggregate Share</th></tr>" +
       styleRows +
-      "</table>" +
-      "<p><strong>Diversity index:</strong> " +
-      pct((leadership.diversity || 0) * 100, 0) +
-      "%</p>" +
-      "<p><strong>Most Used:</strong> " +
-      esc(cap(mostUsed[0])) +
-      " (" +
-      pct(mostUsed[1], 0) +
-      "%) &nbsp; <strong>Least Used:</strong> " +
-      esc(cap(leastUsed[0])) +
-      " (" +
-      pct(leastUsed[1], 0) +
-      "%)</p>";
+      "</table>";
 
-    // --- 5. LEAD Framework Scores -------------------------------------------
+    // --- LEAD Framework Scores ----------------------------------------------
     const leadDims = [
       ["Leadership", lead.leadership],
       ["Excellence", lead.excellence],
@@ -4035,12 +5107,13 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     });
     html +=
       "<h2>LEAD Framework Scores</h2>" +
-      "<table><tr><th>Dimension</th><th>Median</th><th>Average</th>" +
+      "<table data-width='28,18,18,18,18'>" +
+      "<tr><th>Dimension</th><th>Median</th><th>Average</th>" +
       "<th>Range</th><th>Consistency</th></tr>" +
       leadRows +
       "</table>";
 
-    // --- 6. By Business Function --------------------------------------------
+    // --- By Business Function ------------------------------------------------
     const funcSegments = (segments.byFunction || []).filter(
       (s) => s && s.sufficient === true,
     );
@@ -4068,7 +5141,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       });
     }
 
-    // --- 7. By Seniority -----------------------------------------------------
+    // --- By Seniority --------------------------------------------------------
     const senSegments = (segments.bySeniority || []).filter(
       (s) => s && s.sufficient === true,
     );
@@ -4096,10 +5169,58 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       });
     }
 
-    // --- 8. What the Data Shows ---------------------------------------------
-    if (observations.length > 0) {
-      html += "<h2>What the Data Shows</h2>";
-      observations.forEach((obs) => {
+    // --- By LEAD Course Cohort ----------------------------------------------
+    // Only rendered when at least one cohort segment meets the minimum sample
+    // size. Descriptive, not causal (COHORT_SEGMENTATION_DESIGN §3.2/§3.4).
+    const cohorts = a.cohorts || {};
+    const cohortRows = [
+      cohorts.byCohort && cohorts.byCohort["2025"],
+      cohorts.byCohort && cohorts.byCohort["2026"],
+      cohorts.nonParticipants,
+      cohorts.course,
+    ].filter((c) => c && c.sufficient === true);
+    // Only render when actual course data exists (a 2025/2026/course segment
+    // is sufficient). An all-blank cohort would otherwise show a section
+    // containing only "Non-participants", changing existing reports.
+    const hasCourseData = cohortRows.some((c) => c.key !== "none");
+    if (cohortRows.length > 0 && hasCourseData) {
+      html += "<h2>By LEAD Course Cohort</h2>";
+      html +=
+        "<table data-width='22,13,13,13,13,13,13'>" +
+        "<tr><th>Cohort</th><th>Leaders</th><th>LEAD avg</th>" +
+        "<th>Balance (max %)</th><th>Growth</th><th>Morale</th>" +
+        "<th>Attrition</th></tr>";
+      cohortRows.forEach((c) => {
+        html +=
+          "<tr><td>" +
+          esc(c.label || c.key || "") +
+          "</td><td>" +
+          esc(c.count || 0) +
+          "</td><td>" +
+          num(c.leadAvg && c.leadAvg.total, 0) +
+          "</td><td>" +
+          num(c.maxStyleShare, 0) +
+          "%</td><td>" +
+          num(c.avgGrowth, 1) +
+          "%</td><td>" +
+          num(c.avgMorale, 0) +
+          "%</td><td>" +
+          num(c.avgAttrition, 1) +
+          "%</td></tr>";
+      });
+      html += "</table>";
+      html +=
+        "<p style='font-size: 9pt; color: #666;'>Cohorts with fewer than 3 " +
+        "leaders are not shown. This compares observed outcomes between " +
+        "groups; it does not by itself establish that the course caused the " +
+        "difference.</p>";
+    }
+
+    // --- Remaining observations (beyond the first 3 in the summary) ---------
+    const remainingObservations = observations.slice(3);
+    if (remainingObservations.length > 0) {
+      html += "<h2>What the Data Shows (continued)</h2>";
+      remainingObservations.forEach((obs) => {
         const o = obs || {};
         html +=
           "<div class='block'>" +
@@ -4116,16 +5237,17 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       });
     }
 
-    // --- 9. Suggested Focus Areas -------------------------------------------
-    if (recommendations.length > 0) {
-      html += "<h2>Suggested Focus Areas</h2>";
-      recommendations.forEach((rec, index) => {
+    // --- Remaining recommendations (beyond the first 3 in the summary) ------
+    const remainingRecommendations = recommendations.slice(3);
+    if (remainingRecommendations.length > 0) {
+      html += "<h2>Suggested Focus Areas (continued)</h2>";
+      remainingRecommendations.forEach((rec, index) => {
         const r = rec || {};
         const actions = r.actions || [];
         html +=
           "<div class='block'>" +
           "<h3>Focus " +
-          esc(index + 1) +
+          esc(index + 4) +
           ": " +
           esc(r.title || "") +
           "</h3>" +
@@ -4143,27 +5265,26 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       });
     }
 
-    // --- 10. Decision Tendencies --------------------------------------------
+    // --- Decision Tendencies -------------------------------------------------
     if (decisions.available === true) {
       const info = decisions.infoSeekingBehavior || {};
       html +=
         "<h2>Decision Tendencies</h2>" +
-        "<table>" +
+        "<table data-width='40,60'>" +
         "<tr><th>Measure</th><th>Value</th></tr>" +
         // Decision rates are proportions of total decisions, bounded 0-100.
-        "<tr><td>Aggressive decision rate</td><td>" +
+        "<tr><td>Aggressive rate</td><td>" +
         pct(decisions.aggressiveDecisionRate, 1) +
         "%</td></tr>" +
-        "<tr><td>Collaborative decision rate</td><td>" +
+        "<tr><td>Collaborative rate</td><td>" +
         pct(decisions.collaborativeDecisionRate, 1) +
         "%</td></tr>" +
-        "<tr><td>Average info requests per player</td><td>" +
+        "<tr><td>Avg info requests/player</td><td>" +
         num(info.avgRequestsPerPlayer, 1) +
         "</td></tr>" +
         "</table>";
     }
 
-    html += "</body></html>";
     return html;
   }
 
@@ -4175,7 +5296,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // Executive Summary Card
     html += '<div class="culture-summary-card">';
     html += `<h2>Executive Summary</h2>`;
-    html += `<p style="margin-bottom: 20px; color: rgba(255, 255, 255, 0.85); line-height: 1.6;">This dashboard describes the collective leadership culture of your team based on ${analysis.playerCount} completed simulations. All figures are drawn directly from the players' own results - there is no external benchmark.</p>`;
+    html += `<p style="margin-bottom: 20px; color: rgba(255, 255, 255, 0.85); line-height: 1.6;">This dashboard describes the collective leadership culture of your team based on ${analysis.playerCount} completed simulations. All figures are drawn directly from the results of the players - there is no external comparison point.</p>`;
     html += `<div class="culture-stat-row">`;
     html += `<div class="culture-stat"><span class="culture-stat-label">Leaders Analysed:</span><span class="culture-stat-value">${analysis.playerCount}</span></div>`;
     html += `<div class="culture-stat"><span class="culture-stat-label">Met Basic Targets:</span><span class="culture-stat-value">${analysis.metrics.successCount} of ${analysis.playerCount}</span></div>`;
@@ -4290,6 +5411,35 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       html += "</div>";
     }
 
+    // Segmentation by LEAD course cohort
+    const cohorts = analysis.cohorts || {};
+    const cohortCards = [
+      cohorts.byCohort && cohorts.byCohort["2025"],
+      cohorts.byCohort && cohorts.byCohort["2026"],
+      cohorts.nonParticipants,
+      cohorts.course,
+    ].filter((c) => c && c.sufficient === true);
+    // Only render when actual course data exists (see _buildCultureReportHtml).
+    const hasCourseData = cohortCards.some((c) => c.key !== "none");
+    if (cohortCards.length > 0 && hasCourseData) {
+      html += '<div class="culture-section">';
+      html += "<h2>🎓 By LEAD Course Cohort</h2>";
+      html += '<div class="culture-segment-grid">';
+      cohortCards.forEach((c) => {
+        html += `<div class="culture-segment-card">`;
+        html += `<h3>${c.label} <span class="culture-segment-count">${c.count} leaders</span></h3>`;
+        html += `<p><strong>LEAD average:</strong> ${(c.leadAvg ? c.leadAvg.total : 0).toFixed(0)} pts</p>`;
+        html += `<p><strong>Style balance:</strong> ${c.maxStyleShare.toFixed(0)}% max</p>`;
+        html += `<p><strong>Average growth:</strong> ${c.avgGrowth.toFixed(1)}%</p>`;
+        html += `<p><strong>Average morale:</strong> ${c.avgMorale.toFixed(0)}%</p>`;
+        html += `<p><strong>Average attrition:</strong> ${c.avgAttrition.toFixed(1)}%</p>`;
+        html += `</div>`;
+      });
+      html += "</div>";
+      html += `<p style="font-size: 9pt; color: rgba(255, 255, 255, 0.6);">Cohorts with fewer than 3 leaders are not shown. This compares observed outcomes between groups; it does not by itself establish that the course caused the difference.</p>`;
+      html += "</div>";
+    }
+
     // Observations
     if (analysis.observations.length > 0) {
       html += '<div class="culture-section culture-observations">';
@@ -4338,7 +5488,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 <div class="culture-lead-scores">
                     <div class="culture-lead-current" title="Median score">${stats.median.toFixed(0)}</div>
                     <div class="culture-lead-vs">median</div>
-                    <div class="culture-lead-benchmark" title="Average score">${stats.avg.toFixed(0)} avg</div>
+                    <div class="culture-lead-average" title="Average score">${stats.avg.toFixed(0)} avg</div>
                 </div>
                 <div class="culture-lead-gap">range ${stats.min.toFixed(0)} - ${stats.max.toFixed(0)} pts (${stats.consistency})</div>
             </div>

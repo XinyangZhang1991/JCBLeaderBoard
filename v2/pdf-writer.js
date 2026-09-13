@@ -447,6 +447,34 @@
     return tokens;
   }
 
+  // Extract an explicit column width from a cell's attribute string. Accepts
+  // `data-width="30"` (percent of content width) or `data-width="30%"`, and
+  // also honours an inline `style="width:30%"`. Returns a positive number
+  // (the percentage) or null when no usable width is present.
+  function parseCellWidth(attrs) {
+    if (!attrs) return null;
+    var m = /data-width\s*=\s*["']?\s*([0-9]+(?:\.[0-9]+)?)\s*%?/i.exec(attrs);
+    if (!m) {
+      m =
+        /style\s*=\s*["'][^"']*?\bwidth\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*%/i.exec(
+          attrs,
+        );
+    }
+    if (!m) return null;
+    var value = parseFloat(m[1]);
+    if (!isFinite(value) || value <= 0) return null;
+    return value;
+  }
+
+  // True when a cell requests no wrapping, via `data-nowrap` or an inline
+  // `white-space: nowrap` declaration.
+  function parseCellNowrap(attrs) {
+    if (!attrs) return false;
+    if (/\bdata-nowrap\b/i.test(attrs)) return true;
+    if (/white-space\s*:\s*nowrap/i.test(attrs)) return true;
+    return false;
+  }
+
   // A parsed block: { kind, text, bold, level, indent, isRule, pageBreak }
   // kind: 'heading' | 'paragraph' | 'listitem' | 'tablerow' | 'rule' | 'spacer'
   function parseBlocks(html) {
@@ -462,8 +490,12 @@
     var inCell = 0;
     var cellTexts = [];
     var cellBold = [];
+    var cellWidths = [];
+    var cellNowrap = [];
     var currentText = "";
     var currentBold = false;
+    var currentWidth = null;
+    var currentNowrap = false;
     // Indices into `blocks` at which page breaks were requested. Each entry is
     // captured when a break is detected so the flag lands on the NEXT block
     // emitted after that break, not on an earlier block already in the array.
@@ -487,8 +519,12 @@
     function flushCell() {
       cellTexts.push(normaliseWhitespace(currentText));
       cellBold.push(currentBold);
+      cellWidths.push(currentWidth);
+      cellNowrap.push(currentNowrap);
       currentText = "";
       currentBold = false;
+      currentWidth = null;
+      currentNowrap = false;
     }
 
     function flushRow() {
@@ -497,11 +533,15 @@
           kind: "tablerow",
           cells: cellTexts.slice(),
           cellBold: cellBold.slice(),
+          cellWidths: cellWidths.slice(),
+          cellNowrap: cellNowrap.slice(),
           indent: 0,
         });
       }
       cellTexts = [];
       cellBold = [];
+      cellWidths = [];
+      cellNowrap = [];
     }
 
     for (var i = 0; i < tokens.length; i++) {
@@ -565,8 +605,12 @@
         } else if (tag === "tr") {
           flushRow();
         } else if (tag === "td" || tag === "th") {
-          flushCell();
+          // NOTE: do not flush here. The cell's text is flushed on its close
+          // tag; flushing on open would emit a spurious empty leading cell and
+          // double the effective column count.
           inCell++;
+          currentWidth = parseCellWidth(t.attrs);
+          currentNowrap = parseCellNowrap(t.attrs);
           if (tag === "th") {
             boldDepth++;
             currentBold = true;
@@ -797,7 +841,17 @@
         }
       } else {
         lines.push(current);
-        current = word;
+        // A word that cannot fit on a line of its own must be hard-broken
+        // rather than allowed to overflow the column/page.
+        if (measureText(word, fontSize, bold) > maxWidth) {
+          var longPieces = hardBreak(word, maxWidth, fontSize, bold);
+          for (var lp = 0; lp < longPieces.length - 1; lp++) {
+            lines.push(longPieces[lp]);
+          }
+          current = longPieces[longPieces.length - 1];
+        } else {
+          current = word;
+        }
       }
     }
     if (current) lines.push(current);
@@ -1020,23 +1074,189 @@
     for (var i = 0; i < combined.length; i++) pageOps.push(combined[i]);
   }
 
+  // Minimum usable width for a column, and the largest fraction of the content
+  // width any single column may claim under content-aware sizing.
+  var MIN_COL_WIDTH = 40;
+  var MAX_COL_FRACTION = 0.6;
+
+  // Decide the width (in points) of every column in a table row.
+  //
+  // Priority:
+  //   1. Explicit `data-width` / `style="width:N%"` values, normalised so the
+  //      total equals CONTENT_WIDTH. Columns without an explicit width share
+  //      whatever remains equally.
+  //   2. Content-aware sizing: each column's preferred width is the widest
+  //      unwrapped cell, distributed proportionally with min/max clamps.
+  //   3. Equal division (the historical behaviour) when neither applies.
+  //
+  // The returned array always sums to CONTENT_WIDTH.
+  function computeColumnWidths(block, fontSize) {
+    var cells = block.cells || [];
+    var colCount = cells.length || 1;
+    var equal = CONTENT_WIDTH / colCount;
+    var widths = new Array(colCount);
+
+    // --- 1. Explicit widths -------------------------------------------------
+    var explicit = block.cellWidths || [];
+    var hasExplicit = false;
+    var explicitSum = 0;
+    var unspecified = 0;
+    for (var e = 0; e < colCount; e++) {
+      var w = explicit[e];
+      if (typeof w === "number" && isFinite(w) && w > 0) {
+        hasExplicit = true;
+        explicitSum += w;
+      } else {
+        unspecified++;
+      }
+    }
+
+    if (hasExplicit) {
+      // Each explicit value is a percentage of CONTENT_WIDTH (e.g. 30 => 30%).
+      // Unspecified columns share whatever percentage remains, equally. If the
+      // explicit values already consume (or exceed) the full width, the
+      // unspecified columns collapse to zero and the explicit ones are scaled
+      // down proportionally so the row never exceeds CONTENT_WIDTH.
+      var explicitPct = 0;
+      for (var s = 0; s < colCount; s++) {
+        var sv = explicit[s];
+        if (typeof sv === "number" && isFinite(sv) && sv > 0) explicitPct += sv;
+      }
+      var remainingPct = 100 - explicitPct;
+      if (remainingPct < 0) remainingPct = 0;
+      var unspecifiedSharePct =
+        unspecified > 0 ? remainingPct / unspecified : 0;
+      for (var x = 0; x < colCount; x++) {
+        var ew = explicit[x];
+        if (typeof ew === "number" && isFinite(ew) && ew > 0) {
+          widths[x] = (ew / 100) * CONTENT_WIDTH;
+        } else {
+          widths[x] = (unspecifiedSharePct / 100) * CONTENT_WIDTH;
+        }
+      }
+      return normaliseWidths(widths);
+    }
+
+    // --- 2. Content-aware widths -------------------------------------------
+    var preferred = new Array(colCount);
+    var totalPreferred = 0;
+    for (var c = 0; c < colCount; c++) {
+      var bold = !!(block.cellBold && block.cellBold[c]);
+      var text = cells[c] == null ? "" : String(cells[c]);
+      // Widest single unwrapped token drives the minimum; the full unwrapped
+      // string drives the preference (capped later).
+      var full = measureText(text, fontSize, bold);
+      var tokens = text.split(/\s+/);
+      var widestToken = 0;
+      for (var tk = 0; tk < tokens.length; tk++) {
+        var tw = measureText(tokens[tk], fontSize, bold);
+        if (tw > widestToken) widestToken = tw;
+      }
+      // Prefer enough room for the longest token, but never less than a small
+      // floor so short columns still get a sensible share.
+      var pref = Math.max(full, widestToken, MIN_COL_WIDTH);
+      preferred[c] = pref;
+      totalPreferred += pref;
+    }
+
+    if (totalPreferred <= 0) {
+      for (var q = 0; q < colCount; q++) widths[q] = equal;
+      return normaliseWidths(widths);
+    }
+
+    var maxWidth = CONTENT_WIDTH * MAX_COL_FRACTION;
+    var minWidth = Math.min(MIN_COL_WIDTH, equal);
+
+    // If even the minimum widths cannot fit, equal division is the only option.
+    if (colCount * minWidth > CONTENT_WIDTH + 0.01) {
+      for (var r0 = 0; r0 < colCount; r0++) widths[r0] = equal;
+      return normaliseWidths(widths);
+    }
+
+    // Water-filling: start from the proportional share, pin any column that
+    // falls below the minimum (or above the maximum), then redistribute the
+    // remaining space among the still-flexible columns. Repeat until stable.
+    var fixed = new Array(colCount);
+    var flexible = new Array(colCount);
+    for (var f0 = 0; f0 < colCount; f0++) {
+      fixed[f0] = false;
+      flexible[f0] = true;
+      widths[f0] = 0;
+    }
+
+    for (var iter = 0; iter < colCount + 2; iter++) {
+      var flexibleTotal = 0;
+      var fixedTotal = 0;
+      for (var a = 0; a < colCount; a++) {
+        if (fixed[a]) fixedTotal += widths[a];
+        else flexibleTotal += preferred[a];
+      }
+      var available = CONTENT_WIDTH - fixedTotal;
+      if (available < 0) available = 0;
+
+      var changed = false;
+      for (var b = 0; b < colCount; b++) {
+        if (fixed[b]) continue;
+        var share =
+          flexibleTotal > 0
+            ? (preferred[b] / flexibleTotal) * available
+            : available / colCount;
+        if (share < minWidth) {
+          widths[b] = minWidth;
+          fixed[b] = true;
+          changed = true;
+        } else if (share > maxWidth) {
+          widths[b] = maxWidth;
+          fixed[b] = true;
+          changed = true;
+        } else {
+          widths[b] = share;
+        }
+      }
+      if (!changed) break;
+    }
+
+    return normaliseWidths(widths);
+  }
+
+  // Scale a width array so it sums exactly to CONTENT_WIDTH (guarding against
+  // zero totals and overshoot).
+  function normaliseWidths(widths) {
+    var sum = 0;
+    for (var i = 0; i < widths.length; i++) {
+      if (!isFinite(widths[i]) || widths[i] < 0) widths[i] = 0;
+      sum += widths[i];
+    }
+    if (sum <= 0) {
+      var eq = CONTENT_WIDTH / (widths.length || 1);
+      for (var k = 0; k < widths.length; k++) widths[k] = eq;
+      return widths;
+    }
+    var scale = CONTENT_WIDTH / sum;
+    for (var m = 0; m < widths.length; m++) widths[m] *= scale;
+    return widths;
+  }
+
   function layoutTableRow(block, style, ops, ensureSpace, getY, setY) {
     var cells = block.cells || [];
     var colCount = cells.length || 1;
-    var colWidth = CONTENT_WIDTH / colCount;
     var cellPadding = 4;
+    var colWidths = computeColumnWidths(block, style.size);
 
-    // Wrap each cell to its column width.
+    // Wrap each cell to its column width (unless the cell opts out of wrapping).
     var wrapped = [];
     var maxLines = 1;
     for (var c = 0; c < cells.length; c++) {
       var bold = !!(block.cellBold && block.cellBold[c]);
-      var lines = wrapText(
-        cells[c],
-        colWidth - cellPadding * 2,
-        style.size,
-        bold,
-      );
+      var nowrap = !!(block.cellNowrap && block.cellNowrap[c]);
+      var avail = colWidths[c] - cellPadding * 2;
+      var lines;
+      if (nowrap) {
+        // Render on a single line even if it overflows the column.
+        lines = [cells[c] == null ? "" : String(cells[c])];
+      } else {
+        lines = wrapText(cells[c], avail, style.size, bold);
+      }
       wrapped.push({ lines: lines, bold: bold });
       if (lines.length > maxLines) maxLines = lines.length;
     }
@@ -1048,8 +1268,9 @@
     y -= style.spaceBefore;
     var rowTop = y;
 
+    var xCursor = MARGIN_LEFT;
     for (var ci = 0; ci < wrapped.length; ci++) {
-      var x = MARGIN_LEFT + ci * colWidth + cellPadding;
+      var x = xCursor + cellPadding;
       var cellY = rowTop - style.leading + 2;
       for (var li = 0; li < wrapped[ci].lines.length; li++) {
         ops.push({
@@ -1062,6 +1283,7 @@
         });
         cellY -= style.leading;
       }
+      xCursor += colWidths[ci];
     }
 
     // Light row separator.
@@ -1812,6 +2034,12 @@
     _layout: layout,
     _buildPdf: buildPdf,
     _measureText: measureText,
+    _computeColumnWidths: computeColumnWidths,
+    _wrapText: wrapText,
+    _hardBreak: hardBreak,
+    _parseCellWidth: parseCellWidth,
+    _parseCellNowrap: parseCellNowrap,
+    CONTENT_WIDTH: CONTENT_WIDTH,
     PAGE_WIDTH: PAGE_WIDTH,
     PAGE_HEIGHT: PAGE_HEIGHT,
   };

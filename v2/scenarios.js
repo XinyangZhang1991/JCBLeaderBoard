@@ -30,7 +30,7 @@ Marketing, HR and Sales each insist theirs is essential. Exec update in 2 weeks.
           {
             text: "C) Cut the dealer overhaul (keep marketing and training)",
             style: "pacesetting",
-            color: "BLUE",
+            color: "RED",
           },
           {
             text: "D) Part-fund all three (£2M split 3 ways = £667K each)",
@@ -49,17 +49,17 @@ Marketing, HR and Sales each insist theirs is essential. Exec update in 2 weeks.
         type: "choice",
         options: [
           {
-            text: 'A) "This is hard - let\'s support each other"',
+            text: 'A) "This is hard - we support each other"',
             style: "affiliative",
-            color: "BLUE",
+            color: "YELLOW",
           },
           {
             text: 'B) "This is the plan - I need full commitment"',
             style: "coercive",
-            color: "YELLOW",
+            color: "RED",
           },
           {
-            text: 'C) "Decision made - execute it now"',
+            text: 'C) "Make the call and communicate it clearly - the team needs certainty, not more debate"',
             style: "coercive",
             color: "RED",
           },
@@ -82,7 +82,7 @@ Marketing, HR and Sales each insist theirs is essential. Exec update in 2 weeks.
           {
             text: "Detailed presentation with data and rationale",
             style: "pacesetting",
-            color: "BLUE",
+            color: "RED",
           },
           {
             text: "Open forum on how to implement",
@@ -90,7 +90,7 @@ Marketing, HR and Sales each insist theirs is essential. Exec update in 2 weeks.
             color: "YELLOW",
           },
           {
-            text: 'Direct mandate - "Here are your assignments, start now"',
+            text: '"Set clear assignments and let the team get moving - momentum matters in the first 90 days"',
             style: "coercive",
             color: "RED",
           },
@@ -105,13 +105,13 @@ Marketing, HR and Sales each insist theirs is essential. Exec update in 2 weeks.
 
     additionalInfo: [
       {
-        label: "Last year's performance data",
+        label: "Performance data from last year",
         type: "useful",
         content: "ROI: marketing 8%, training 35%, dealers 42%.",
         validatesDecision: [0], // Validates cutting marketing (choice A in Part 1)
       },
       {
-        label: "Marketing Director's track record",
+        label: "Track record of the Marketing Director",
         type: "trap",
         content: "Strong campaign metrics, but no sales growth.",
         validatesDecision: null, // Trap - misleads into keeping marketing
@@ -127,21 +127,6 @@ Marketing, HR and Sales each insist theirs is essential. Exec update in 2 weeks.
 
     consequenceText:
       "Your team responds to your leadership approach. First month metrics are being calculated...",
-
-    // Scoring impacts (will be calculated by scoring engine)
-    scoreTemplates: {
-      // Ranking: 0=Marketing, 1=Training, 2=Dealer, 3=Innovation, 4=Supply
-      balancedRanking: [1, 2, 4], // Training, Dealer, Supply
-      aggressiveRanking: [0, 3], // Marketing, Innovation
-      // Communication style impacts
-      communicationImpacts: {
-        authoritative: { morale: 0, growth: 2 },
-        democratic: { morale: 5, growth: 1 },
-        coaching: { morale: 8, growth: 0 },
-        pacesetting: { morale: -10, growth: 5 },
-        affiliative: { morale: 3, growth: -2 },
-      },
-    },
   },
 
   // SCENARIO 2: THE DATA DILEMMA
@@ -163,12 +148,12 @@ Both defend their methods. The Exec wants clarity on customer health within 48 h
           {
             text: "Deep dive into both methods to find the disconnect",
             style: "pacesetting",
-            color: "BLUE",
+            color: "RED",
           },
           {
             text: "Decide now on business priorities - no time to debate",
             style: "coercive",
-            color: "YELLOW",
+            color: "RED",
           },
           {
             text: "Hold a joint meeting so both teams debate",
@@ -183,19 +168,18 @@ Both defend their methods. The Exec wants clarity on customer health within 48 h
         ],
       },
       {
-        title:
-          "Part 2: Both are right - Marketing surveys loyal customers, Operations tracks all complaints. How do you present to the Exec?",
+        title: "Part 2: Both are right. How do you present to the Exec?",
         type: "choice",
         options: [
           {
             text: "Acknowledge complexity and present both views honestly",
             style: "affiliative",
-            color: "GREEN",
+            color: "YELLOW",
           },
           {
             text: 'One story: "Core customers happy, growth segments need work"',
             style: "pacesetting",
-            color: "BLUE",
+            color: "RED",
           },
           {
             text: "Frame as opportunity: high satisfaction plus rising complaints equals growth",
@@ -232,7 +216,7 @@ Both defend their methods. The Exec wants clarity on customer health within 48 h
     ],
 
     consequenceText:
-      "Your analytical approach to conflicting data influences team's trust in your judgment...",
+      "Your analytical approach to conflicting data shapes how much the team trusts your judgement.",
   },
 
   // SCENARIO 3: THE SAFETY CRISIS
@@ -252,7 +236,7 @@ Operations wants suspension, HR retraining (2 days), Safety a full audit (1 week
         type: "choice",
         options: [
           {
-            text: "A) Suspend the employee pending investigation",
+            text: '"Stand the operator down pending the investigation - protect the site and be seen to act"',
             style: "coercive",
             color: "RED",
           },
@@ -267,7 +251,7 @@ Operations wants suspension, HR retraining (2 days), Safety a full audit (1 week
             color: "BLUE",
           },
           {
-            text: "D) Issue a safety reminder and carry on (zero cost)",
+            text: '"Reinforce the safety briefing with the team and keep production running - the near-miss is a useful prompt"',
             style: "affiliative",
             color: "YELLOW",
           },
@@ -288,12 +272,12 @@ Operations wants suspension, HR retraining (2 days), Safety a full audit (1 week
             color: "RED",
           },
           {
-            text: 'B) Learning opportunity - "Let\'s use this to improve"',
+            text: 'B) Learning opportunity - "Use this to improve"',
             style: "coaching",
             color: "GREEN",
           },
           {
-            text: 'C) Empathetic - "We\'re all in this together"',
+            text: 'C) Empathetic - "We are all in this together"',
             style: "affiliative",
             color: "YELLOW",
           },
@@ -336,13 +320,7 @@ Operations wants suspension, HR retraining (2 days), Safety a full audit (1 week
     ],
 
     consequenceText:
-      "Word of your crisis response spreads through the organization. Team morale shifts...",
-
-    scoreTemplates: {
-      punitive: { morale: -15, attrition: 12, growth: 2 }, // Quick discipline
-      balanced: { morale: 8, growth: -2, attrition: -3 }, // Investigation + coaching
-      excessive: { morale: -5, growth: -5 }, // Full shutdown
-    },
+      "Word of your crisis response spreads through the organisation. Team morale shifts...",
   },
 
   // SCENARIO 4: THE AMBIGUOUS SIGNAL
@@ -352,7 +330,7 @@ Operations wants suspension, HR retraining (2 days), Safety a full audit (1 week
     subtitle: "Month 5 - Q2",
     month: 5,
     quarter: 2,
-    description: `Sales velocity has slowed 8% month-over-month and nobody knows why. Three theories: a competitor's new hydraulic feature, economic uncertainty, or our team losing its customer focus.
+    description: `Sales velocity has slowed 8% month-over-month and nobody knows why. Three theories: a new hydraulic feature from a competitor, economic uncertainty, or our team losing its customer focus.
 
 Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.`,
 
@@ -364,7 +342,7 @@ Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.
           {
             text: "Assume based on experience and act decisively",
             style: "authoritative",
-            color: "RED",
+            color: "BLUE",
           },
           {
             text: "Invest time to gather comprehensive data",
@@ -379,7 +357,7 @@ Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.
           {
             text: "Run small regional experiments to test the theories",
             style: "democratic",
-            color: "GREEN",
+            color: "YELLOW",
           },
         ],
       },
@@ -400,7 +378,7 @@ Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.
           {
             text: "Test different approaches in different regions",
             style: "democratic",
-            color: "GREEN",
+            color: "YELLOW",
           },
           {
             text: "Make a decisive call on the root cause",
@@ -411,13 +389,13 @@ Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.
       },
       {
         title:
-          "Part 3: It's still ambiguous after analysis. How do you move forward?",
+          "Part 3: The picture is still ambiguous after analysis. How do you move forward?",
         type: "choice",
         options: [
           {
             text: "Make the call and commit fully",
             style: "authoritative",
-            color: "GREEN",
+            color: "BLUE",
           },
           {
             text: "Commit to a direction, reassess in 90 days",
@@ -452,7 +430,7 @@ Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.
           "Exaggerates the competitor threat and pressures a hasty reaction.",
       },
       {
-        label: "Your team's perspective",
+        label: "Perspective of your team",
         type: "useful",
         content:
           "Frontline staff say customers feel rushed and conversations are less consultative.",
@@ -460,7 +438,7 @@ Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.
     ],
 
     consequenceText:
-      "How you handle ambiguity and uncertainty shapes team's confidence in your leadership...",
+      "How you handle ambiguity and uncertainty shapes how much the team trusts your leadership.",
   },
 
   // SCENARIO 5: THE COMPETITOR THREAT
@@ -520,17 +498,17 @@ Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.
         type: "choice",
         options: [
           {
-            text: '"We\'re going to crush this competitor"',
+            text: '"We are going to crush this competitor"',
             style: "pacesetting",
             color: "RED",
           },
           {
-            text: '"Here\'s our vision to stay ahead"',
+            text: '"Here is our vision to stay ahead"',
             style: "authoritative",
             color: "BLUE",
           },
           {
-            text: '"Let\'s brainstorm solutions together"',
+            text: '"Let us brainstorm solutions together"',
             style: "democratic",
             color: "YELLOW",
           },
@@ -540,7 +518,7 @@ Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.
             color: "GREEN",
           },
           {
-            text: "\"We're strongest together - let's unite as one team\"",
+            text: '"We are strongest together - let us unite as one team"',
             style: "affiliative",
             color: "YELLOW",
           },
@@ -575,33 +553,22 @@ Data is incomplete. Your CFO wants action now; your strategy lead wants 3 weeks.
 
     consequenceText:
       "Market responds to your strategy. Dealer relationships and profit margins adjust...",
-
-    scoreTemplates: {
-      priceWar: { growth: 5, profitMargin: -8, marketShare: 3 }, // Heavy discounting
-      balanced: {
-        growth: -3,
-        profitMargin: -1,
-        marketShare: -1,
-        futureGrowth: 12,
-      }, // Invest in R&D + relationships
-      reactive: { growth: 2, morale: -5 }, // Panic response
-    },
   },
 
-  // SCENARIO 4: THE TALENT EXODUS
+  // SCENARIO 6: THE TALENT EXODUS
   {
     id: "talent_exodus",
     title: "THE TALENT EXODUS",
     subtitle: "Month 8 - Q3",
     month: 8,
     quarter: 3,
-    description: `Your top regional sales manager resigned, citing unsustainable pressure and no support. Two more high-performers may follow. Staff cite unrealistic targets, no work-life balance and feeling like a number.
+    description: `Your top regional sales manager resigned, citing unsustainable pressure and no support. Two more high-performers may follow. Staff point to unrealistic targets, poor work-life balance and a sense of being just a number.
 
 HR warns losing all three would trigger a confidence crisis.`,
 
     decisions: [
       {
-        title: "Part 1: What's the root cause?",
+        title: "Part 1: What is the root cause?",
         type: "choice",
         options: [
           {
@@ -623,7 +590,7 @@ HR warns losing all three would trigger a confidence crisis.`,
             color: "GREEN",
           },
           {
-            text: "Headhunt rivals' high flyers as replacements",
+            text: "Headhunt high flyers from rivals as replacements",
             impact: "harsh",
             style: "coercive",
             color: "RED",
@@ -640,9 +607,9 @@ HR warns losing all three would trigger a confidence crisis.`,
             color: "YELLOW",
           },
           {
-            text: "Performance warnings for underperformers",
+            text: '"Set clear performance expectations and hold people to them - the team needs to know the standard"',
             style: "coercive",
-            color: "GREEN",
+            color: "RED",
           },
           {
             text: "Announce a new retention programme and benefits",
@@ -671,7 +638,7 @@ HR warns losing all three would trigger a confidence crisis.`,
           "Reduce by 30%",
         ],
         styleMapping: ["coercive", "pacesetting", "democratic", "coaching"],
-        colorMapping: ["RED", "BLUE", "YELLOW", "GREEN"],
+        colorMapping: ["RED", "RED", "YELLOW", "GREEN"],
       },
     ],
 
@@ -704,12 +671,6 @@ HR warns losing all three would trigger a confidence crisis.`,
     consequenceText:
       "Your team watches closely to see if you genuinely change or just talk about it...",
 
-    scoreTemplates: {
-      moneyOnly: { attrition: 20, morale: -10, growth: -8 }, // Retention bonuses fail
-      courseCorrect: { attrition: -8, morale: 15, growth: -5, agility: 25 }, // Admit and adjust
-      denial: { attrition: 30, morale: -20, growth: -15 }, // Failure path
-    },
-
     isCriticalMoment: true, // This is the reckoning for aggressive players
   },
 
@@ -720,7 +681,7 @@ HR warns losing all three would trigger a confidence crisis.`,
     subtitle: "Month 9 - Q3",
     month: 9,
     quarter: 3,
-    description: `Your most senior team member (20 years at JCB) is 25% below target for two quarters. They resist feedback but are widely respected, and their team's morale is dropping. This must be addressed.`,
+    description: `Your most senior team member (20 years at JCB) is 25% below target for two quarters. They resist feedback but are widely respected, and the morale of their team is dropping.`,
 
     decisions: [
       {
@@ -764,14 +725,14 @@ HR warns losing all three would trigger a confidence crisis.`,
             color: "GREEN",
           },
           {
-            text: "Explore what's beneath the defensiveness",
+            text: "Explore what lies beneath the defensiveness",
             style: "coaching",
-            color: "YELLOW",
+            color: "GREEN",
           },
           {
             text: "Take a break and reschedule",
             style: "affiliative",
-            color: "BLUE",
+            color: "YELLOW",
           },
         ],
       },
@@ -785,9 +746,9 @@ HR warns losing all three would trigger a confidence crisis.`,
             color: "YELLOW",
           },
           {
-            text: "Give 6 weeks' grace to address personal issues",
+            text: "Give 6 weeks of grace to address personal issues",
             style: "affiliative",
-            color: "GREEN",
+            color: "YELLOW",
           },
           {
             text: "Refer to HR/EAP, keep performance separate",
@@ -797,7 +758,7 @@ HR warns losing all three would trigger a confidence crisis.`,
           {
             text: "Co-create a recovery plan together",
             style: "coaching",
-            color: "YELLOW",
+            color: "GREEN",
           },
         ],
       },
@@ -940,22 +901,16 @@ HR warns losing all three would trigger a confidence crisis.`,
 
     consequenceText:
       "Product launch begins. Quality control and market response will determine success...",
-
-    scoreTemplates: {
-      rush: { growth: 18, futureGrowth: -25 }, // Spectacular short-term, disaster long-term
-      balanced: { growth: 9, morale: 5, futureGrowth: 15 }, // Accelerated with testing
-      tooSlow: { growth: -3, missTarget: true }, // Safe but miss escape threshold
-    },
   },
 
-  // SCENARIO 6: THE YEAR-END RECKONING
+  // SCENARIO 9: THE YEAR-END RECKONING
   {
     id: "year_end",
     title: "THE YEAR-END RECKONING",
     subtitle: "Month 12 - Q4",
     month: 12,
     quarter: 4,
-    description: `December. Exec meeting in 3 weeks. Three challenges: a major customer (15% of revenue) may leave over service issues, your exhausted team needs direction, and the Exec want your Year 2 plan.`,
+    description: `December. Exec meeting in 3 weeks. Three challenges: a major customer (15% of revenue) may leave over service issues, your exhausted team needs direction, and the Exec wants your Year 2 plan.`,
 
     decisions: [
       {
@@ -978,7 +933,7 @@ HR warns losing all three would trigger a confidence crisis.`,
             color: "RED",
           },
           {
-            text: "I learned to adapt my approach to each situation",
+            text: "I should have adapted my approach more",
             style: "coaching",
             color: "GREEN",
           },
@@ -1020,23 +975,26 @@ HR warns losing all three would trigger a confidence crisis.`,
         sliders: [
           {
             label: "Year-end bonuses for performance",
-            max: 0.2,
+            max: 0.25,
             budgetConstraint: 0.25,
             color: "RED",
           },
           {
             label: "Team celebration and recognition event",
-            max: 0.1,
+            // Finer £5K step is required so the £10K cap is reachable
+            // (the default £50K step would overshoot it entirely).
+            max: 0.01,
+            step: 0.005,
             color: "YELLOW",
           },
           {
             label: "Year 2 capability investment (training, tools)",
-            max: 0.2,
+            max: 0.25,
             color: "GREEN",
           },
           {
             label: "Roll budget to Year 2 targets (save money)",
-            max: 0.2,
+            max: 0.25,
             color: "BLUE",
           },
         ],
@@ -1099,13 +1057,6 @@ HR warns losing all three would trigger a confidence crisis.`,
     consequenceText:
       "Final calculations underway. Your year of leadership is being evaluated...",
 
-    scoreTemplates: {
-      // Highly dependent on previous choices
-      optimal: { growth: 28, morale: 78, attrition: 10 },
-      recovery: { growth: 22, morale: 72, attrition: 15 },
-      collapse: { growth: 15, morale: 45, attrition: 35 },
-    },
-
     isFinale: true,
   },
 ];
@@ -1150,7 +1101,7 @@ const round2Scenarios = [
           {
             text: "Keep both cultures running separately for now",
             style: "affiliative",
-            color: "BLUE",
+            color: "YELLOW",
           },
         ],
       },
@@ -1241,7 +1192,7 @@ const round2Scenarios = [
     subtitle: "Month 4 - Q2",
     month: 4,
     quarter: 2,
-    description: `A lucrative £500K export order hinges on a local agent's payment to an overseas official. Legal flags it as a likely bribe. The order would hit this year's target; refusing may cost the region.`,
+    description: `A lucrative £500K export order hinges on a payment from a local agent to an overseas official. Legal flags it as a likely bribe. The order would hit the target for this year; refusing may cost the region.`,
 
     decisions: [
       {
@@ -1332,7 +1283,7 @@ const round2Scenarios = [
           "The payment breaches the Bribery Act - personal liability risk.",
       },
       {
-        label: "Regional sales director's view",
+        label: "View of the Regional Sales Director",
         type: "trap",
         content: '"Everyone does it here - we will lose the region."',
       },
@@ -1450,7 +1401,7 @@ const round2Scenarios = [
         content: "Contract changes need consultation to avoid tribunal risk.",
       },
       {
-        label: "Board member's private view",
+        label: "Private view of a Board member",
         type: "trap",
         content: '"Presence equals performance - hold the line."',
       },
@@ -1556,7 +1507,7 @@ const round2Scenarios = [
         content: "Staff want a leader who invests in their development.",
       },
       {
-        label: "Operations director's own recommendation",
+        label: "Recommendation from the Operations Director",
         type: "useful",
         content: "Backs the candidate with the strongest people skills.",
       },
@@ -1767,17 +1718,17 @@ const round2Scenarios = [
         content: "Strong on delivery, mixed on culture and retention.",
       },
       {
-        label: "Board's private succession concerns",
+        label: "Private succession concerns of the Board",
         type: "useful",
         content: "They want a deeper bench behind you for Year 3.",
       },
       {
-        label: "Executive coach's debrief notes",
+        label: "Debrief notes from the Executive Coach",
         type: "useful",
         content: "Highlights your growth in balancing pace with people.",
       },
       {
-        label: "Rival's Year 3 strategy leak",
+        label: "Leaked Year 3 strategy of a rival",
         type: "trap",
         content: "Tempts a reactive plan rather than your own priorities.",
       },

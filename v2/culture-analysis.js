@@ -16,17 +16,99 @@ class CultureAnalysis {
     this.minSegmentSize = 3;
   }
 
+  // ------------------------------------------------------------------
+  // Consent & segmentation predicates (delegate to the shared ResultsStore
+  // helpers when available so the browser and Node tools agree).
+  // ------------------------------------------------------------------
+
+  isCultureEligible(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.isCultureEligible === "function") {
+      return store.isCultureEligible(record);
+    }
+    const fn = record && record.jobFunction;
+    return (
+      [
+        "Engineering",
+        "Manufacturing",
+        "Commercial",
+        "Finance",
+        "Human Resources",
+        "Operations",
+        "Product Development",
+        "Marketing",
+        "IT / Digital",
+      ].indexOf(fn) !== -1
+    );
+  }
+
+  isPubliclyDisplayable(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.isPubliclyDisplayable === "function") {
+      return store.isPubliclyDisplayable(record);
+    }
+    return !!(
+      record &&
+      record.consent &&
+      record.consent.publicDisplay === true
+    );
+  }
+
+  anonymiseForCulture(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.anonymiseForCulture === "function") {
+      return store.anonymiseForCulture(record);
+    }
+    if (!record) return record;
+    const clone = JSON.parse(JSON.stringify(record));
+    if (!this.isPubliclyDisplayable(clone)) {
+      clone.name = "Anonymous";
+      clone.anonymised = true;
+    }
+    return clone;
+  }
+
+  // LEAD course cohort predicate. Delegates to the shared ResultsStore helper
+  // when available so the browser and Node tools agree; falls back to a local
+  // implementation (canonical values only) otherwise.
+  leadCohortOf(record) {
+    const store = typeof window !== "undefined" ? window.ResultsStore : null;
+    if (store && typeof store.leadCohortOf === "function") {
+      return store.leadCohortOf(record);
+    }
+    if (!record) return "";
+    const raw =
+      record.player && typeof record.player === "object"
+        ? record.player.leadCohort
+        : record.leadCohort;
+    const v = raw === null || raw === undefined ? "" : String(raw).trim();
+    return v === "2025" || v === "2026" ? v : "";
+  }
+
   analyzeCulture(cohortData) {
-    if (!cohortData || cohortData.length < this.minPlayers) {
+    // DEFENSIVE segmentation filter: only records with a valid JCB business
+    // function are eligible for the company culture analysis. Callers should
+    // already pass getCultureDataForAnalysis() (filtered + anonymised), but we
+    // re-apply the rule here so a direct call is still safe. Non-consenting
+    // JCB players are INCLUDED (they are anonymised upstream / below).
+    const eligible = (Array.isArray(cohortData) ? cohortData : []).filter((r) =>
+      this.isCultureEligible(r),
+    );
+
+    if (eligible.length < this.minPlayers) {
       return {
         error: "Insufficient data",
         message:
           "Company Culture Analysis requires at least " +
           this.minPlayers +
           " leaders to have completed the game.",
-        playerCount: cohortData ? cohortData.length : 0,
+        playerCount: eligible.length,
       };
     }
+
+    // Anonymise any non-consenting record that slipped through un-anonymised,
+    // so identity never leaks into the report even on a direct call.
+    cohortData = eligible.map((r) => this.anonymiseForCulture(r));
 
     const analysis = {
       playerCount: cohortData.length,
@@ -36,6 +118,8 @@ class CultureAnalysis {
       lead: this.analyzeLEADScores(cohortData),
       colors: this.analyzePersonalityColors(cohortData),
       segments: this.analyzeSegments(cohortData),
+      // LEAD course cohort segmentation (COHORT_SEGMENTATION_DESIGN §3.2).
+      cohorts: this.analyzeCohortSegments(cohortData),
       observations: [],
       recommendations: [],
     };
@@ -428,6 +512,108 @@ class CultureAnalysis {
     };
   }
 
+  // ------------------------------------------------------------------
+  // Segmentation by LEAD course cohort (COHORT_SEGMENTATION_DESIGN §3.2)
+  //
+  // Groups records into the canonical cohort keys ("2025", "2026", "none")
+  // plus a "course" roll-up (2025 + 2026). Blank / legacy / unexpected values
+  // are treated as "none" (non-participant). Cohorts below minSegmentSize are
+  // computed but flagged `sufficient: false` so renderers can suppress them.
+  // ------------------------------------------------------------------
+
+  analyzeCohortSegments(data) {
+    const groups = { "2025": [], "2026": [], none: [] };
+    (Array.isArray(data) ? data : []).forEach((p) => {
+      const key = this.leadCohortOf(p) || "none";
+      if (groups[key]) groups[key].push(p);
+    });
+
+    const build = (key, players) => {
+      if (players.length === 0) return null;
+      const lead = this.analyzeLEADScores(players);
+      const metrics = this.calculateAggregateMetrics(players);
+      const leadership = this.analyzeLeadershipDistribution(players);
+      return {
+        key: key,
+        label: key === "none" ? "Non-participants" : key + " cohort",
+        count: players.length,
+        sufficient: players.length >= this.minSegmentSize,
+        // LEAD dimension averages (the headline course-impact metrics)
+        leadAvg: {
+          leadership: lead.leadership.avg,
+          excellence: lead.excellence.avg,
+          agility: lead.agility.avg,
+          determination: lead.determination.avg,
+          total:
+            lead.leadership.avg +
+            lead.excellence.avg +
+            lead.agility.avg +
+            lead.determination.avg,
+        },
+        // Balance: max single-style share (lower = more balanced)
+        maxStyleShare: Math.max(0, ...Object.values(leadership.aggregate)),
+        diversity: leadership.diversity,
+        // Outcomes
+        avgGrowth: metrics.avgGrowth,
+        avgMorale: metrics.avgMorale,
+        avgAttrition: metrics.avgAttrition,
+        avgProfitMargin: metrics.avgProfitMargin,
+        successRate: metrics.successRate,
+        optimalRate: metrics.optimalRate,
+      };
+    };
+
+    const byCohort = {
+      "2025": build("2025", groups["2025"]),
+      "2026": build("2026", groups["2026"]),
+      none: build("none", groups.none),
+    };
+
+    // Roll-up: all course participants (2025 + 2026) vs non-participants.
+    const coursePlayers = groups["2025"].concat(groups["2026"]);
+    const course = build("course", coursePlayers);
+    if (course) course.label = "All course participants";
+
+    return {
+      byCohort: byCohort,
+      course: course,
+      nonParticipants: byCohort.none,
+      // Convenience deltas for the impact narrative (null when either side is
+      // missing or below the minimum sample size).
+      deltas: this.computeCohortDeltas(byCohort, course),
+    };
+  }
+
+  // Deltas between two cohort segments. Returns null for any comparison where
+  // either side is missing or `sufficient === false`. Sign convention:
+  // positive = better (so attrition is inverted).
+  computeCohortDeltas(byCohort, course) {
+    const delta = (a, b) => {
+      if (!a || !b || !a.sufficient || !b.sufficient) return null;
+      return {
+        leadTotal: b.leadAvg.total - a.leadAvg.total,
+        leadership: b.leadAvg.leadership - a.leadAvg.leadership,
+        excellence: b.leadAvg.excellence - a.leadAvg.excellence,
+        agility: b.leadAvg.agility - a.leadAvg.agility,
+        determination: b.leadAvg.determination - a.leadAvg.determination,
+        balance: a.maxStyleShare - b.maxStyleShare, // +ve = b more balanced
+        growth: b.avgGrowth - a.avgGrowth,
+        morale: b.avgMorale - a.avgMorale,
+        attrition: b.avgAttrition - a.avgAttrition, // -ve = b better
+      };
+    };
+    return {
+      // 2026 vs 2025 (year-on-year course impact)
+      yoy: delta(byCohort["2025"], byCohort["2026"]),
+      // 2026 vs non-participants
+      cohort2026VsNone: delta(byCohort.none, byCohort["2026"]),
+      // 2025 vs non-participants
+      cohort2025VsNone: delta(byCohort.none, byCohort["2025"]),
+      // All course participants vs non-participants (headline impact)
+      courseVsNone: delta(byCohort.none, course),
+    };
+  }
+
   segmentBy(data, field) {
     const groups = {};
 
@@ -660,6 +846,40 @@ class CultureAnalysis {
           "% morale.",
       });
     }
+
+    // --- Course Impact (LEAD course cohort segmentation) ---
+    // Only shown when both the course roll-up and the non-participant group
+    // meet the minimum sample size. Descriptive, not causal.
+    const d =
+      analysis.cohorts && analysis.cohorts.deltas
+        ? analysis.cohorts.deltas.courseVsNone
+        : null;
+    if (d) {
+      analysis.observations.push({
+        category: "Course Impact",
+        headline:
+          "Course participants average " +
+          (d.leadTotal >= 0 ? "+" : "") +
+          d.leadTotal.toFixed(0) +
+          " LEAD points vs non-participants",
+        detail:
+          "Across " +
+          analysis.cohorts.course.count +
+          " course participants and " +
+          analysis.cohorts.nonParticipants.count +
+          " non-participants, the course group shows " +
+          (d.balance >= 0 ? "+" : "") +
+          d.balance.toFixed(0) +
+          " points better style balance, " +
+          (d.growth >= 0 ? "+" : "") +
+          d.growth.toFixed(1) +
+          "% growth and " +
+          (d.morale >= 0 ? "+" : "") +
+          d.morale.toFixed(0) +
+          "% morale. This compares observed outcomes between groups; it does " +
+          "not by itself establish that the course caused the difference.",
+      });
+    }
   }
 
   // ------------------------------------------------------------------
@@ -682,7 +902,7 @@ class CultureAnalysis {
           leadership.mostUsed[1].toFixed(0) +
           "%).",
         actions: [
-          "Run a facilitated session on Goleman's six leadership styles",
+          "Run a facilitated session on the six leadership styles of Goleman",
           "Pair leaders with colleagues who use different dominant styles",
           'Build a "when to use which style" playbook for the leadership team',
         ],

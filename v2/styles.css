@@ -285,6 +285,22 @@ body {
   color: var(--jcb-black);
 }
 
+/* Results export/import (migration) actions on the welcome screen */
+.results-io-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.results-io-btn {
+  flex: 1;
+  min-width: 140px;
+  padding: 10px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .btn-tertiary {
   background: var(--jcb-gray);
   color: var(--jcb-white);
@@ -315,6 +331,13 @@ body {
 #registration-screen {
   pointer-events: auto;
   z-index: 1;
+  /* ISSUE H: allow the form to scroll when it is taller than the viewport,
+     and anchor it to the top so the title is visible on load. Mirrors the
+     #results-screen pattern below. */
+  overflow-y: auto;
+  justify-content: flex-start !important;
+  align-items: center;
+  padding: 2rem 1rem;
 }
 
 .registration-container {
@@ -751,12 +774,31 @@ select.input-large option:hover {
   font-size: 18px;
   margin-bottom: 15px;
   line-height: 1.6;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
 }
 
 .brief-details strong {
   color: var(--jcb-yellow);
-  display: inline-block;
-  width: 180px;
+  flex: 0 0 150px;
+  width: auto;
+  display: block;
+}
+
+.brief-value {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .brief-details p {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .brief-details strong {
+    flex: none;
+  }
 }
 
 .countdown {
@@ -1677,6 +1719,73 @@ select.input-large option:hover {
   font-size: 24px;
   color: var(--jcb-yellow);
   margin-bottom: 15px;
+}
+
+/* FIX 3b: the colour name is now a secondary descriptor beneath the
+   "YOUR LEADERSHIP SIGNATURE" heading, not a headline. */
+.signature-color {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 12px;
+}
+
+/* FIX 3a: executive-grade business-impact summary card. Visually consistent
+   with the metric tiles and the leadership chart (dark card, JCB yellow
+   accent, left border). */
+.results-business-impact {
+  margin-bottom: 40px;
+}
+
+.business-impact {
+  max-width: 900px;
+  margin: 0 auto;
+  background: rgba(51, 51, 51, 0.8);
+  padding: 40px;
+  border-left: 4px solid var(--jcb-yellow);
+}
+
+.business-impact h3 {
+  font-size: 32px;
+  color: var(--jcb-yellow);
+  margin-bottom: 30px;
+}
+
+.business-impact-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.business-impact-row:last-child {
+  border-bottom: none;
+}
+
+.business-impact-label {
+  flex: 1 1 auto;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.business-impact-value {
+  flex: 0 0 auto;
+  font-size: 28px;
+  font-weight: bold;
+  color: var(--jcb-yellow);
+}
+
+.business-impact-assessment {
+  flex: 0 0 160px;
+  text-align: right;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .results-feedback {
