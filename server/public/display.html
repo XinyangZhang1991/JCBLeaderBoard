@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JCB Leadership in Action — Live Leaderboard</title>
+    <link rel="stylesheet" href="/display-assets/display.css" />
+  </head>
+  <body>
+    <header class="display-header">
+      <div class="brand">
+        <span class="brand-mark">JCB</span>
+        <span class="brand-title">Leadership in Action</span>
+      </div>
+      <div class="status">
+        <span id="conn-dot" class="conn-dot offline"></span>
+        <span id="conn-label">Connecting…</span>
+        <span class="sep">•</span>
+        <span id="player-count">0 players</span>
+      </div>
+    </header>
+
+    <main class="display-main">
+      <section class="leaderboard-panel">
+        <h1 class="panel-title">Live Leaderboard</h1>
+        <table class="leaderboard">
+          <thead>
+            <tr>
+              <th class="col-rank">#</th>
+              <th class="col-name">Player</th>
+              <th class="col-num">Growth</th>
+              <th class="col-num">LEAD</th>
+              <th class="col-num">Morale</th>
+              <th class="col-num">Attrition</th>
+              <th class="col-style">Style</th>
+              <th class="col-round">Round</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body">
+            <tr class="empty-row">
+              <td colspan="8">Waiting for players to finish…</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <aside class="stats-panel">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-count">0</div>
+          <div class="stat-label">Completed runs</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-top-growth">—</div>
+          <div class="stat-label">Top growth</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-avg-morale">—</div>
+          <div class="stat-label">Avg morale</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-updated">—</div>
+          <div class="stat-label">Last update</div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="display-footer">
+      <span id="join-url">Join at the URL shown by the facilitator</span>
+      <span class="footer-note">Results update live as players finish</span>
+    </footer>
+
+    <script src="/display-assets/display.js"></script>
+  </body>
+</html>

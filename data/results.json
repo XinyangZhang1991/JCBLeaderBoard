@@ -1,0 +1,546 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-10-03T15:45:54.846Z",
+  "records": [
+    {
+      "schemaVersion": 1,
+      "runId": "run_muskdhrt_a3vls3ys",
+      "machineId": "mch_muskdhru_0hvxsofg",
+      "sessionId": "ses_muskdhsc_6rkubay9",
+      "recordedAt": "2026-10-03T15:45:55.020Z",
+      "timestamp": 1791042355001,
+      "appVersion": "2.0.0",
+      "player": {
+        "name": "X",
+        "jobFunction": "Manufacturing",
+        "seniority": "Executive",
+        "leadCohort": "2026",
+        "selfIdentifiedStyle": "coercive"
+      },
+      "consent": {
+        "publicDisplay": true,
+        "capturedAt": "2026-10-03T15:42:01.097Z"
+      },
+      "run": {
+        "round": 1,
+        "escaped": true,
+        "optimal": false,
+        "adaptationBonus": 0
+      },
+      "outcomes": {
+        "growth": 11.952349038052233,
+        "morale": 95,
+        "attrition": 5,
+        "profitMargin": 28,
+        "organizationalCapability": 181.75
+      },
+      "lead": {
+        "leadership": 190,
+        "excellence": 140,
+        "agility": 65,
+        "determination": 40,
+        "total": 435,
+        "ratios": {
+          "leadership": 1.1111111111111112,
+          "excellence": 0.8187134502923976,
+          "agility": 0.38011695906432746,
+          "determination": 0.23391812865497078
+        }
+      },
+      "profile": {
+        "leadershipStyle": "Coaching",
+        "leadershipProfile": {
+          "coercive": 10,
+          "authoritative": 18,
+          "affiliative": 14,
+          "democratic": 19,
+          "pacesetting": 13,
+          "coaching": 26
+        },
+        "leadershipStyles": {
+          "coercive": 35,
+          "authoritative": 65,
+          "affiliative": 50,
+          "democratic": 70,
+          "pacesetting": 45,
+          "coaching": 95
+        },
+        "personalityColor": "BALANCED",
+        "personalityDescription": "The Adaptive Leader - You repeatedly chose the approach the moment demanded rather than one fixed style."
+      },
+      "narrative": {
+        "criticalImprovement": "Continue developing balanced leadership",
+        "feedback": "<div class=\"feedback-section\"><div class=\"feedback-section\"><h4>Your Leadership Profile: The Adaptive Leader</h4><p><strong>Your dominant colour is BALANCED — Adaptive Leader.</strong> You consistently chose the approach the moment demanded. No single style dominated your decisions, and you moved between driving, analysing, energising and developing as the situation changed. This was driven by your two most-used styles: <strong>coaching</strong> (26%) and <strong>democratic</strong> (19%). Your signature strengths are you matched your approach to the moment, you drew on a wide range of styles, and you adapted when the context shifted rather than repeating one play. The edge to watch is range without a signature — being everything to everyone can read as having no clear centre. For example, in <strong>safety near-miss</strong> you leaned on <em>coaching</em> leadership — one of the moments that shaped the profile above. </p></div><div class=\"feedback-section\"><h4>Self-Image vs Reality:</h4><p>⚠️ <strong>A gap worth examining.</strong> You identified yourself as <strong>Coercive</strong>, but your decisions used it only 10% of the time. What actually drove your play was <strong>coaching</strong> (26%). This is a <em>significant</em> gap. You may be leading from a style you do not fully recognise — which means the impact you intend and the impact you create are not yet the same thing. That is not a character flaw; it is the single most useful thing this profile can tell you. Seek candid feedback from people who experience your leadership daily. Neither style is \"wrong\" — the goal is to close the distance between how you see yourself and how you actually behave, because self-aware leaders develop faster.</p></div><div class=\"feedback-section\"><h4>What You Did Well:</h4><p><strong>Organizational Capability Path:</strong> You achieved 12.0% growth - below the 15% growth target, but you built exceptional organizational capability (182 points). This coaching-focused approach invests in long-term team development. While Year 1 growth is moderate, you have built a strong foundation for sustainable performance. Your team morale remained strong, demonstrating that you brought people with you. You showed genuine agility, particularly in adapting your approach when faced with challenges. </p></div><div class=\"feedback-section\"><h4>Your LEAD Competencies Explained:</h4><p><strong>Leadership (47%):</strong> Adequate - Limited style variety suggests some over-reliance on comfort zone.</p><p><strong>Excellence (31%):</strong> Needs development - 0 info requests indicates decisions made on instinct rather than evidence.</p><p><strong>Agility (28%):</strong> Needs development - Difficulty adapting to uncertainty or changing contexts.</p><p><strong>Determination (13%):</strong> Needs development - Insufficient drive for results or resilience under pressure.</p></div><div class=\"feedback-section\"><h4>Decision-Making Rigor:</h4><p>⚠️ You requested <strong>zero additional information</strong> across all 9 scenarios. This \"decide on instinct\" approach is fast but dangerous - you are operating with incomplete data. You succeeded despite this, but will not always be lucky. Evidence-based leaders outperform gut-decision makers over time.</p></div><div class=\"feedback-section\"><h4>Where You Left Performance on the Table:</h4><p>You achieved 12.0% when 30%+ was possible with more strategic choices. </p></div><div class=\"feedback-section\"><h4>Your Leadership Personality (Jung Model):</h4><p>Your dominant color is <strong>BALANCED</strong>: The Adaptive Leader - You repeatedly chose the approach the moment demanded rather than one fixed style.<br><br><strong>Balanced Leadership Profile:</strong> You do not show a strong preference for any single Jung temperament. This suggests high adaptability - you can shift between different leadership modes as context requires. Your LEAD scores likely show relatively even development across all four dimensions.</p></div><div class=\"feedback-section\"><h4>The Key Insight:</h4><p>You have strong leadership instincts. The next level is consciously adapting your style to what each situation requires, rather than defaulting to your comfort zone.</p></div>",
+        "recommendations": [
+          {
+            "title": "DEVELOP YOUR COACHING MUSCLE (Critical)",
+            "description": "Current usage: 26% | Optimal: 35-40%. Recommended: \"Good to Great\" by Jim Collins - See how elite leaders develop people AND drive relentless results simultaneously. Practice: Spend 30 min weekly in development conversations. Why: Your team needs growth opportunities, not just targets."
+          },
+          {
+            "title": "IMPROVE DEMOCRATIC DECISION-MAKING (Opportunity)",
+            "description": "You made most major decisions unilaterally. Recommended: Implement peer problem-solving techniques. Resource: \"Death by Meeting\" by Patrick Lencioni - Turn endless consultation into decisive, well-structured decisions."
+          },
+          {
+            "title": "STRENGTHEN STRATEGIC PATIENCE (Foundation)",
+            "description": "You favoured short-term options frequently. Recommended: Develop decision-making frameworks. Resource: \"Thinking, Fast and Slow\" by Daniel Kahneman - Recognise the cognitive biases that make fast, gut-led decisions unreliable."
+          }
+        ]
+      },
+      "history": {
+        "decisions": [
+          {
+            "scenario": 0,
+            "timestamp": 1791042223896,
+            "choices": [
+              {
+                "type": "choice",
+                "index": 0
+              },
+              {
+                "type": "choice",
+                "index": 0
+              },
+              {
+                "type": "choice",
+                "index": 0
+              }
+            ],
+            "impact": {
+              "growth": 3.5,
+              "profitMargin": 0,
+              "morale": 11,
+              "attrition": -2,
+              "organizationalCapability": 22,
+              "leadershipStyles": {
+                "coercive": 0,
+                "authoritative": 0,
+                "affiliative": 20,
+                "democratic": 0,
+                "pacesetting": 0,
+                "coaching": 20
+              },
+              "leadership": 28,
+              "excellence": 15,
+              "agility": 0,
+              "determination": 10
+            },
+            "scenarioTitle": "THE INHERITANCE",
+            "scenarioId": "inheritance",
+            "stylesUsed": [
+              "coaching",
+              "affiliative",
+              "pacesetting"
+            ],
+            "colorsUsed": [
+              "GREEN",
+              "YELLOW",
+              "RED"
+            ]
+          },
+          {
+            "scenario": 1,
+            "timestamp": 1791042230504,
+            "choices": [
+              {
+                "type": "choice",
+                "index": 3
+              },
+              {
+                "type": "choice",
+                "index": 2
+              }
+            ],
+            "impact": {
+              "growth": -0.28261500000000006,
+              "profitMargin": 0,
+              "morale": 1.03477,
+              "attrition": 2.565375,
+              "organizationalCapability": 2,
+              "leadershipStyles": {
+                "coercive": 15,
+                "authoritative": 15,
+                "affiliative": 0,
+                "democratic": 0,
+                "pacesetting": 0,
+                "coaching": 0
+              },
+              "leadership": 15,
+              "excellence": 15,
+              "agility": 20,
+              "determination": 10
+            },
+            "scenarioTitle": "THE DATA DILEMMA",
+            "scenarioId": "data_dilemma",
+            "stylesUsed": [
+              "coercive",
+              "authoritative"
+            ],
+            "colorsUsed": [
+              "RED",
+              "BLUE"
+            ]
+          },
+          {
+            "scenario": 2,
+            "timestamp": 1791042236550,
+            "choices": [
+              {
+                "type": "choice",
+                "index": 1
+              },
+              {
+                "type": "choice",
+                "index": 1
+              }
+            ],
+            "impact": {
+              "growth": -0.18232428571428572,
+              "profitMargin": 0,
+              "morale": 23.166597142857146,
+              "attrition": -3,
+              "organizationalCapability": 38.75,
+              "leadershipStyles": {
+                "coercive": 0,
+                "authoritative": 0,
+                "affiliative": 0,
+                "democratic": 0,
+                "pacesetting": 0,
+                "coaching": 35
+              },
+              "leadership": 35,
+              "excellence": 35,
+              "agility": 0,
+              "determination": 0
+            },
+            "scenarioTitle": "THE SAFETY NEAR-MISS",
+            "scenarioId": "safety_crisis",
+            "stylesUsed": [
+              "coaching",
+              "coaching"
+            ],
+            "colorsUsed": [
+              "GREEN",
+              "GREEN"
+            ]
+          },
+          {
+            "scenario": 3,
+            "timestamp": 1791042242868,
+            "choices": [
+              {
+                "type": "choice",
+                "index": 2
+              },
+              {
+                "type": "choice",
+                "index": 1
+              },
+              {
+                "type": "choice",
+                "index": 2
+              }
+            ],
+            "impact": {
+              "growth": 1.8531408571428574,
+              "profitMargin": 0,
+              "morale": 7.315289999999999,
+              "attrition": 0,
+              "organizationalCapability": 22,
+              "leadershipStyles": {
+                "coercive": 0,
+                "authoritative": 0,
+                "affiliative": 15,
+                "democratic": 30,
+                "pacesetting": 0,
+                "coaching": 0
+              },
+              "leadership": 35,
+              "excellence": 35,
+              "agility": 30,
+              "determination": -15
+            },
+            "scenarioTitle": "THE AMBIGUOUS SIGNAL",
+            "scenarioId": "ambiguous_signal",
+            "stylesUsed": [
+              "democratic",
+              "democratic",
+              "affiliative"
+            ],
+            "colorsUsed": [
+              "YELLOW",
+              "YELLOW",
+              "YELLOW"
+            ]
+          },
+          {
+            "scenario": 4,
+            "timestamp": 1791042296755,
+            "choices": [
+              {
+                "type": "slider",
+                "values": [
+                  0.05,
+                  0.15,
+                  0.05,
+                  0.05,
+                  0.05,
+                  0.05
+                ]
+              },
+              {
+                "type": "timeline",
+                "value": 1
+              },
+              {
+                "type": "choice",
+                "index": 1
+              }
+            ],
+            "impact": {
+              "growth": 0,
+              "profitMargin": 0,
+              "morale": 3.1863599999999996,
+              "attrition": 0,
+              "organizationalCapability": 0,
+              "leadershipStyles": {
+                "coercive": 0,
+                "authoritative": 35,
+                "affiliative": 0,
+                "democratic": 0,
+                "pacesetting": 0,
+                "coaching": 0
+              },
+              "leadership": 15,
+              "excellence": 0,
+              "agility": 0,
+              "determination": 0
+            },
+            "scenarioTitle": "THE COMPETITOR THREAT",
+            "scenarioId": "competitor_threat",
+            "stylesUsed": [
+              "authoritative",
+              "authoritative"
+            ],
+            "colorsUsed": [
+              "BLUE",
+              "BLUE"
+            ]
+          },
+          {
+            "scenario": 5,
+            "timestamp": 1791042308518,
+            "choices": [
+              {
+                "type": "choice",
+                "index": 0
+              },
+              {
+                "type": "choice",
+                "index": 1
+              },
+              {
+                "type": "timeline",
+                "value": 1
+              }
+            ],
+            "impact": {
+              "growth": -1.7745594594594594,
+              "profitMargin": 0,
+              "morale": 2.135264324324324,
+              "attrition": -2,
+              "organizationalCapability": -1,
+              "leadershipStyles": {
+                "coercive": 20,
+                "authoritative": 0,
+                "affiliative": 0,
+                "democratic": 0,
+                "pacesetting": 15,
+                "coaching": 0
+              },
+              "leadership": 5,
+              "excellence": -10,
+              "agility": 0,
+              "determination": 0
+            },
+            "scenarioTitle": "THE TALENT EXODUS",
+            "scenarioId": "talent_exodus",
+            "stylesUsed": [
+              "coaching",
+              "coercive",
+              "pacesetting"
+            ],
+            "colorsUsed": [
+              "GREEN",
+              "RED",
+              "RED"
+            ]
+          },
+          {
+            "scenario": 6,
+            "timestamp": 1791042317180,
+            "choices": [
+              {
+                "type": "choice",
+                "index": 3
+              },
+              {
+                "type": "choice",
+                "index": 3
+              },
+              {
+                "type": "choice",
+                "index": 2
+              }
+            ],
+            "impact": {
+              "growth": -0.17666,
+              "profitMargin": 0,
+              "morale": 3.21006,
+              "attrition": 2.12475,
+              "organizationalCapability": -5,
+              "leadershipStyles": {
+                "coercive": 0,
+                "authoritative": 15,
+                "affiliative": 15,
+                "democratic": 0,
+                "pacesetting": 15,
+                "coaching": 0
+              },
+              "leadership": 5,
+              "excellence": 35,
+              "agility": 0,
+              "determination": 10
+            },
+            "scenarioTitle": "THE DIFFICULT CONVERSATION",
+            "scenarioId": "difficult_conversation",
+            "stylesUsed": [
+              "pacesetting",
+              "affiliative",
+              "authoritative"
+            ],
+            "colorsUsed": [
+              "RED",
+              "YELLOW",
+              "BLUE"
+            ]
+          },
+          {
+            "scenario": 7,
+            "timestamp": 1791042331141,
+            "choices": [
+              {
+                "type": "choice",
+                "index": 3
+              },
+              {
+                "type": "choice",
+                "index": 2
+              },
+              {
+                "type": "slider",
+                "values": [
+                  0.05,
+                  0.05,
+                  0.05,
+                  0.1,
+                  0.05
+                ]
+              }
+            ],
+            "impact": {
+              "growth": 1.149606037735849,
+              "profitMargin": 0,
+              "morale": 11.82283320754717,
+              "attrition": -2,
+              "organizationalCapability": 20,
+              "leadershipStyles": {
+                "coercive": 0,
+                "authoritative": 0,
+                "affiliative": 0,
+                "democratic": 20,
+                "pacesetting": 0,
+                "coaching": 20
+              },
+              "leadership": 22,
+              "excellence": 15,
+              "agility": 15,
+              "determination": 10
+            },
+            "scenarioTitle": "THE INNOVATION GAMBLE",
+            "scenarioId": "innovation_gamble",
+            "stylesUsed": [
+              "democratic",
+              "coaching"
+            ],
+            "colorsUsed": [
+              "YELLOW",
+              "GREEN"
+            ]
+          },
+          {
+            "scenario": 8,
+            "timestamp": 1791042349309,
+            "choices": [
+              {
+                "type": "choice",
+                "index": 0
+              },
+              {
+                "type": "choice",
+                "index": 1
+              },
+              {
+                "type": "slider",
+                "values": [
+                  0.1,
+                  0.005,
+                  0.1,
+                  0.05
+                ]
+              },
+              {
+                "type": "choice",
+                "index": 3
+              }
+            ],
+            "impact": {
+              "growth": 4.642767213114754,
+              "profitMargin": 0,
+              "morale": 10.803459016393441,
+              "attrition": 0,
+              "organizationalCapability": 8,
+              "leadershipStyles": {
+                "coercive": 0,
+                "authoritative": 0,
+                "affiliative": 0,
+                "democratic": 20,
+                "pacesetting": 15,
+                "coaching": 20
+              },
+              "leadership": 30,
+              "excellence": 0,
+              "agility": 0,
+              "determination": 15
+            },
+            "scenarioTitle": "THE YEAR-END RECKONING",
+            "scenarioId": "year_end",
+            "stylesUsed": [
+              "pacesetting",
+              "coaching",
+              "democratic"
+            ],
+            "colorsUsed": [
+              "RED",
+              "GREEN",
+              "YELLOW"
+            ]
+          }
+        ],
+        "infoRequests": []
+      },
+      "integrity": {
+        "recordHash": ""
+      }
+    }
+  ]
+}

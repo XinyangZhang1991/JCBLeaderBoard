@@ -1,0 +1,23 @@
+{
+  "name": "jcb-leaderboard-server",
+  "version": "1.0.0",
+  "description": "Multiplayer Node.js server for the JCB Leadership in Action game. Hosts the client, collects results from many players on their own devices, and broadcasts a live shared leaderboard/dashboard.",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "jcb",
+    "leadership",
+    "game",
+    "multiplayer",
+    "leaderboard"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {}
+}

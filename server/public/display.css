@@ -1,0 +1,291 @@
+/* Host / projector display for the JCB Leadership in Action live leaderboard.
+   Large type, high contrast, dark theme so it reads well on a big screen. */
+
+:root {
+  --jcb-yellow: #ffd100;
+  --jcb-black: #1a1a1a;
+  --bg: #0e1116;
+  --panel: #161b22;
+  --panel-2: #1c232d;
+  --text: #f5f7fa;
+  --muted: #9aa4b2;
+  --line: #2a323d;
+  --good: #3fb950;
+  --warn: #d29922;
+  --bad: #f85149;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ---------------- Header ---------------- */
+
+.display-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.2rem 2rem;
+  background: linear-gradient(90deg, var(--jcb-black), #2b2b2b);
+  border-bottom: 4px solid var(--jcb-yellow);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.brand-mark {
+  background: var(--jcb-yellow);
+  color: var(--jcb-black);
+  font-weight: 900;
+  font-size: 2rem;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.7rem;
+  border-radius: 6px;
+}
+
+.brand-title {
+  font-size: 1.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.2rem;
+  color: var(--muted);
+}
+
+.conn-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--bad);
+}
+
+.conn-dot.online {
+  background: var(--good);
+  box-shadow: 0 0 10px var(--good);
+}
+
+.conn-dot.offline {
+  background: var(--bad);
+}
+
+.sep {
+  opacity: 0.4;
+}
+
+/* ---------------- Main ---------------- */
+
+.display-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  min-height: 0;
+}
+
+.panel-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  color: var(--jcb-yellow);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.leaderboard-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.5rem;
+  overflow: auto;
+  min-height: 0;
+}
+
+.leaderboard {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1.35rem;
+}
+
+.leaderboard thead th {
+  text-align: left;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0.6rem 0.8rem;
+  border-bottom: 2px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+
+.leaderboard tbody td {
+  padding: 0.85rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.leaderboard tbody tr:nth-child(1) td {
+  background: rgba(255, 209, 0, 0.12);
+  font-weight: 700;
+}
+
+.leaderboard tbody tr:nth-child(2) td {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.leaderboard tbody tr:nth-child(3) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.col-rank {
+  width: 3.5rem;
+  text-align: center;
+}
+.col-num {
+  text-align: right;
+  width: 7rem;
+}
+.col-round {
+  text-align: center;
+  width: 6rem;
+}
+
+.rank-badge {
+  display: inline-block;
+  min-width: 2.2rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-weight: 700;
+}
+
+tr:nth-child(1) .rank-badge {
+  background: var(--jcb-yellow);
+  color: var(--jcb-black);
+}
+
+.style-pill {
+  display: inline-block;
+  padding: 0.15rem 0.7rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 600;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.empty-row td {
+  text-align: center;
+  color: var(--muted);
+  font-size: 1.3rem;
+  padding: 3rem 1rem;
+}
+
+/* ---------------- Stats ---------------- */
+
+.stats-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.stat-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.4rem;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: var(--jcb-yellow);
+  line-height: 1.1;
+}
+
+.stat-label {
+  margin-top: 0.4rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/* ---------------- Footer ---------------- */
+
+.display-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 2rem;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+.footer-note {
+  font-style: italic;
+}
+
+/* Flash animation when a new result arrives. */
+@keyframes flash {
+  0% {
+    background: rgba(255, 209, 0, 0.35);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.flash {
+  animation: flash 1.2s ease-out;
+}
+
+@media (max-width: 1100px) {
+  .display-main {
+    grid-template-columns: 1fr;
+  }
+  .stats-panel {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .stat-card {
+    flex: 1 1 140px;
+  }
+}

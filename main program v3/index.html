@@ -44,6 +44,14 @@
               📊 COMPANY CULTURE ANALYSIS
               <span class="btn-subtitle">Requires 3+ players</span>
             </button>
+            <button
+              class="btn-secondary results-io-btn"
+              id="live-leaderboard-btn"
+              onclick="if (window.LiveSync) window.LiveSync.showLeaderboard();"
+              title="See everyone playing right now (multiplayer)"
+            >
+              🔴 LIVE LEADERBOARD
+            </button>
             <div class="results-io-actions">
               <button
                 class="btn-secondary results-io-btn"
@@ -615,6 +623,8 @@
     <script src="culture-analysis.js"></script>
     <!-- BUGFIX #13: Removed <script src="game-simulator.js"></script> — the file does not exist. -->
     <script src="app.js"></script>
+    <!-- Multiplayer live sync: inert unless served by server/server.js. -->
+    <script src="live-sync.js"></script>
 
     <script>
       // BUGFIX #14: Removed the leftover button-diagnostic block and the disabled
