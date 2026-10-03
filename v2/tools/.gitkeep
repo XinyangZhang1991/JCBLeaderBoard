@@ -1,3 +1,0 @@
-# Keeps tools/ in version control. Contains the dependency-free Node helpers:
-#   serve.js          - static server + POST /api/results + GET /api/cohort
-#   merge-results.js  - amalgamate results folders into one leaderboard/cohort

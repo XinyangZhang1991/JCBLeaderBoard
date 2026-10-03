@@ -1,2 +1,0 @@
-# Keeps results/merged/ in version control while it is empty.
-# The merge tool writes leaderboard.json, cohort.json and merge-manifest.json here.
