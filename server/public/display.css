@@ -289,3 +289,103 @@ tr:nth-child(1) .rank-badge {
     flex: 1 1 140px;
   }
 }
+
+/* Phone: the 8-column table cannot fit, so stack each player as a card
+   and label every value from its data-label attribute. */
+@media (max-width: 640px) {
+  /* Let the page scroll naturally instead of trapping the list in a
+     fixed-height box with its own scrollbar. */
+  html,
+  body {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .display-main {
+    display: block;
+    min-height: 0;
+  }
+
+  .leaderboard-panel {
+    overflow: visible;
+    min-height: 0;
+    margin-bottom: 1rem;
+  }
+
+  .display-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 1rem;
+  }
+
+  .brand-title {
+    font-size: 1.3rem;
+  }
+
+  .display-main {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .leaderboard-panel {
+    padding: 1rem;
+  }
+
+  .leaderboard thead {
+    display: none;
+  }
+
+  .leaderboard,
+  .leaderboard tbody,
+  .leaderboard tr,
+  .leaderboard td {
+    display: block;
+    width: 100%;
+  }
+
+  .leaderboard tr {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .leaderboard tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    text-align: right;
+  }
+
+  .leaderboard tbody td:last-child {
+    border-bottom: none;
+  }
+
+  .leaderboard tbody td::before {
+    content: attr(data-label);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    text-align: left;
+  }
+
+  .col-rank,
+  .col-num,
+  .col-round {
+    width: auto;
+  }
+
+  .display-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    padding: 1rem;
+    font-size: 0.95rem;
+  }
+}

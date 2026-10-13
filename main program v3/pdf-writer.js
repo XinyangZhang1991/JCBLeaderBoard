@@ -451,6 +451,23 @@
   // `data-width="30"` (percent of content width) or `data-width="30%"`, and
   // also honours an inline `style="width:30%"`. Returns a positive number
   // (the percentage) or null when no usable width is present.
+  // Detect a right-aligned cell. The report HTML marks numeric columns with
+  // class="num" (and/or an inline text-align:right). Classes are otherwise
+  // stripped by the parser, so we sniff them here and carry the flag through
+  // to the layout engine, which right-aligns the text within its column.
+  function parseCellAlign(attrs) {
+    if (!attrs) return null;
+    if (/text-align\s*:\s*right/i.test(attrs)) return "right";
+    if (/text-align\s*:\s*center/i.test(attrs)) return "center";
+    // class="num" (possibly among other classes) => right aligned.
+    var classMatch = /class\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
+    if (classMatch) {
+      var classes = classMatch[2] || classMatch[3] || classMatch[4] || "";
+      if (/(^|\s)num(\s|$)/i.test(classes)) return "right";
+    }
+    return null;
+  }
+
   function parseCellWidth(attrs) {
     if (!attrs) return null;
     var m = /data-width\s*=\s*["']?\s*([0-9]+(?:\.[0-9]+)?)\s*%?/i.exec(attrs);

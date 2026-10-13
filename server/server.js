@@ -210,7 +210,10 @@ function handleGetCohort(req, res) {
 
 function handleGetLeaderboard(req, res) {
   const url = new URL(req.url, "http://localhost");
-  const limit = parseInt(url.searchParams.get("limit") || "10", 10);
+  // Default to the FULL cohort so the live leaderboard shows every player, not
+  // just the top 10. An explicit ?limit= still narrows the result when needed.
+  const rawLimit = url.searchParams.get("limit");
+  const limit = rawLimit === null ? undefined : parseInt(rawLimit, 10);
   sendJson(res, 200, {
     ok: true,
     count: store.count(),
@@ -300,7 +303,8 @@ const ws = attachWebSocketServer(server, {
       JSON.stringify({
         type: "snapshot",
         count: store.count(),
-        leaderboard: store.leaderboard(10),
+        // Full cohort so the live leaderboard shows every player, not top 10.
+        leaderboard: store.leaderboard(),
         updatedAt: new Date().toISOString(),
       }),
     );
@@ -319,7 +323,8 @@ store.onChange((event) => {
     JSON.stringify({
       type: event.type, // "added" | "updated"
       count: store.count(),
-      leaderboard: store.leaderboard(10),
+      // Full cohort so the live leaderboard shows every player, not top 10.
+      leaderboard: store.leaderboard(),
       record: event.record,
       updatedAt: new Date().toISOString(),
     }),

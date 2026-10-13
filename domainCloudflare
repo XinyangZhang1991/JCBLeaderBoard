@@ -1,0 +1,65 @@
+CLOUDFLARE TUNNEL — SETUP REFERENCE
+Domain:        tomrushtonportal.co.uk
+Tunnel name:   node-server
+Tunnel UUID:   cbd602d5-5946-4712-81e8-1c9b77f23f68
+Public URL:    https://jcb.tomrushtonportal.co.uk
+Local service: http://localhost:3001
+================================================================
+
+
+----------------------------------------------------------------
+SETUP COMMANDS
+----------------------------------------------------------------
+
+# Install
+winget install Cloudflare.cloudflared
+
+# Verify
+cloudflared --version
+
+# Log in (opens browser, pick tomrushtonportal.co.uk)
+cloudflared tunnel login
+
+# Create the tunnel
+cloudflared tunnel create node-server
+# → UUID: cbd602d5-5946-4712-81e8-1c9b77f23f68
+
+# Route DNS — use SUBDOMAIN ONLY, not the full domain
+cloudflared tunnel route dns node-server jcb
+# → Creates jcb.tomrushtonportal.co.uk → tunnel
+
+
+----------------------------------------------------------------
+CONFIG FILE
+----------------------------------------------------------------
+
+Path: C:\Users\13091\.cloudflared\config.yml
+
+   tunnel: cbd602d5-5946-4712-81e8-1c9b77f23f68
+   credentials-file: C:\Users\13091\.cloudflared\cbd602d5-5946-4712-81e8-1c9b77f23f68.json
+
+   ingress:
+     - hostname: jcb.tomrushtonportal.co.uk
+       service: http://localhost:3001
+     - service: http_status:404
+
+
+----------------------------------------------------------------
+DAILY WORKFLOW
+----------------------------------------------------------------
+
+# Window 1
+cd "E:\JCB leaderboard"
+node server/server.js
+
+# Window 2
+cloudflared tunnel run node-server
+
+
+----------------------------------------------------------------
+ACCESS
+----------------------------------------------------------------
+
+   https://jcb.tomrushtonportal.co.uk
+
+================================================================

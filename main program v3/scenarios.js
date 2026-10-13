@@ -239,26 +239,36 @@ Operations wants suspension, HR retraining (2 days), Safety a full audit (1 week
             text: '"Stand the operator down pending the investigation - protect the site and be seen to act"',
             style: "coercive",
             color: "RED",
+            consequence:
+              "You act fast, but the site reads it as blame. The operator is sidelined before the facts are in, and the team quietly notes that a near-miss is treated as a disciplinary matter. The HSE inspector will ask what you learned - and right now, you have not learned anything yet.",
           },
           {
             text: "B) Retrain the employee and team (£15k, 2 days)",
             style: "coaching",
             color: "GREEN",
+            consequence:
+              "This is the response the evidence supports. The near-miss was a training gap, not a person problem - the operator had one day of induction instead of the recommended three. Retraining the whole team closes the gap, the HSE inspector sees a proportionate, learning-led response, and morale holds. A sound, defensible decision.",
           },
           {
             text: "C) Facility-wide safety audit (£85k, 1 week downtime)",
             style: "authoritative",
             color: "BLUE",
+            consequence:
+              "Thorough, and the audit will surface real systemic issues - but a week of downtime and £85k for a first incident in three years reads as an over-reaction. The team absorbs the disruption and the message lands as 'we panicked' rather than 'we learned'.",
           },
           {
             text: '"Reinforce the safety briefing with the team and keep production running - the near-miss is a useful prompt"',
             style: "affiliative",
             color: "YELLOW",
+            consequence:
+              "Production keeps running and the team feels trusted - but a briefing alone leaves the actual training gap in place. If the same near-miss recurs, the HSE inspector will ask why the known cause was never fixed. This is the weakest defensible position.",
           },
           {
             text: "E) Find the root cause first, then decide (1 week)",
             style: "democratic",
             color: "YELLOW",
+            consequence:
+              "You resist the pressure to act before you understand. The investigation confirms a training gap, not a person problem - exactly the evidence the HSE inspector wants to see. The team reads your restraint as competence, and the eventual fix is the right one. A strong, evidence-led decision.",
           },
         ],
       },
@@ -568,7 +578,7 @@ HR warns losing all three would trigger a confidence crisis.`,
 
     decisions: [
       {
-        title: "Part 1: What is the root cause?",
+        title: "Part 1: Where do you focus first?",
         type: "choice",
         options: [
           {
@@ -880,22 +890,25 @@ HR warns losing all three would trigger a confidence crisis.`,
         label: "Customer pilot feedback verbatims",
         type: "useful",
         content:
-          "Concerns about cold-weather battery life - fixable with testing.",
+          "Strong demand for the hybrid Loadall. Cold-weather battery life is the one concern - a short, focused test cycle resolves it, so an accelerated Q4 launch is achievable without cutting corners.",
       },
       {
         label: "Competitor timeline intelligence",
         type: "trap",
-        content: "Claims the competitor is 6 months away - false urgency.",
+        content:
+          "Claims the competitor is 6 months away - false urgency that pushes a rushed, untested launch.",
       },
       {
         label: "Technical risk assessment",
         type: "useful",
-        content: "Flags failure modes to fix before full launch.",
+        content:
+          "Failure modes are known and containable with a 10-week accelerated programme. A full 18-week delay is not required - it would simply miss the year-end window.",
       },
       {
         label: "Exec pressure memo",
         type: "trap",
-        content: "Puts year-end politics above sound decisions.",
+        content:
+          "Puts year-end politics above sound decisions - pushes an immediate launch with no testing.",
       },
     ],
 

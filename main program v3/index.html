@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>JCB Leadership in Action</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="culture-dashboard-styles.css" />
@@ -35,19 +38,42 @@
           </div>
           <div class="welcome-right">
             <h3 class="leaderboard-title">LEADERBOARD</h3>
+            <!-- Round selector: Round 1 and Round 2 are scored against
+                 different benchmarks (171 vs 114 cumulative LEAD) and different
+                 scenario counts, so their scores are NOT comparable and must
+                 never be mixed on one board. This tab strip filters the board
+                 to a single round. -->
+            <div class="leaderboard-round-tabs" id="leaderboard-round-tabs">
+              <button
+                type="button"
+                class="leaderboard-round-tab active"
+                data-round="1"
+                onclick="if (window.game) game.setLeaderboardRound(1);"
+              >
+                ROUND 1
+              </button>
+              <button
+                type="button"
+                class="leaderboard-round-tab"
+                data-round="2"
+                onclick="if (window.game) game.setLeaderboardRound(2);"
+              >
+                ROUND 2
+              </button>
+            </div>
             <div id="leaderboard-container" class="leaderboard-list"></div>
             <button
               class="btn-culture-analysis"
               id="culture-btn"
-              onclick="if (window.game) game.showCultureDashboard();"
+              onclick="if (window.game) game.promptCultureAccess();"
             >
               📊 COMPANY CULTURE ANALYSIS
-              <span class="btn-subtitle">Requires 3+ players</span>
+              <span class="btn-subtitle">Password required · 3+ players</span>
             </button>
             <button
               class="btn-secondary results-io-btn"
               id="live-leaderboard-btn"
-              onclick="if (window.LiveSync) window.LiveSync.showLeaderboard();"
+              onclick="if (window.LiveSync) window.LiveSync.showLeaderboardForRound(window.game ? game.leaderboardRound : 1);"
               title="See everyone playing right now (multiplayer)"
             >
               🔴 LIVE LEADERBOARD
@@ -165,6 +191,7 @@
               <option value="">Select an option</option>
               <option value="2025">2025</option>
               <option value="2026">2026</option>
+              <option value="No">No / N/A</option>
             </select>
           </div>
 
@@ -173,7 +200,7 @@
             <div class="radio-group">
               <div
                 class="radio-option"
-                onclick="game.selectLeadershipStyle('coercive')"
+                onclick="game.selectLeadershipStyle('coercive', this)"
               >
                 <input type="radio" name="leadership-style" value="coercive" />
                 <div class="radio-content">
@@ -183,7 +210,7 @@
               </div>
               <div
                 class="radio-option"
-                onclick="game.selectLeadershipStyle('authoritative')"
+                onclick="game.selectLeadershipStyle('authoritative', this)"
               >
                 <input
                   type="radio"
@@ -197,7 +224,7 @@
               </div>
               <div
                 class="radio-option"
-                onclick="game.selectLeadershipStyle('affiliative')"
+                onclick="game.selectLeadershipStyle('affiliative', this)"
               >
                 <input
                   type="radio"
@@ -211,7 +238,7 @@
               </div>
               <div
                 class="radio-option"
-                onclick="game.selectLeadershipStyle('democratic')"
+                onclick="game.selectLeadershipStyle('democratic', this)"
               >
                 <input
                   type="radio"
@@ -225,7 +252,7 @@
               </div>
               <div
                 class="radio-option"
-                onclick="game.selectLeadershipStyle('pacesetting')"
+                onclick="game.selectLeadershipStyle('pacesetting', this)"
               >
                 <input
                   type="radio"
@@ -239,7 +266,7 @@
               </div>
               <div
                 class="radio-option"
-                onclick="game.selectLeadershipStyle('coaching')"
+                onclick="game.selectLeadershipStyle('coaching', this)"
               >
                 <input type="radio" name="leadership-style" value="coaching" />
                 <div class="radio-content">
@@ -326,7 +353,7 @@
               <p>
                 Your predecessor delivered steady growth. The Exec has set an
                 ambitious growth target for the year ahead — and expects you to
-                hit it without burning out the team along the way. You have 15
+                hit it without burning out the team along the way. You have 20
                 minutes to work through the scenarios — the clock is running, so
                 trust your judgement and decide quickly.
               </p>
@@ -370,7 +397,7 @@
               </p>
 
               <p>
-                This round has 6 scenarios, and you have 15 minutes to work
+                This round has 6 scenarios, and you have 20 minutes to work
                 through them — the clock is running, so decide quickly and trust
                 your judgement.
               </p>
@@ -378,9 +405,9 @@
               <div class="exec-expectations">
                 <p>
                   <strong>WHAT THE EXEC WANTS:</strong> Sharper decisions this
-                  time. Sustain growth, protect margin, keep morale and
-                  capability high, and hold attrition down — the pressure is
-                  greater now, and the business will feel every call you make.
+                  time. Sustain growth, keep morale and capability high, and
+                  hold attrition down — the pressure is greater now, and the
+                  business will feel every call you make.
                 </p>
               </div>
 
@@ -458,10 +485,11 @@
               <span class="metric-label">Revenue Growth:</span>
               <span class="metric-value" id="metric-growth">+0.0%</span>
             </div>
-            <div class="metric">
-              <span class="metric-label">Profit Margin:</span>
-              <span class="metric-value" id="metric-profit">28%</span>
-            </div>
+            <!-- Profit Margin tile removed: profit is only modified by 2 of 9
+                 Round 1 scenarios, so it appeared frozen/un-impacted. Growth is
+                 the headline target, so the HUD now shows growth + team health
+                 metrics only. The profitMargin state value is still tracked
+                 internally for win-condition logic. -->
             <div class="metric">
               <span class="metric-label">Team Morale:</span>
               <div class="morale-bar" id="morale-bar">
@@ -498,12 +526,24 @@
           <div class="results-header">
             <h1>CALCULATING YEAR 1 RESULTS...</h1>
           </div>
-          <div class="results-metrics" id="results-metrics">
-            <!-- Populated by JavaScript -->
-          </div>
+          <!-- The verdict (TARGET MET / NOT MET) comes FIRST so the player sees
+               the headline result immediately, before the supporting metrics.
+               Previously the metrics grid sat above the outcome, so on a phone
+               the player had to scroll past the whole data block before
+               reaching the verdict. -->
           <div class="results-outcome" id="results-outcome">
             <!-- SUCCESS or FAILURE -->
           </div>
+          <div class="results-metrics" id="results-metrics">
+            <!-- Populated by JavaScript -->
+          </div>
+          <!-- Feedback is placed directly after the outcome so the player sees
+               it without scrolling past the business-impact and breakdown
+               sections. It is populated last by the animation chain; the
+               .results-feedback:empty rule keeps it collapsed (no reserved
+               space) until showFeedback() fills it. This element MUST stay
+               truly empty (no comments/whitespace) for :empty to match. -->
+          <div class="results-feedback" id="results-feedback"></div>
           <div class="results-business-impact" id="results-business-impact">
             <!-- Executive-grade business impact summary -->
           </div>
@@ -512,13 +552,6 @@
           </div>
           <div class="results-breakdown" id="results-breakdown">
             <!-- Leadership style breakdown -->
-          </div>
-          <div
-            class="results-feedback"
-            id="results-feedback"
-            style="max-height: 60vh; overflow-y: auto; margin-bottom: 30px"
-          >
-            <!-- Radical candor feedback -->
           </div>
           <div class="results-actions">
             <button class="btn-secondary" onclick="game.viewDetailedFeedback()">

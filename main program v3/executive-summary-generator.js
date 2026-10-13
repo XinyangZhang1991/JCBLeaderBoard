@@ -219,10 +219,12 @@ class ExecutiveSummaryGenerator {
   }
 
   /**
-   * ISSUE A: the player's raw cumulative LEAD score (sum of the four
-   * dimensions) for the current round. Used to state a plain fact such as
-   * "142 / 171 target" instead of a percentage-of-benchmark. Returns a
-   * rounded integer, or 0 when the state is missing.
+   * The player's raw cumulative LEAD score (sum of the four dimensions) for the
+   * current round. NOTE: this is a raw sum on the internal LEAD scale (each
+   * dimension is capped at 250), so it is NOT directly comparable to the
+   * cumulative benchmark target. Use getAverageLeadPercentOfMaximum() for any
+   * like-for-like percentage statement. Returns a rounded integer, or 0 when
+   * the state is missing.
    * @returns {number}
    */
   getCumulativeLeadScore() {
@@ -233,6 +235,77 @@ class ExecutiveSummaryGenerator {
       (gs.agility || 0) +
       (gs.determination || 0);
     return isFinite(total) ? Math.round(total) : 0;
+  }
+
+  /**
+   * Round-aware per-dimension LEAD MAXIMUMS (the ceiling a player could reach),
+   * mirroring scoring.js generateFeedback()'s `maximums` block exactly. These
+   * are the denominators behind the "% of maximum" figures shown on the
+   * feedback page (e.g. "Leadership (50%)"), so the executive summary can quote
+   * the SAME scale and never contradict the feedback.
+   *
+   *   maximum = breakdownMaxPerScenario[dim] * scenarioCount
+   *
+   * @returns {{leadership:number, excellence:number, agility:number, determination:number}}
+   */
+  getLeadMaximums() {
+    const per = EXEC_LEAD_CONSTANTS.breakdownMaxPerScenario || {
+      leadership: 401 / 9,
+      excellence: 450 / 9,
+      agility: 233 / 9,
+      determination: 318 / 9,
+    };
+    const count = this.getScenarioCount();
+    return {
+      leadership: per.leadership * count,
+      excellence: per.excellence * count,
+      agility: per.agility * count,
+      determination: per.determination * count,
+    };
+  }
+
+  /**
+   * The player's OVERALL LEAD score as a percentage of the MAXIMUM achievable
+   * (0-100), on the SAME scale the feedback page uses. This is the figure that
+   * must be quoted in the executive summary so the two artefacts agree.
+   *
+   * PERCENTAGE-CONSISTENCY FIX: this previously returned the UNWEIGHTED mean of
+   * the four per-dimension ratios:
+   *
+   *   percent = mean( raw[dim] / maximum[dim] ) * 100
+   *
+   * but the feedback page's "Overall LEAD Score" (game-engine.js
+   * renderLEADScoreBreakdown) uses the WEIGHTED ratio:
+   *
+   *   percent = ( Σ raw[dim] ) / ( Σ maximum[dim] ) * 100
+   *
+   * Because the four dimensions have different ceilings (e.g. Agility 233 vs
+   * Excellence 450), the two formulas produced different numbers for the same
+   * run - the "incongruity between the % on the main feedback page and the exec
+   * summary". We now mirror the feedback page's weighted formula EXACTLY so the
+   * two artefacts can never disagree.
+   *
+   * e.g. raw 200/401, 252/450, 121/233, 99/318 -> 672 / 1402 -> 48%.
+   * Returns a number rounded to the nearest integer, or 0 when unavailable.
+   * @returns {number}
+   */
+  getAverageLeadPercentOfMaximum() {
+    const gs = this.gameState || {};
+    const max = this.getLeadMaximums();
+    const dims = ["leadership", "excellence", "agility", "determination"];
+    let rawSum = 0;
+    let maxSum = 0;
+    dims.forEach((dim) => {
+      const raw = Number(gs[dim]) || 0;
+      const ceiling = Number(max[dim]) || 0;
+      if (ceiling > 0) {
+        rawSum += raw;
+        maxSum += ceiling;
+      }
+    });
+    if (maxSum <= 0) return 0;
+    const pct = (rawSum / maxSum) * 100;
+    return isFinite(pct) ? Math.round(pct) : 0;
   }
 
   /**
@@ -423,18 +496,19 @@ class ExecutiveSummaryGenerator {
     const generated = new Date().toLocaleDateString("en-GB");
     const header = this.buildBrandedHeader(
       "Executive Summary",
-      `${this.getRoundLabel()} — ${this.getScenarioCount()} scenarios, cumulative LEAD target ${this.getCumulativeTarget()} (19 points/dimension/scenario)`,
+      `${this.getRoundLabel()} — ${this.getScenarioCount()} scenarios, LEAD scored as a percentage of the maximum achievable`,
       [
         `<strong>Player:</strong> ${this.playerData.name} &nbsp; <strong>Date:</strong> ${generated} &nbsp; <strong>Personality:</strong> ${this.results.personalityColor}`,
       ],
     );
 
-    // Plain-language opening summary (2-3 sentences) before the detailed tables.
+    // Plain-language opening summary. ONE-PAGE FIX: trimmed from three
+    // sentences to a single compact line so the summary fits a single A4 page
+    // for readers who only have minutes. The full analysis remains in the
+    // detailed appendix.
     const openingSummary =
-      `<p>This report summarises the performance of ${this.playerData.name} across the ` +
-      `${this.getRoundLabel()} leadership simulation. It highlights overall ` +
-      `assessment, key strengths, development areas and recommended actions, ` +
-      `with a full appendix of supporting analysis.</p>`;
+      `<p style="margin: 0 0 8px 0;">Performance summary for ` +
+      `${this.playerData.name} — ${this.getRoundLabel()} leadership simulation.</p>`;
 
     return `
 <!DOCTYPE html>
@@ -443,29 +517,32 @@ class ExecutiveSummaryGenerator {
     <meta charset="UTF-8">
     <title>Executive Summary - ${this.playerData.name}</title>
     <style>
-        @page { size: A4; margin: 15mm; }
-        body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.4; color: #000; margin: 0; padding: 0; }
-        h1 { font-size: 20pt; }
-        h2 { font-size: 15pt; }
-        h3 { font-size: 12.5pt; }
-        h4 { font-size: 11.5pt; }
-        .header { border-bottom: 4px solid #FFCB00; padding-bottom: 10px; margin-bottom: 15px; }
-        .jcb-logo { font-size: 24pt; font-weight: bold; color: #000; margin-bottom: 5px; }
-        .title { font-size: 18pt; font-weight: bold; color: #000; margin: 5px 0; }
-        .subtitle { font-size: 10pt; color: #666; }
-        .assessment-box { background: ${assessment.color}; padding: 15px; border-left: 5px solid #FFCB00; margin: 15px 0; border-radius: 3px; }
-        .assessment-title { font-size: 14pt; font-weight: bold; margin-bottom: 5px; }
-        .section { margin: 15px 0; }
-        .section-title { font-size: 15pt; font-weight: bold; color: #000; border-bottom: 2px solid #FFCB00; padding-bottom: 3px; margin-bottom: 8px; }
-        .bullet-list { margin: 5px 0; padding-left: 20px; }
-        .bullet-list li { margin: 3px 0; }
-        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
-        .metric { padding: 8px; background: #f5f5f5; border-left: 3px solid #FFCB00; }
-        .metric-label { font-size: 9pt; color: #666; }
-        .metric-value { font-size: 14pt; font-weight: bold; color: #000; }
-        .risk-flag { background: #fff3cd; border-left: 4px solid #ff9800; padding: 10px; margin: 10px 0; }
-        .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #ccc; font-size: 9pt; color: #666; }
-        .confidential { font-size: 9pt; color: #d32f2f; font-weight: bold; margin-bottom: 10px; }
+        /* ONE-PAGE FIX: tightened page margins, section spacing and type scale so
+           the executive summary fits a single A4 page. The full analysis lives in
+           the detailed appendix; this page is deliberately scannable in minutes. */
+        @page { size: A4; margin: 12mm; }
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.3; color: #000; margin: 0; padding: 0; }
+        h1 { font-size: 18pt; }
+        h2 { font-size: 13pt; }
+        h3 { font-size: 11.5pt; }
+        h4 { font-size: 10.5pt; }
+        .header { border-bottom: 3px solid #FFCB00; padding-bottom: 6px; margin-bottom: 10px; }
+        .jcb-logo { font-size: 20pt; font-weight: bold; color: #000; margin-bottom: 3px; }
+        .title { font-size: 16pt; font-weight: bold; color: #000; margin: 3px 0; }
+        .subtitle { font-size: 9pt; color: #666; }
+        .assessment-box { background: ${assessment.color}; padding: 10px; border-left: 5px solid #FFCB00; margin: 10px 0; border-radius: 3px; }
+        .assessment-title { font-size: 12.5pt; font-weight: bold; margin-bottom: 3px; }
+        .section { margin: 10px 0; }
+        .section-title { font-size: 13pt; font-weight: bold; color: #000; border-bottom: 2px solid #FFCB00; padding-bottom: 2px; margin-bottom: 6px; }
+        .bullet-list { margin: 4px 0; padding-left: 18px; }
+        .bullet-list li { margin: 2px 0; }
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+        .metric { padding: 6px; background: #f5f5f5; border-left: 3px solid #FFCB00; }
+        .metric-label { font-size: 8.5pt; color: #666; }
+        .metric-value { font-size: 12.5pt; font-weight: bold; color: #000; }
+        .risk-flag { background: #fff3cd; border-left: 4px solid #ff9800; padding: 8px; margin: 8px 0; }
+        .footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #ccc; font-size: 8.5pt; color: #666; }
+        .confidential { font-size: 8.5pt; color: #d32f2f; font-weight: bold; margin-bottom: 6px; }
         @media print { .assessment-box { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     </style>
 </head>
@@ -590,14 +667,13 @@ class ExecutiveSummaryGenerator {
     const morale = this.gameState.morale;
     const attrition = this.gameState.attrition;
 
-    // ISSUE A: plain-fact LEAD wording. We no longer say "X% of benchmark";
-    // instead we state the capped percentage and the raw score against the
-    // round-aware cumulative target (e.g. "142 / 171 target"). The underlying
-    // ratio is unchanged - only the wording and the displayed clamp differ.
-    const leadPct = this.formatPercent(this.clampPercent(leadRatio * 100), 0);
-    const leadTarget = this.getCumulativeTarget();
-    const leadScore = this.getCumulativeLeadScore();
-    const leadFact = `${leadScore} / ${leadTarget} target (${leadPct}%)`;
+    // LEAD wording: quote the SAME "% of maximum" scale the feedback page uses
+    // for each dimension, so the executive summary can never contradict the
+    // feedback (previously this said e.g. "672 / 171 target (98%)", mixing a
+    // raw sum on the internal scale with the benchmark target - which read as
+    // nonsense and disagreed with the feedback's ~47%).
+    const leadPct = this.getAverageLeadPercentOfMaximum();
+    const leadFact = `${leadPct}% of maximum`;
 
     // High Potential: Escaped + High LEAD + Balanced
     // BUGFIX (audit H4): use the canonical exceptional threshold (0.78), the
@@ -1215,27 +1291,10 @@ class ExecutiveSummaryGenerator {
             font-weight: bold;
             color: #000;
         }
-        .lead-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 10px;
-            margin: 15px 0;
-        }
-        .lead-dimension {
-            text-align: center;
-            padding: 10px;
-            background: #f5f5f5;
-            border-top: 3px solid #FFCB00;
-        }
-        .lead-score {
-            font-size: 18pt;
-            font-weight: bold;
-            color: #000;
-        }
-        .lead-label {
-            font-size: 9pt;
-            color: #666;
-        }
+        /* PDF ALIGNMENT FIX: the LEAD Competency Breakdown is now a real <table>
+           (see generateLEADAnalysis) so the offline PDF writer can align its
+           columns. The old .lead-grid / .lead-dimension / .lead-score /
+           .lead-label CSS-grid rules were removed as dead code. */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -1286,46 +1345,67 @@ class ExecutiveSummaryGenerator {
   }
 
   generateLEADAnalysis() {
-    const leadRatios = this.calculateLEADRatios();
-    // ROUND-AWARE: canonical 19-point per-scenario scale (see calculateLEADRatios).
-    // Divisor is 9 for Round 1 and 6 for Round 2.
-    const benchmarks = {
-      leadership: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
-      excellence: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
-      agility: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
-      determination: EXEC_LEAD_CONSTANTS.benchmarkPerScenario,
-    };
-    const scenarioCount = this.getScenarioCount();
+    // SCALE CONSISTENCY FIX: quote each dimension as a percentage of the
+    // MAXIMUM achievable (the same scale the feedback page uses, e.g.
+    // "Leadership (50%)"), not as a percentage of the 19-point benchmark. The
+    // two scales previously disagreed (feedback ~47% vs summary 98%) for the
+    // same run, which read as nonsense.
+    //
+    // PDF ALIGNMENT FIX: this block previously used a CSS grid (.lead-grid /
+    // .lead-dimension). The offline PDF writer (pdf-writer.js) does NOT render
+    // CSS grid - it flattens each <div> into its own paragraph, so the four
+    // dimensions stacked vertically and lost their column alignment in the
+    // exported PDF. We now emit a real <table>, which the PDF writer lays out
+    // with proper, aligned columns (it understands <table>/<tr>/<td> and
+    // explicit width percentages). The on-screen HTML still renders as a clean
+    // table, so the browser view and the PDF now agree.
+    const maximums = this.getLeadMaximums();
+    const gs = this.gameState || {};
+    const pctOfMax = (raw, ceiling) =>
+      ceiling > 0 ? this.clampPercent(((Number(raw) || 0) / ceiling) * 100) : 0;
+    const dims = [
+      { key: "leadership", label: "LEADERSHIP" },
+      { key: "excellence", label: "EXCELLENCE" },
+      { key: "agility", label: "AGILITY" },
+      { key: "determination", label: "DETERMINATION" },
+    ];
+
+    // Header row: one column per dimension, equal 25% widths.
+    const headerCells = dims
+      .map((d) => `<th width="25%">${d.label}</th>`)
+      .join("");
+    // Percentage row (the headline figure for each dimension).
+    const pctCells = dims
+      .map((d) => {
+        const raw = Number(gs[d.key]) || 0;
+        const ceiling = maximums[d.key];
+        const pct = pctOfMax(raw, ceiling);
+        return `<td width="25%" style="color: ${this.getScoreColor(pct / 100)}; font-weight: bold;">${this.formatPercent(pct, 0)}%</td>`;
+      })
+      .join("");
+    // Raw / maximum row (the underlying points).
+    const rawCells = dims
+      .map((d) => {
+        const raw = Number(gs[d.key]) || 0;
+        const ceiling = maximums[d.key];
+        return `<td width="25%" style="font-size: 8pt;">${raw.toFixed(0)} / ${Math.round(ceiling)} max</td>`;
+      })
+      .join("");
+
+    const overallPct = this.getAverageLeadPercentOfMaximum();
 
     return `
     <div class="section">
         <h2>LEAD Competency Breakdown — ${this.getRoundLabel()}</h2>
-        <p style="font-size: 9pt; color: #666; margin-top: 0;">${scenarioCount} scenarios played; per-dimension target 19 points/scenario (cumulative target ${this.getCumulativeTarget()}).</p>
+        <p style="font-size: 9pt; color: #666; margin-top: 0;">${this.getScenarioCount()} scenarios played; each dimension shown as a percentage of the maximum achievable this round.</p>
 
-        <div class="lead-grid">
-            <div class="lead-dimension">
-                <div class="lead-score" style="color: ${this.getScoreColor(leadRatios.leadership)}">${this.formatPercent(this.clampPercent(leadRatios.leadership * 100), 0)}%</div>
-                <div class="lead-label">LEADERSHIP</div>
-                <div style="font-size: 8pt; margin-top: 5px;">${((this.gameState.leadership || 0) / scenarioCount).toFixed(1)} / ${benchmarks.leadership}</div>
-            </div>
-            <div class="lead-dimension">
-                <div class="lead-score" style="color: ${this.getScoreColor(leadRatios.excellence)}">${this.formatPercent(this.clampPercent(leadRatios.excellence * 100), 0)}%</div>
-                <div class="lead-label">EXCELLENCE</div>
-                <div style="font-size: 8pt; margin-top: 5px;">${((this.gameState.excellence || 0) / scenarioCount).toFixed(1)} / ${benchmarks.excellence}</div>
-            </div>
-            <div class="lead-dimension">
-                <div class="lead-score" style="color: ${this.getScoreColor(leadRatios.agility)}">${this.formatPercent(this.clampPercent(leadRatios.agility * 100), 0)}%</div>
-                <div class="lead-label">AGILITY</div>
-                <div style="font-size: 8pt; margin-top: 5px;">${((this.gameState.agility || 0) / scenarioCount).toFixed(1)} / ${benchmarks.agility}</div>
-            </div>
-            <div class="lead-dimension">
-                <div class="lead-score" style="color: ${this.getScoreColor(leadRatios.determination)}">${this.formatPercent(this.clampPercent(leadRatios.determination * 100), 0)}%</div>
-                <div class="lead-label">DETERMINATION</div>
-                <div style="font-size: 8pt; margin-top: 5px;">${((this.gameState.determination || 0) / scenarioCount).toFixed(1)} / ${benchmarks.determination}</div>
-            </div>
-        </div>
+        <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+            <tr>${headerCells}</tr>
+            <tr>${pctCells}</tr>
+            <tr>${rawCells}</tr>
+        </table>
 
-        <p><strong>Overall LEAD Quality:</strong> ${this.formatPercent(this.clampPercent(this.calculateAverageLEADRatio() * 100), 0)}% (${this.getCumulativeLeadScore()} / ${this.getCumulativeTarget()} target)</p>
+        <p><strong>Overall LEAD Quality:</strong> ${this.formatPercent(overallPct, 0)}% of maximum</p>
     </div>
         `;
   }

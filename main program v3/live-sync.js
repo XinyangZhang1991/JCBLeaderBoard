@@ -22,6 +22,11 @@
   var LEADERBOARD_KEY = "jcb_leaderboard";
   var CULTURE_KEY = "jcb_culture_data";
 
+  // Which round the live overlay is showing (1 or 2). Mirrors the home-screen
+  // leaderboard's round tab so opening the live board from a Round 2 tab shows
+  // the Round 2 cohort, not the combined board. Defaults to Round 1.
+  var overlayRound = 1;
+
   var state = {
     connected: false,
     count: 0,
@@ -129,7 +134,7 @@
     overlay.innerHTML =
       '<div class="live-overlay-panel">' +
       '<div class="live-overlay-header">' +
-      '<h2>Live Leaderboard</h2>' +
+      '<h2>Live Leaderboard <span id="live-round-label"></span></h2>' +
       '<div class="live-overlay-status">' +
       '<span id="live-conn-dot" class="live-conn-dot"></span>' +
       '<span id="live-conn-label">Connecting…</span>' +
@@ -153,10 +158,48 @@
     return overlay;
   }
 
+  // REST fallback: if the WebSocket has not delivered a snapshot yet (or the
+  // socket is unavailable), pull the same leaderboard the server exposes over
+  // HTTP so the live view never contradicts the title-screen board. The server
+  // projection omits `consent`, so isDisplayable() trusts it.
+  function fetchLeaderboardFallback() {
+    if (typeof fetch !== "function") return;
+    if (typeof location === "undefined" || location.protocol === "file:") return;
+    // No limit: the live leaderboard must show every player, not just top 10.
+    fetch("/api/leaderboard", { cache: "no-store" })
+      .then(function (res) {
+        return res && res.ok ? res.json() : null;
+      })
+      .then(function (data) {
+        if (!data || !Array.isArray(data.leaderboard)) return;
+        // Only adopt the REST payload when the socket has not already given us
+        // a (possibly newer) snapshot.
+        if (state.leaderboard && state.leaderboard.length > 0) return;
+        state.leaderboard = data.leaderboard;
+        if (typeof data.count === "number") state.count = data.count;
+        renderOverlay();
+      })
+      .catch(function () {
+        /* offline / server down - leave the overlay as-is */
+      });
+  }
+
   function showOverlay() {
     var overlay = ensureOverlay();
     overlay.classList.add("visible");
     renderOverlay();
+    // Backfill from REST when the socket has not populated the board yet.
+    if (!state.leaderboard || state.leaderboard.length === 0) {
+      fetchLeaderboardFallback();
+    }
+  }
+
+  // Open the overlay for a specific round (1 or 2). Called by the LIVE
+  // LEADERBOARD button with the home-screen's currently-selected round so the
+  // live board matches the tab the user is looking at.
+  function showOverlayForRound(round) {
+    overlayRound = Number(round) === 2 ? 2 : 1;
+    showOverlay();
   }
 
   function hideOverlay() {
@@ -180,10 +223,22 @@
       .join(QUOT);
   }
 
+  // Normalise a record/entry's round. Legacy entries written before the `round`
+  // field existed are treated as Round 1 (the only round that existed then).
+  function entryRound(entry) {
+    var r = entry && entry.round;
+    return Number(r) === 2 ? 2 : 1;
+  }
+
   function isDisplayable(entry) {
-    // Reuse the shared consent predicate when available. The server already
-    // sends only leaderboard projections, but we gate again defensively.
+    // The server already sends only consent-filtered leaderboard projections,
+    // and those projections deliberately omit the `consent` object. Only apply
+    // the shared consent predicate when the entry actually carries a consent
+    // object (e.g. a full record); otherwise trust the server's projection.
     if (
+      entry &&
+      typeof entry === "object" &&
+      entry.consent &&
       typeof window.ResultsStore !== "undefined" &&
       window.ResultsStore.isPubliclyDisplayable
     ) {
@@ -206,15 +261,92 @@
 
     if (dot) dot.classList.toggle("online", state.connected);
     if (label) label.textContent = state.connected ? "Live" : "Reconnecting…";
+    var roundLabel = state.overlayEl.querySelector("#live-round-label");
+    if (roundLabel) roundLabel.textContent = "— Round " + overlayRound;
     if (countEl) {
       countEl.textContent =
         state.count + " player" + (state.count === 1 ? "" : "s");
     }
 
-    var entries = (state.leaderboard || []).filter(isDisplayable);
+    // Filter to the SELECTED round so the live board matches the home-screen
+    // round tab. Round 1 and Round 2 are scored against different benchmarks,
+    // so mixing them on one board is meaningless.
+    var entries = (state.leaderboard || [])
+      .filter(isDisplayable)
+      .filter(function (e) {
+        return entryRound(e) === overlayRound;
+      });
+
+    // Re-rank WITHIN the selected round. The server assigns `rank` against the
+    // COMBINED cohort (Round 1 + Round 2 mixed), so a Round 2 player who is
+    // 17th overall would otherwise display as "17th" even though they are 1st
+    // within Round 2. Round 1 and Round 2 are independent competitions, so the
+    // displayed rank must be the position within the filtered round only.
+    entries = entries
+      .slice()
+      .sort(function (a, b) {
+        var ga = Number(a && a.growth) || 0;
+        var gb = Number(b && b.growth) || 0;
+        if (gb !== ga) return gb - ga;
+        var la = Number(a && a.leadTotal) || 0;
+        var lb = Number(b && b.leadTotal) || 0;
+        return lb - la;
+      })
+      .map(function (e, i) {
+        var copy = {};
+        for (var k in e) {
+          if (Object.prototype.hasOwnProperty.call(e, k)) copy[k] = e[k];
+        }
+        copy.rank = i + 1;
+        return copy;
+      });
+
+    // Last-resort fallback: when neither the socket nor REST has produced a
+    // board (e.g. the page is opened from file:// with no server), show the
+    // LOCAL cohort so the live view agrees with the title-screen leaderboard
+    // instead of claiming nobody has played.
+    if (entries.length === 0) {
+      var local = readJson(LEADERBOARD_KEY);
+      if (local.length > 0) {
+        entries = local
+          .filter(function (r) {
+            return entryRound(r) === overlayRound;
+          })
+          .slice()
+          .sort(function (a, b) {
+            var ga = Number(a && a.growth) || 0;
+            var gb = Number(b && b.growth) || 0;
+            return gb - ga;
+          })
+          .map(function (r, i) {
+            var lead =
+              (Number(r.leadership) || 0) +
+              (Number(r.excellence) || 0) +
+              (Number(r.agility) || 0) +
+              (Number(r.determination) || 0);
+            return {
+              rank: i + 1,
+              name: r.name,
+              growth: r.growth,
+              leadTotal: lead,
+              leadershipStyle: r.leadershipStyle,
+              personalityColor: r.personalityColor,
+              round: entryRound(r),
+            };
+          });
+        if (countEl && (!state.count || state.count < entries.length)) {
+          state.count = entries.length;
+          countEl.textContent =
+            state.count + " player" + (state.count === 1 ? "" : "s");
+        }
+      }
+    }
+
     if (entries.length === 0) {
       body.innerHTML =
-        '<div class="live-empty">No results yet — be the first to finish!</div>';
+        '<div class="live-empty">No Round ' +
+        overlayRound +
+        " results yet — be the first to finish!</div>";
       return;
     }
 
@@ -327,6 +459,8 @@
       connect();
     },
     showLeaderboard: showOverlay,
+    // Open the live board for a specific round (1 or 2).
+    showLeaderboardForRound: showOverlayForRound,
     hideLeaderboard: hideOverlay,
     isConnected: function () {
       return state.connected;

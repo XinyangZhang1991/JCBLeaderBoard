@@ -66,7 +66,7 @@ class GameEngine {
 
       // Timing
       startTime: null,
-      timeRemaining: 900, // 15 minutes in seconds (9 scenarios, ~100s each)
+      timeRemaining: 1200, // 20 minutes in seconds (9 scenarios, ~130s each)
       timerInterval: null,
 
       // Submission control
@@ -82,6 +82,11 @@ class GameEngine {
 
     this.scenarios = null; // Will be loaded from scenarios.js
     this.finalResults = null; // BUGFIX: Initialize to prevent "No results available" error
+
+    // Home-screen leaderboard round filter (1 or 2). Round 1 and Round 2 are
+    // scored against different benchmarks and scenario counts, so they are
+    // shown on separate boards. Defaults to Round 1.
+    this.leaderboardRound = 1;
   }
 
   init() {
@@ -124,26 +129,92 @@ class GameEngine {
   }
 
   loadLeaderboard() {
-    // Issue 1: consent is applied at DISPLAY time only. The cache retains all
-    // runs; this view filters to publicly displayable records (legacy rows with
-    // no consent object are grandfathered as displayable).
+    // The MAIN-SCREEN leaderboard shows the LOCAL cohort - every run played on
+    // this machine - so it must NOT be gated by the public-display consent flag.
+    // Consent controls the PUBLIC/LIVE leaderboard (multiplayer display), which
+    // is filtered separately in live-sync.js. Filtering the local board by
+    // consent made it show only the single most-recent consenting run, which is
+    // why it "only ever showed one person".
     //
-    // BUGFIX (#7): the cache now persists the FULL sorted list, so the top-10
-    // slice must happen HERE, at render time. Previously the cache itself was
-    // truncated to 10 on write, which silently dropped any run that did not
-    // crack the top 10 (e.g. a returning player's lower-scoring new run).
-    const leaderboardData = this.getDisplayableLeaderboard().slice(0, 10);
+    // BUGFIX (#7): the cache persists the FULL sorted list, so the top-10 slice
+    // must happen HERE, at render time.
+    //
+    // BUGFIX (#8): on a fresh browser the local cache holds only THIS player's
+    // run(s), so the board showed a single row even though the server already
+    // had a full cohort. We now render the local cache immediately, then merge
+    // in the server's /api/leaderboard cohort and re-render, so the home-screen
+    // board matches the live board.
+    this._renderLeaderboardRows(this.getLeaderboardData());
+    this._mergeServerLeaderboard();
+  }
+
+  // Which round the home-screen leaderboard is currently showing. Round 1 and
+  // Round 2 are scored against different benchmarks (171 vs 114 cumulative
+  // LEAD) and different scenario counts, so their scores are NOT comparable.
+  // Defaults to Round 1; the tab strip calls setLeaderboardRound() to switch.
+  _leaderboardRound() {
+    return this.leaderboardRound === 2 ? 2 : 1;
+  }
+
+  // Normalise a record's round. Legacy records written before the `round`
+  // field existed are treated as Round 1 (the only round that existed then).
+  _recordRound(record) {
+    const r = record && record.round;
+    return Number(r) === 2 ? 2 : 1;
+  }
+
+  // Switch the home-screen leaderboard between Round 1 and Round 2 and repaint.
+  setLeaderboardRound(round) {
+    this.leaderboardRound = Number(round) === 2 ? 2 : 1;
+    // Reflect the active tab.
+    const tabs = document.querySelectorAll(".leaderboard-round-tab");
+    if (tabs && tabs.forEach) {
+      tabs.forEach((tab) => {
+        const tabRound = Number(tab.getAttribute("data-round")) === 2 ? 2 : 1;
+        tab.classList.toggle("active", tabRound === this.leaderboardRound);
+      });
+    }
+    // Repaint from the local cache immediately, then re-merge the server cohort
+    // so the freshly-selected round also picks up server-only players.
+    this._renderLeaderboardRows(this.getLeaderboardData());
+    this._mergeServerLeaderboard();
+  }
+
+  // Render the TOP 3 rows for the CURRENT ROUND from a raw record list into
+  // #leaderboard-container. Records from the other round are filtered out so
+  // Round 1 and Round 2 scores are never mixed on the same board.
+  //
+  // The front/welcome screen is a teaser: it shows only the podium (top 3) so
+  // players are not tempted to scroll a long list before registering. The FULL
+  // board for every player is available via the LIVE LEADERBOARD button directly
+  // below the list (see index.html). The complete, uncapped cohort is still
+  // fetched and merged (see _mergeServerLeaderboard) - only the DISPLAY here is
+  // limited to 3.
+  _renderLeaderboardRows(records) {
+    const round = this._leaderboardRound();
+    const FRONT_SCREEN_LIMIT = 3;
+    const allForRound = (Array.isArray(records) ? records : [])
+      .filter((r) => this._recordRound(r) === round)
+      .slice()
+      .sort((a, b) => this.compareLeaderboardRecords(a, b));
+    const leaderboardData = allForRound.slice(0, FRONT_SCREEN_LIMIT);
+    const hiddenCount = Math.max(0, allForRound.length - leaderboardData.length);
     const container = document.getElementById("leaderboard-container");
+
+    // Remember exactly what is on screen. The per-row VIEW FEEDBACK / PDF
+    // buttons pass their row index, and _reconstructPlayerState() must resolve
+    // that index against THIS filtered+sorted list - not the raw cache, which
+    // now contains both rounds and would resolve the wrong player.
+    this._displayedLeaderboard = leaderboardData;
 
     if (!container) return;
 
     if (leaderboardData.length === 0) {
-      container.innerHTML =
-        '<div class="leaderboard-empty">No players yet.<br/>Be the first to lead!</div>';
+      container.innerHTML = `<div class="leaderboard-empty">No Round ${round} players yet.<br/>Be the first to lead!</div>`;
       return;
     }
 
-    container.innerHTML = leaderboardData
+    const rowsHtml = leaderboardData
       .map((player, index) => {
         // Status badge
         const statusBadge = player.optimal
@@ -208,6 +279,72 @@ class GameEngine {
         `;
       })
       .join("");
+
+    // Teaser footer: tell the player how many more finished this round and
+    // point them at the LIVE LEADERBOARD button (rendered directly below this
+    // list in index.html) for the full board.
+    const moreHtml =
+      hiddenCount > 0
+        ? `<div class="leaderboard-more">+${hiddenCount} more player${
+            hiddenCount === 1 ? "" : "s"
+          } this round — tap <strong>🔴 LIVE LEADERBOARD</strong> below to see the full board</div>`
+        : "";
+
+    container.innerHTML = rowsHtml + moreHtml;
+  }
+
+  // Merge the server's public cohort into the home-screen board so a fresh
+  // browser (whose local cache holds only its own run) still shows the full
+  // leaderboard. The server projection omits `consent`, so it is trusted as
+  // already-public. Local records win on runId collisions (they carry the
+  // richer, full-fidelity fields). Never throws; silently no-ops offline.
+  _mergeServerLeaderboard() {
+    if (typeof fetch !== "function") return;
+    if (typeof location === "undefined" || location.protocol === "file:")
+      return;
+
+    // Fetch the FULL cohort (no limit) so the round filter has every record to
+    // choose from. A `?limit=10` would return the global top 10, which - once
+    // rounds are separated - could contain ZERO rows for the selected round.
+    fetch("/api/leaderboard", { cache: "no-store" })
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data || !Array.isArray(data.leaderboard)) return;
+        const local = this.getLeaderboardData();
+        const byRunId = new Map();
+        // Server rows first, then local rows override on matching runId.
+        data.leaderboard.forEach((row) => {
+          if (row && row.runId) byRunId.set(row.runId, row);
+        });
+        local.forEach((row) => {
+          if (!row || !row.runId) return;
+          const existing = byRunId.get(row.runId);
+          // Local rows normally carry the richer, full-fidelity fields, so they
+          // win on a runId collision. BUT a stale/partial local row (e.g. one
+          // written by an older build that never persisted the individual LEAD
+          // dimensions) must NOT blank out a complete server row - otherwise the
+          // home-screen board renders "L:0 E:0 A:0 D:0" for that player. Only
+          // let the local row win when it actually carries the LEAD dimensions,
+          // or when the server row is missing them too.
+          if (existing && !this._hasLeadDimensions(row) && this._hasLeadDimensions(existing)) {
+            return;
+          }
+          byRunId.set(row.runId, row);
+        });
+        const merged = Array.from(byRunId.values());
+        // Always repaint after a successful merge. The previous guard
+        // (`merged.length > local.length`) compared TOTAL counts, so it skipped
+        // the repaint whenever the local cache and the server held the same
+        // NUMBER of records - even when the server's set contained a record for
+        // the currently-selected round that the local cache lacked (e.g. a
+        // Round 2 run played on another machine). That is exactly why the
+        // Round 2 board could read "No Round 2 players yet" despite the run
+        // existing on the server. A repaint is cheap; correctness wins.
+        this._renderLeaderboardRows(merged);
+      })
+      .catch(() => {
+        /* offline / server down - keep the local render */
+      });
   }
 
   // ------------------------------------------------------------------
@@ -360,6 +497,120 @@ class GameEngine {
     }
   }
 
+  // Hydrate the local culture store from the AUTHORITATIVE server cohort.
+  //
+  // Why this exists: the browser's jcb_culture_data / jcb_leaderboard can hold
+  // flat rows written by an OLDER build that did not persist the segmentation
+  // fields (jobFunction / seniority / leadCohort). Such rows fail
+  // isCultureEligible() and the dashboard reports "0 players" even though the
+  // leaderboard clearly has entries. The server's canonical cohort always
+  // carries these fields, so we fetch it, flatten each record, and merge it
+  // into the local stores (keyed by runId). This is a no-op when the server is
+  // unavailable (e.g. opened from file://) - the local store is then used as-is.
+  //
+  // Returns true when the local store was changed.
+  async hydrateCultureFromServer() {
+    try {
+      const store = typeof window !== "undefined" ? window.ResultsStore : null;
+      if (!store || typeof store.fetchCohort !== "function") return false;
+
+      const serverCohort = await store.fetchCohort();
+      if (!Array.isArray(serverCohort) || serverCohort.length === 0) {
+        return false;
+      }
+
+      // Flatten canonical -> flat so the shape matches the local stores.
+      const flatRecords = serverCohort.map((rec) => {
+        try {
+          return typeof store.canonicalToFlat === "function"
+            ? store.canonicalToFlat(rec)
+            : rec;
+        } catch (e) {
+          return rec;
+        }
+      });
+
+      const mergeInto = (key) => {
+        let local;
+        try {
+          const raw = localStorage.getItem(key);
+          local = raw ? JSON.parse(raw) : [];
+        } catch (e) {
+          local = [];
+        }
+        if (!Array.isArray(local)) local = [];
+
+        const byRunId = new Map();
+        local.forEach((r) => {
+          if (r && r.runId) byRunId.set(r.runId, r);
+        });
+
+        // Value-equality helper: objects (e.g. leadershipProfile) must be
+        // compared by content, not reference, or hydration is never idempotent.
+        const sameValue = (a, b) => {
+          if (a === b) return true;
+          if (a && b && typeof a === "object" && typeof b === "object") {
+            try {
+              return JSON.stringify(a) === JSON.stringify(b);
+            } catch (e) {
+              return false;
+            }
+          }
+          return false;
+        };
+
+        let changed = false;
+        flatRecords.forEach((rec) => {
+          if (!rec || !rec.runId) return;
+          const existing = byRunId.get(rec.runId);
+          if (existing) {
+            // Prefer the server's authoritative values for the segmentation
+            // fields, but never clobber a locally-present value with a blank.
+            [
+              "jobFunction",
+              "seniority",
+              "leadCohort",
+              "personalityColor",
+              "leadershipStyle",
+              "leadershipProfile",
+            ].forEach((field) => {
+              const want = rec[field];
+              const wantPresent =
+                want !== undefined &&
+                want !== null &&
+                want !== "" &&
+                !(typeof want === "object" && Object.keys(want).length === 0);
+              if (wantPresent && !sameValue(existing[field], want)) {
+                existing[field] = want;
+                changed = true;
+              }
+            });
+          } else {
+            local.push(rec);
+            byRunId.set(rec.runId, rec);
+            changed = true;
+          }
+        });
+
+        if (changed) {
+          try {
+            localStorage.setItem(key, JSON.stringify(local));
+          } catch (e) {
+            /* storage full / disabled - ignore */
+          }
+        }
+        return changed;
+      };
+
+      const a = mergeInto("jcb_culture_data");
+      const b = mergeInto("jcb_leaderboard");
+      return a || b;
+    } catch (e) {
+      console.error("Error hydrating culture data from server:", e);
+      return false;
+    }
+  }
+
   // Back-fill jcb_culture_data from jcb_leaderboard so the two stores agree.
   //
   // The culture store is the authoritative FULL cohort; the leaderboard is a
@@ -382,34 +633,72 @@ class GameEngine {
         return culture;
       }
 
-      // Index existing culture records for O(1) membership checks.
-      const cultureRunIds = new Set(
-        culture.filter((p) => p && p.runId).map((p) => p.runId),
-      );
-      const cultureLegacyKeys = new Set(
-        culture
-          .filter((p) => p && !p.runId)
-          .map((p) => this.legacyRecordKey(p)),
-      );
+      // Index existing culture records for O(1) membership checks. We keep a
+      // reference to the record itself (not just the id) so a matching
+      // leaderboard row can BACK-FILL fields the culture row is missing.
+      const cultureByRunId = new Map();
+      const cultureByLegacyKey = new Map();
+      culture.forEach((p) => {
+        if (!p) return;
+        if (p.runId) cultureByRunId.set(p.runId, p);
+        else cultureByLegacyKey.set(this.legacyRecordKey(p), p);
+      });
+
+      // Segmentation fields the culture analysis depends on. Older builds wrote
+      // flat leaderboard rows WITHOUT these, so a culture store populated by an
+      // earlier build rejects every record as "not JCB" and reports 0 players.
+      // Back-filling them here makes the store self-heal on read.
+      const SEGMENT_FIELDS = [
+        "jobFunction",
+        "seniority",
+        "leadCohort",
+        "personalityColor",
+        "leadershipStyle",
+        "leadershipProfile",
+      ];
 
       let changed = false;
       leaderboard.forEach((record) => {
         if (!record) return;
 
         // Prefer the stable runId; fall back to timestamp+name for legacy rows.
-        const isDuplicate = record.runId
-          ? cultureRunIds.has(record.runId)
-          : cultureLegacyKeys.has(this.legacyRecordKey(record));
+        const key = record.runId
+          ? record.runId
+          : this.legacyRecordKey(record);
+        const existing = record.runId
+          ? cultureByRunId.get(record.runId)
+          : cultureByLegacyKey.get(key);
 
-        if (isDuplicate) return;
+        if (existing) {
+          // Already present: repair any missing segmentation fields in place.
+          SEGMENT_FIELDS.forEach((field) => {
+            const have = existing[field];
+            const want = record[field];
+            const haveEmpty =
+              have === undefined ||
+              have === null ||
+              have === "" ||
+              (typeof have === "object" && Object.keys(have).length === 0);
+            const wantPresent =
+              want !== undefined &&
+              want !== null &&
+              want !== "" &&
+              !(typeof want === "object" && Object.keys(want).length === 0);
+            if (haveEmpty && wantPresent) {
+              existing[field] = want;
+              changed = true;
+            }
+          });
+          return;
+        }
 
         culture.push(record);
         changed = true;
 
         if (record.runId) {
-          cultureRunIds.add(record.runId);
+          cultureByRunId.set(record.runId, record);
         } else {
-          cultureLegacyKeys.add(this.legacyRecordKey(record));
+          cultureByLegacyKey.set(key, record);
         }
       });
 
@@ -487,7 +776,18 @@ class GameEngine {
       //    Rank is computed ONLY against publicly displayable records, so a
       //    non-consenting player never consumes a rank slot invisibly. A
       //    non-consenting player gets a hidden placement (rank: null).
-      const publicCohort = cohort.filter((p) => this.isPubliclyDisplayable(p));
+      //
+      //    ROUND-SCOPED: Round 1 and Round 2 are independent competitions with
+      //    different benchmarks (171 vs 114 cumulative LEAD; 9 vs 6 scenarios),
+      //    so a Round 2 player must be ranked against OTHER ROUND 2 PLAYERS
+      //    only - never against the Round 1 cohort. Ranking across both rounds
+      //    made a lone Round 2 player read "16th of 16" purely because 15 Round
+      //    1 runs existed. Filter to the player's own round before ranking.
+      const playerRound = this._recordRound(playerData);
+      const publicCohort = cohort.filter(
+        (p) =>
+          this.isPubliclyDisplayable(p) && this._recordRound(p) === playerRound,
+      );
       const sortedPublic = [...publicCohort].sort((a, b) =>
         this.compareLeaderboardRecords(a, b),
       );
@@ -663,6 +963,8 @@ class GameEngine {
       screen.classList.remove("active");
     });
     document.getElementById(screenId).classList.add("active");
+    // Reset scroll so each screen opens at the top (phone scrolls the page).
+    window.scrollTo(0, 0);
   }
 
   startRegistration() {
@@ -671,30 +973,46 @@ class GameEngine {
     if (DEBUG_ENABLED) console.log("registration screen should now be visible");
   }
 
-  selectLeadershipStyle(style) {
+  // Select the player's self-identified primary leadership style.
+  //
+  // `el` is the .radio-option element that was clicked (passed as `this` from
+  // the inline onclick). Relying on the deprecated `window.event` was fragile:
+  // when the click landed on the child <input> or the inner text, the event
+  // target could be a descendant and the `selected` class was applied to the
+  // wrong node (or not at all), so the highlight and the stored value could
+  // disagree. We now resolve the option element deterministically and keep the
+  // visual state, the radio input and the stored value in lock-step.
+  selectLeadershipStyle(style, el) {
     this.state.selfIdentifiedStyle = style;
+
+    // Resolve the option element: prefer the element passed from the handler,
+    // then fall back to a value lookup (covers programmatic calls).
+    let targetOption = el || null;
+    if (!targetOption && typeof document !== "undefined") {
+      const input = document.querySelector(
+        `.radio-option input[value="${style}"]`,
+      );
+      targetOption = input ? input.closest(".radio-option") : null;
+    }
+
+    // Clear the highlight from every option, then apply it to the chosen one.
     document.querySelectorAll(".radio-option").forEach((opt) => {
       opt.classList.remove("selected");
     });
-
-    // Use event if available, otherwise find the element
-    const targetOption = window.event
-      ? window.event.target.closest(".radio-option")
-      : document
-          .querySelector(`.radio-option input[value="${style}"]`)
-          ?.closest(".radio-option");
-
     if (targetOption) {
       targetOption.classList.add("selected");
     }
 
-    const radioInput = document.querySelector(`input[value="${style}"]`);
-    if (radioInput) {
-      radioInput.checked = true;
-    }
+    // Keep the underlying radio inputs consistent: check the chosen value and
+    // uncheck the rest, so the native form state matches the visual state.
+    document
+      .querySelectorAll('input[name="leadership-style"]')
+      .forEach((input) => {
+        input.checked = input.value === style;
+      });
   }
 
-  validateAndStartBriefing() {
+  async validateAndStartBriefing() {
     const nameInput = document.getElementById("player-name");
     const functionInput = document.getElementById("player-function");
     const seniorityInput = document.getElementById("player-seniority");
@@ -742,7 +1060,13 @@ class GameEngine {
     // Returning-player detection: if this name matches a previous completed
     // run, offer the choice of replaying Round 1 or advancing to Round 2.
     // New players are completely unaffected and go straight to the briefing.
-    const returning = this.findReturningPlayer(this.state.playerName);
+    //
+    // ASYNC: findReturningPlayer() now also consults the shared server cohort,
+    // so a player who completed a run on ANOTHER device/browser (or whose local
+    // store was cleared) is still recognised as returning. Previously only the
+    // local jcb_culture_data store was searched, so the Round 2 option silently
+    // failed to appear for returning players on a fresh device.
+    const returning = await this.findReturningPlayer(this.state.playerName);
     if (returning) {
       this.returningPlayer = returning;
       this.showRoundChoice(returning);
@@ -773,15 +1097,56 @@ class GameEngine {
     }
   }
 
-  // Search the full cohort (jcb_culture_data) for a prior completed run whose
-  // name matches the entered name case-insensitively and trimmed.
-  // Returns the most recent match (by timestamp), preferring a Round 1 record
-  // when one exists because Round 2 is the "learned from feedback" follow-up.
-  findReturningPlayer(name) {
+  // Search for a prior completed run whose name matches the entered name
+  // case-insensitively and trimmed. Returns the most recent match (by
+  // timestamp), preferring a Round 1 record when one exists because Round 2 is
+  // the "learned from feedback" follow-up.
+  //
+  // ASYNC: searches BOTH the local jcb_culture_data store AND the shared server
+  // cohort. The local store alone is not enough - a returning player who played
+  // on another device/browser, or whose localStorage was cleared, has no local
+  // record, so the Round 2 option silently failed to appear. The server cohort
+  // (via ResultsStore.fetchCohort) holds every run across all machines.
+  async findReturningPlayer(name) {
     if (!name || !name.trim()) return null;
 
     const target = name.trim().toLowerCase();
-    const cohort = this.getCultureData();
+
+    // Local cohort first (fast, synchronous, always available).
+    let cohort = this.getCultureData();
+
+    // Merge in the server cohort when the game is served by the Node server.
+    // Failures are non-fatal: we simply fall back to the local cohort.
+    try {
+      const store = typeof window !== "undefined" ? window.ResultsStore : null;
+      if (store && typeof store.fetchCohort === "function") {
+        const serverCohort = await store.fetchCohort();
+        if (Array.isArray(serverCohort) && serverCohort.length > 0) {
+          // Normalise the server records to the flat shape the local store uses
+          // so the name/round/timestamp fields line up.
+          const flatServer =
+            typeof store.canonicalToFlat === "function"
+              ? serverCohort.map((r) => store.canonicalToFlat(r))
+              : serverCohort;
+          // De-duplicate by runId (falling back to timestamp+name) so a run
+          // present in both stores is not counted twice.
+          const seen = new Set();
+          const merged = [];
+          cohort.concat(flatServer).forEach((r) => {
+            if (!r) return;
+            const key =
+              r.runId ||
+              String(r.timestamp || "") + "|" + String(r.name || "");
+            if (seen.has(key)) return;
+            seen.add(key);
+            merged.push(r);
+          });
+          cohort = merged;
+        }
+      }
+    } catch (e) {
+      /* server unavailable - use the local cohort only */
+    }
 
     const matches = cohort.filter(
       (p) =>
@@ -872,7 +1237,7 @@ class GameEngine {
 
     // Timing
     this.state.startTime = null;
-    this.state.timeRemaining = 900;
+    this.state.timeRemaining = 1200;
     if (this.state.timerInterval) {
       clearInterval(this.state.timerInterval);
       this.state.timerInterval = null;
@@ -1057,8 +1422,13 @@ class GameEngine {
     // Update visible metrics
     document.getElementById("metric-growth").textContent =
       `+${this.state.growth.toFixed(1)}%`;
-    document.getElementById("metric-profit").textContent =
-      `${this.state.profitMargin.toFixed(0)}%`;
+    // Profit Margin tile removed from the HUD (only 2 of 9 Round 1 scenarios
+    // modify it, so it looked frozen). Guard the lookup so the removed element
+    // does not throw; profitMargin is still tracked for win-condition logic.
+    const profitEl = document.getElementById("metric-profit");
+    if (profitEl) {
+      profitEl.textContent = `${this.state.profitMargin.toFixed(0)}%`;
+    }
     document.getElementById("metric-attrition").textContent =
       `${this.state.attrition.toFixed(0)}%`;
     document.getElementById("metric-capability").textContent =
@@ -1085,7 +1455,8 @@ class GameEngine {
     // Animated deltas: flash each metric that moved and show a +/- chip
     if (deltas) {
       this.animateMetricDelta("metric-growth", deltas.growth, "%", 1);
-      this.animateMetricDelta("metric-profit", deltas.profitMargin, "%", 0);
+      // Profit delta chip suppressed: the Profit Margin tile is no longer on
+      // the HUD. animateMetricDelta already no-ops when the element is absent.
       this.animateMetricDelta("metric-attrition", deltas.attrition, "%", 0);
       this.animateMetricDelta(
         "metric-capability",
@@ -1328,11 +1699,12 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     if (DEBUG_ENABLED) console.log("Loading scenario:", scenario.id);
 
-    // Scroll to top of scenario container
+    // Reset scroll for the new scenario (phone scrolls the page, not the container)
     const scenarioContainer = document.getElementById("scenario-container");
     if (scenarioContainer) {
       scenarioContainer.scrollTop = 0;
     }
+    window.scrollTo(0, 0);
 
     // Update period
     this.updatePeriod(scenario.month, scenario.quarter);
@@ -1479,17 +1851,56 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   }
 
   renderRanking(items, decisionIndex) {
+    // HTML5 drag-and-drop (draggable="true") does NOT fire on touch devices, so
+    // on a phone a drag just scrolls the page. We therefore render explicit
+    // up/down move buttons that work everywhere (touch + mouse + keyboard),
+    // while keeping drag-and-drop as a desktop convenience.
     let html = `<div class="ranking-container" id="ranking-container-${decisionIndex}">`;
     items.forEach((item, i) => {
+      const isFirst = i === 0;
+      const isLast = i === items.length - 1;
       html += `
                 <div class="ranking-item" draggable="true" data-decision="${decisionIndex}" data-item="${i}">
                     <div class="ranking-number">${i + 1}</div>
                     <div class="ranking-text">${item}</div>
+                    <div class="ranking-move">
+                        <button type="button"
+                                class="ranking-move-btn"
+                                aria-label="Move up"
+                                ${isFirst ? "disabled" : ""}
+                                onclick="game.moveRankingItem(${decisionIndex}, this, -1)">▲</button>
+                        <button type="button"
+                                class="ranking-move-btn"
+                                aria-label="Move down"
+                                ${isLast ? "disabled" : ""}
+                                onclick="game.moveRankingItem(${decisionIndex}, this, 1)">▼</button>
+                    </div>
                 </div>
             `;
     });
     html += "</div>";
     return html;
+  }
+
+  // Move a ranking item up (-1) or down (+1) by one position. Works on touch
+  // devices where HTML5 drag-and-drop is unavailable. `btn` is the clicked
+  // button; we walk up to its .ranking-item and swap it with the adjacent
+  // sibling, then renumber and refresh the disabled state of every button.
+  moveRankingItem(decisionIndex, btn, direction) {
+    const item = btn && btn.closest ? btn.closest(".ranking-item") : null;
+    if (!item) return;
+    const parent = item.parentNode;
+    if (!parent) return;
+
+    if (direction < 0) {
+      const prev = item.previousElementSibling;
+      if (prev) parent.insertBefore(item, prev);
+    } else {
+      const next = item.nextElementSibling;
+      if (next) parent.insertBefore(next, item);
+    }
+
+    this.updateRankingNumbers(parent);
   }
 
   renderTimeline(options, decisionIndex) {
@@ -1713,7 +2124,19 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   updateRankingNumbers(container) {
     const items = container.querySelectorAll(".ranking-item");
     items.forEach((item, index) => {
-      item.querySelector(".ranking-number").textContent = index + 1;
+      const numberEl = item.querySelector(".ranking-number");
+      if (numberEl) numberEl.textContent = index + 1;
+
+      // Keep the up/down buttons' disabled state in sync with the new order so
+      // the first item cannot move up and the last cannot move down.
+      const upBtn = item.querySelector(
+        '.ranking-move-btn[aria-label="Move up"]',
+      );
+      const downBtn = item.querySelector(
+        '.ranking-move-btn[aria-label="Move down"]',
+      );
+      if (upBtn) upBtn.disabled = index === 0;
+      if (downBtn) downBtn.disabled = index === items.length - 1;
     });
   }
 
@@ -2751,14 +3174,135 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     }
   }
 
+  // Build a per-option consequence narrative when a scenario does not hand-write
+  // one. Previously only the safety near-miss scenario defined per-option
+  // `consequence` text, so every other scenario fell back to a generic one-liner
+  // and players only saw the "why this went well/badly" explanation on that one
+  // scenario. This derives a specific, answer-aware explanation from the option's
+  // leadership style/colour plus the ACTUAL metric deltas the choice produced,
+  // so every scenario now explains the outcome.
+  // Locate the option the player actually picked for the scenario's first
+  // multiple-choice decision. `decision.choices` is ordered to match
+  // `scenario.decisions`, so we walk both in lockstep and return the option
+  // object for the first entry that is a "choice" with a valid index.
+  getPrimaryChoiceOption(scenario, decision) {
+    if (!scenario || !Array.isArray(scenario.decisions)) return null;
+    const choices = (decision && decision.choices) || [];
+    for (let i = 0; i < scenario.decisions.length; i++) {
+      const dec = scenario.decisions[i];
+      const choice = choices[i];
+      if (
+        dec &&
+        dec.type === "choice" &&
+        choice &&
+        choice.type === "choice" &&
+        typeof choice.index === "number" &&
+        choice.index >= 0 &&
+        Array.isArray(dec.options) &&
+        dec.options[choice.index]
+      ) {
+        return dec.options[choice.index];
+      }
+    }
+    return null;
+  }
+
+  generateOptionConsequence(primaryOption, deltas) {
+    if (!primaryOption) return "";
+    const style = primaryOption.style || "";
+    const color = primaryOption.color || "";
+
+    // What the chosen style tends to optimise for, in plain language.
+    const styleIntent = {
+      coercive: "moving fast and taking control",
+      authoritative: "setting a clear direction",
+      affiliative: "protecting relationships and morale",
+      democratic: "bringing people into the decision",
+      pacesetting: "driving hard for results",
+      coaching: "developing people and capability",
+    };
+    const intent = styleIntent[style] || "your chosen approach";
+
+    // Summarise the real, measured effect of the decision.
+    const d = deltas || {};
+    const num = (v) => (typeof v === "number" && isFinite(v) ? v : 0);
+    const growth = num(d.growth);
+    const morale = num(d.morale);
+    const attrition = num(d.attrition);
+    const capability = num(d.organizationalCapability);
+    const profit = num(d.profitMargin);
+
+    const positives = [];
+    const negatives = [];
+    if (growth > 0.05) positives.push(`growth up ${growth.toFixed(1)}%`);
+    else if (growth < -0.05)
+      negatives.push(`growth down ${Math.abs(growth).toFixed(1)}%`);
+    if (morale > 0.05) positives.push(`morale up ${morale.toFixed(1)}%`);
+    else if (morale < -0.05)
+      negatives.push(`morale down ${Math.abs(morale).toFixed(1)}%`);
+    if (attrition < -0.05)
+      positives.push(`attrition down ${Math.abs(attrition).toFixed(1)}%`);
+    else if (attrition > 0.05)
+      negatives.push(`attrition up ${attrition.toFixed(1)}%`);
+    if (capability > 0.05)
+      positives.push(`capability up ${capability.toFixed(1)} pts`);
+    else if (capability < -0.05)
+      negatives.push(`capability down ${Math.abs(capability).toFixed(1)} pts`);
+    if (profit > 0.05) positives.push(`profit margin up ${profit.toFixed(1)}%`);
+    else if (profit < -0.05)
+      negatives.push(`profit margin down ${Math.abs(profit).toFixed(1)}%`);
+
+    let effect;
+    if (positives.length > 0 && negatives.length === 0) {
+      effect = `The numbers back the call: ${positives.join(", ")}.`;
+    } else if (negatives.length > 0 && positives.length === 0) {
+      effect = `The cost shows up immediately: ${negatives.join(", ")}.`;
+    } else if (positives.length > 0 && negatives.length > 0) {
+      effect = `It is a trade-off — ${positives.join(", ")}, but ${negatives.join(", ")}.`;
+    } else {
+      effect =
+        "The immediate metrics barely move, so the real effect will show up in how the team responds over the coming months.";
+    }
+
+    // A short, style-aware verdict so the player learns WHY it landed that way.
+    let verdict;
+    if (positives.length > 0 && negatives.length === 0) {
+      verdict = `Leading through ${intent} was the right read of this situation.`;
+    } else if (negatives.length > 0 && positives.length === 0) {
+      verdict = `Leading through ${intent} did not fit what this situation actually needed.`;
+    } else {
+      verdict = `Leading through ${intent} bought you something but gave something else away — that is the trade-off to weigh next time.`;
+    }
+
+    return `${effect} ${verdict}`;
+  }
+
   showConsequence(scenario, decision, deltas) {
     const modal = document.getElementById("consequence-modal");
     const textEl = document.getElementById("consequence-text");
 
-    // Get consequence text from scenario
-    const consequenceText =
+    // Prefer a per-option consequence when the scenario defines one, so the
+    // narrative can affirm the specific choice the player made.
+    let consequenceText =
       scenario.consequenceText ||
       "Your decision has been recorded. The situation evolves...";
+
+    // Find the FIRST decision that is a multiple-choice question and pair it
+    // with the player's selected option. Previously this hard-coded
+    // `scenario.decisions[0]`, so any scenario whose first decision was a
+    // slider/ranking/timeline (or whose primary choice lived in a later
+    // decision) produced NO answer-specific feedback — which is why the green
+    // explanation only appeared on some scenarios.
+    const primaryOption = this.getPrimaryChoiceOption(scenario, decision);
+    if (primaryOption && primaryOption.consequence) {
+      consequenceText = primaryOption.consequence;
+    } else if (primaryOption) {
+      // No hand-written consequence: generate an answer-specific explanation
+      // from the option's style and the measured deltas so every scenario
+      // tells the player why their choice went well or badly.
+      const generated = this.generateOptionConsequence(primaryOption, deltas);
+      if (generated) consequenceText = generated;
+    }
 
     // Build the cinematic impact strip from the deltas.
     // BUGFIX (audit): previously any delta below 0.05 was silently DROPPED, so a
@@ -2806,6 +3350,36 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         ? `<div class="impact-strip">${impactItems.join("")}</div>`
         : "";
 
+    // Surface the research payoff: when the player requested useful information
+    // that supports the choice they made, say so explicitly. The scoring engine
+    // already rewards this; without a visible acknowledgement players assumed
+    // their research had no effect.
+    let researchNote = "";
+    const infoRequests = (this.state.infoRequests || []).find(
+      (ir) => ir.scenario === this.state.currentScenario,
+    );
+    if (
+      infoRequests &&
+      infoRequests.requests &&
+      infoRequests.requests.length > 0 &&
+      primaryOption &&
+      typeof primaryOption.index === "number" &&
+      primaryOption.index >= 0
+    ) {
+      const useful = infoRequests.requests
+        .map((i) => scenario.additionalInfo[i])
+        .filter(
+          (info) =>
+            info &&
+            info.type === "useful" &&
+            info.validatesDecision &&
+            info.validatesDecision.includes(primaryOption.index),
+        );
+      if (useful.length > 0) {
+        researchNote = `<div class="research-payoff">RESEARCH PAYOFF — the evidence you gathered supported this decision.</div>`;
+      }
+    }
+
     // Render the impact card into the modal body
     const bodyEl = document.getElementById("consequence-body");
     if (bodyEl) {
@@ -2813,6 +3387,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
                 <div class="impact-card">
                     <div class="impact-card-header">SCENARIO NET IMPACT</div>
                     <p class="impact-consequence">${consequenceText}</p>
+                    ${researchNote}
                     ${impactStrip}
                 </div>
             `;
@@ -2823,8 +3398,9 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     modal.classList.add("active");
 
-    // Auto-continue after 5 seconds
-    let countdown = 5;
+    // Auto-continue after 10 seconds so players have time to read the impact
+    // card before it advances.
+    let countdown = 10;
     const timerEl = document.getElementById("consequence-timer");
     timerEl.textContent = countdown;
 
@@ -2902,6 +3478,21 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   showResults() {
     this.showScreen("results-screen");
 
+    // Restore the "CALCULATING YEAR 1 RESULTS..." header. showFeedback() hides
+    // it once the reveal completes (it is a loading placeholder), so a fresh
+    // run must bring it back or the next player sees no loading heading.
+    const resultsHeader = document.querySelector(
+      "#results-screen .results-header",
+    );
+    if (resultsHeader) resultsHeader.style.display = "";
+
+    // The results screen now grows with its content and the PAGE scrolls, so
+    // reset the window scroll to the top. Without this the screen could open
+    // part-way down, leaving a large empty gap above the feedback.
+    const resultsScreen = document.getElementById("results-screen");
+    if (resultsScreen) resultsScreen.scrollTop = 0;
+    window.scrollTo(0, 0);
+
     // CRITICAL: Apply LEAD multipliers BEFORE calculating final score
     // This ensures LEAD competencies actually impact business outcomes
     this.applyLEADMultipliers();
@@ -2942,7 +3533,18 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     const feedbackPdfBtn = document.getElementById("download-feedback-pdf-btn");
     if (feedbackPdfBtn) feedbackPdfBtn.style.display = "";
 
-    // Animate metrics counting up (tightened for the time constraint)
+    // Collapse the "CALCULATING YEAR 1 RESULTS..." loading header IMMEDIATELY.
+    // It is a placeholder whose 48px heading + 40px margin reserved a tall band
+    // of dead space at the very top of the page - the "swipe three times before
+    // you reach any data" gap. The verdict is now the first section, so the
+    // header has served its purpose the moment the reveal begins.
+    const resultsHeader = document.querySelector(
+      "#results-screen .results-header",
+    );
+    if (resultsHeader) resultsHeader.style.display = "none";
+
+    // Animate the reveal (verdict first, then metrics) - tightened for the time
+    // constraint.
     setTimeout(() => {
       this.animateResultsReveal(results);
     }, 900);
@@ -2999,8 +3601,11 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
         },
       );
 
-      // Trigger a browser download of the combined report.
-      const html = report.combined || report.summary || "";
+      // ONE-PAGE SUMMARY: download ONLY the executive summary, not the combined
+      // summary + detailed appendix. The combined report ran to ~7 pages, which
+      // is not a "summary". The one-page summary is self-contained (overall
+      // assessment, key strengths, development areas, recommended actions).
+      const html = report.summary || report.combined || "";
       const baseFilename = report.filename || "JCB_Leadership_Assessment.pdf";
 
       // Prefer a real PDF when the offline SimplePDF writer is available.
@@ -3152,7 +3757,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       profileRows +=
         "<tr><td>" +
         esc(style.charAt(0).toUpperCase() + style.slice(1)) +
-        "</td><td>" +
+        "</td><td class='num'>" +
         esc(safePct) +
         "%" +
         esc(annotation) +
@@ -3201,6 +3806,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       "table{border-collapse:collapse;width:100%;margin:8px 0;}" +
       "td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:13px;}" +
       "th{background:#f4f4f4;}" +
+      // Numeric columns (Value / Score / Share) are right-aligned and given a
+      // fixed width so the figures form a single clean vertical column instead
+      // of floating at a different x-position on every row (the "wobbly" look).
+      "td.num,th.num{text-align:right;width:90px;font-variant-numeric:tabular-nums;}" +
       ".meta{color:#555;font-size:13px;margin-bottom:12px;}" +
       ".color-swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:middle;}" +
       "</style></head><body>" +
@@ -3221,42 +3830,42 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       ) +
       openingSummary +
       "<h2>Final Performance Metrics</h2>" +
-      "<table><tr><th>Metric</th><th>Value</th></tr>" +
+      "<table><tr><th>Metric</th><th class='num'>Value</th></tr>" +
       // Growth / attrition / profitMargin are the game's own metrics and are
       // meaningful above 100 / below 0, so they are only finiteness-guarded
       // (via num). Morale is conceptually a percentage of a maximum, so it is
       // clamped to 0-100 to avoid a confusing "morale 180%".
-      "<tr><td>Revenue Growth</td><td>" +
+      "<tr><td>Revenue Growth</td><td class='num'>" +
       num(s.growth, 1) +
       "%</td></tr>" +
-      "<tr><td>Team Morale</td><td>" +
+      "<tr><td>Team Morale</td><td class='num'>" +
       pct(s.morale, 0) +
       "%</td></tr>" +
-      "<tr><td>Staff Attrition</td><td>" +
+      "<tr><td>Staff Attrition</td><td class='num'>" +
       num(s.attrition, 1) +
       "%</td></tr>" +
-      "<tr><td>Profit Margin</td><td>" +
+      "<tr><td>Profit Margin</td><td class='num'>" +
       num(s.profitMargin, 1) +
       "%</td></tr>" +
-      "<tr><td>Organizational Capability</td><td>" +
+      "<tr><td>Organizational Capability</td><td class='num'>" +
       num(s.organizationalCapability, 0) +
       "</td></tr></table>" +
       "<h2>JCB LEAD Framework Performance</h2>" +
-      "<table><tr><th>Dimension</th><th>Score</th></tr>" +
-      "<tr><td>Leadership Quality</td><td>" +
+      "<table><tr><th>Dimension</th><th class='num'>Score</th></tr>" +
+      "<tr><td>Leadership Quality</td><td class='num'>" +
       esc(s.leadership || 0) +
       "</td></tr>" +
-      "<tr><td>Excellence Standards</td><td>" +
+      "<tr><td>Excellence Standards</td><td class='num'>" +
       esc(s.excellence || 0) +
       "</td></tr>" +
-      "<tr><td>Agility & Adaptability</td><td>" +
+      "<tr><td>Agility & Adaptability</td><td class='num'>" +
       esc(s.agility || 0) +
       "</td></tr>" +
-      "<tr><td>Determination to Succeed</td><td>" +
+      "<tr><td>Determination to Succeed</td><td class='num'>" +
       esc(s.determination || 0) +
       "</td></tr></table>" +
       "<h2>Leadership Profile (Goleman Framework)</h2>" +
-      "<table><tr><th>Style</th><th>Share</th></tr>" +
+      "<table><tr><th>Style</th><th class='num'>Share</th></tr>" +
       (profileRows || "<tr><td colspan='2'>No profile data</td></tr>") +
       "</table>" +
       "<h2>Personality Colour</h2>" +
@@ -3289,10 +3898,19 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = filename;
+    // Keep the anchor in the DOM until after the click has been processed.
+    // Some browsers (notably Safari/iPadOS) ignore a click on a detached
+    // anchor, which made the download silently do nothing.
+    anchor.style.display = "none";
     document.body.appendChild(anchor);
     anchor.click();
-    document.body.removeChild(anchor);
-    setTimeout(() => URL.revokeObjectURL(url), 0);
+    // Revoke on a longer delay: revoking on the next tick (0ms) can race the
+    // download and cancel it in Safari/iPadOS and some Chrome builds. 60s is
+    // long enough for the download to start while still releasing the URL.
+    setTimeout(() => {
+      if (anchor.parentNode) anchor.parentNode.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    }, 60000);
   }
 
   /**
@@ -3324,19 +3942,29 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       let blob;
       let downloadName;
       if (window.SimplePDF && typeof window.SimplePDF.fromHTML === "function") {
-        blob = window.SimplePDF.fromHTML(html, {
-          title: "JCB Leadership Assessment",
-          subtitle: "Individual Feedback — " + name,
-        });
-        downloadName =
-          "JCB_Feedback_" +
-          cleanName +
-          "_round" +
-          round +
-          "_" +
-          timestamp +
-          ".pdf";
-      } else {
+        try {
+          blob = window.SimplePDF.fromHTML(html, {
+            title: "JCB Leadership Assessment",
+            subtitle: "Individual Feedback — " + name,
+          });
+          downloadName =
+            "JCB_Feedback_" +
+            cleanName +
+            "_round" +
+            round +
+            "_" +
+            timestamp +
+            ".pdf";
+        } catch (pdfErr) {
+          // If the PDF writer fails for any reason, fall back to an HTML
+          // download rather than surfacing an error — the button must always
+          // produce a file.
+          console.error("SimplePDF failed, falling back to HTML:", pdfErr);
+          blob = null;
+        }
+      }
+
+      if (!blob) {
         blob = new Blob([html], { type: "text/html;charset=utf-8" });
         downloadName =
           "JCB_Feedback_" +
@@ -3364,7 +3992,14 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
    * @returns {{state: Object, results: Object, name: string}|null}
    */
   _reconstructPlayerState(playerIndex) {
-    const leaderboardData = this.getLeaderboardData();
+    // Resolve the index against the list that is ACTUALLY on screen (filtered
+    // to the selected round and sorted). Falling back to the raw cache keeps
+    // this working for any caller that runs before the board has rendered.
+    const leaderboardData =
+      Array.isArray(this._displayedLeaderboard) &&
+      this._displayedLeaderboard.length > 0
+        ? this._displayedLeaderboard
+        : this.getLeaderboardData();
     const player = leaderboardData[playerIndex];
 
     if (!player) return null;
@@ -3479,7 +4114,42 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     }
   }
 
+  // Reveal chain, reordered so the VERDICT lands first. The outcome container
+  // is now the first section in the DOM (above the metrics grid), so the player
+  // sees "TARGET MET / NOT MET" immediately instead of having to scroll past the
+  // whole data block to reach it. The metrics then fill in beneath the verdict.
   animateResultsReveal(results) {
+    const outcomeContainer = document.getElementById("results-outcome");
+    const success = results.escaped;
+
+    outcomeContainer.innerHTML = `
+            <div class="outcome-status ${success ? "success" : "failure"}">
+                ${success ? "✓ TARGET MET" : "✗ TARGET NOT MET"}
+            </div>
+            <div class="outcome-message">
+                ${
+                  success
+                    ? `You achieved ${this.state.growth.toFixed(1)}% growth and met your target!`
+                    : `You achieved ${this.state.growth.toFixed(1)}% growth. Target was ${this._growthTarget()}%.`
+                }
+            </div>
+        `;
+
+    // Bring the verdict into view immediately - it is the headline result and
+    // must not sit below the fold on a phone.
+    requestAnimationFrame(() => {
+      if (outcomeContainer && outcomeContainer.scrollIntoView) {
+        outcomeContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+
+    setTimeout(() => {
+      this.showOutcome(results);
+    }, 900);
+  }
+
+  // Populates the supporting metrics grid beneath the verdict.
+  showOutcome(results) {
     const metricsContainer = document.getElementById("results-metrics");
     metricsContainer.innerHTML = `
             <div class="result-metric">
@@ -3501,28 +4171,6 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             <div class="result-metric">
                 <div class="result-metric-label">Profit Margin</div>
                 <div class="result-metric-value">${this.state.profitMargin.toFixed(1)}%</div>
-            </div>
-        `;
-
-    setTimeout(() => {
-      this.showOutcome(results);
-    }, 900);
-  }
-
-  showOutcome(results) {
-    const outcomeContainer = document.getElementById("results-outcome");
-    const success = results.escaped;
-
-    outcomeContainer.innerHTML = `
-            <div class="outcome-status ${success ? "success" : "failure"}">
-                ${success ? "✓ TARGET MET" : "✗ TARGET NOT MET"}
-            </div>
-            <div class="outcome-message">
-                ${
-                  success
-                    ? `You achieved ${this.state.growth.toFixed(1)}% growth and met your target!`
-                    : `You achieved ${this.state.growth.toFixed(1)}% growth. Target was ${this._growthTarget()}%.`
-                }
             </div>
         `;
 
@@ -3846,6 +4494,10 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       leadershipProfile: results.leadershipProfile, // Full style distribution
       leadershipStyles: this.state.leadershipStyles, // Raw style points
       personalityColor: results.personalityColor,
+      // When BALANCED, the colour the player leans towards most (null when
+      // genuinely even). Lets the report say "balanced, with a slight tendency
+      // towards X" instead of a flat "BALANCED".
+      personalityTendency: results.personalityTendency || null,
       personalityDescription: results.personalityDescription,
       // Result status
       escaped: results.escaped,
@@ -3886,19 +4538,129 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // Reload leaderboard for next player
     this.loadLeaderboard();
 
-    // Dramatic leaderboard placement reveal
-    this.showLeaderboardPlacement(placement);
+    // Dramatic leaderboard placement reveal. Pass the runId so the reveal can
+    // re-rank against the SERVER cohort (the local cohort may hold only this
+    // run on a fresh browser, which showed a misleading "1 of 1").
+    this.showLeaderboardPlacement(placement, this.state.runId);
+
+    // The "CALCULATING YEAR 1 RESULTS..." header is a loading placeholder. Once
+    // the reveal chain has finished it is stale and its 48px heading + 40px
+    // margin reserved a tall band of dead space at the very top of the results
+    // page - the "scroll space above the feedback" players had to scroll past.
+    // Collapse it now that the real content is on screen.
+    const resultsHeader = document.querySelector(
+      "#results-screen .results-header",
+    );
+    if (resultsHeader) resultsHeader.style.display = "none";
+
+    // Bring the results into view. The results screen is a tall scroll
+    // container, so without this the player lands at the top and has to scroll
+    // down past the metrics/outcome/impact to reach the feedback.
+    //
+    // SCROLL-OVERSHOOT FIX: previously this scrolled the FEEDBACK container to
+    // block:"start". The feedback block is very tall, so anchoring its top to
+    // the viewport top pushed the verdict (TARGET MET / NOT MET) off-screen and
+    // let the player scroll far past the headline. We now anchor the OUTCOME
+    // (the verdict) to the top instead, so the player lands on the headline
+    // result with the feedback flowing naturally beneath it. Deferred a frame
+    // so the browser has laid out the new content first.
+    requestAnimationFrame(() => {
+      const outcomeContainer = document.getElementById("results-outcome");
+      const anchor =
+        outcomeContainer && outcomeContainer.scrollIntoView
+          ? outcomeContainer
+          : feedbackContainer;
+      if (anchor && anchor.scrollIntoView) {
+        anchor.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+    });
   }
 
   // Animated rank-in reveal on the results screen.
-  // Uses the truthful rank computed against the full cohort.
-  showLeaderboardPlacement(placement) {
+  //
+  // The local placement passed in is computed against the LOCAL cohort, which
+  // on a fresh browser holds only this run - hence a misleading "1 of 1". We
+  // render that immediately, then fetch the SERVER cohort and re-rank against
+  // the merged set so the podium reflects every player who has played.
+  showLeaderboardPlacement(placement, runId) {
     const container = document.getElementById("results-placement");
     if (!container || !placement) return;
 
     // #5: the private-results card was removed. A non-consenting player has
     // `rank: null` and `hidden: true`, so the ranked reveal below would print
     // "#null OF n". Fall back to a neutral, non-numeric message instead.
+    if (placement.hidden || !placement.rank) {
+      this._renderPlacementCard(container, placement);
+      return;
+    }
+
+    // First paint: the local placement (instant, no network wait).
+    this._renderPlacementCard(container, placement);
+
+    // Then re-rank against the server cohort and repaint if it differs.
+    if (!runId || typeof fetch !== "function") return;
+    if (typeof location === "undefined" || location.protocol === "file:")
+      return;
+
+    // Fetch the FULL cohort (no limit) so the placement rank is computed
+    // against every player - cohorts can run to ~150, so a ?limit=100 would
+    // under-count and mis-rank players outside the top 100.
+    fetch("/api/leaderboard", { cache: "no-store" })
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data || !Array.isArray(data.leaderboard)) return;
+        const serverRows = data.leaderboard;
+        // Merge local records over server rows (local carries richer fields),
+        // then rank the player's runId within the merged, sorted set.
+        const byRunId = new Map();
+        serverRows.forEach((row) => {
+          if (row && row.runId) byRunId.set(row.runId, row);
+        });
+        this.getLeaderboardData().forEach((row) => {
+          if (row && row.runId) byRunId.set(row.runId, row);
+        });
+        const merged = Array.from(byRunId.values());
+        // ROUND-SCOPED: rank only against players in the SAME round. Round 1
+        // and Round 2 are independent competitions (different benchmarks and
+        // scenario counts), so a Round 2 player must never be ranked against
+        // the Round 1 cohort - that is what produced a spurious "16th of 16".
+        // Find the player's own record first to learn its round, then filter.
+        const playerRecord = merged.find((r) => r.runId === runId);
+        if (!playerRecord) return; // this run is not on the server yet - keep local
+        const playerRound = this._recordRound(playerRecord);
+        const roundScoped = merged.filter(
+          (r) => this._recordRound(r) === playerRound,
+        );
+        roundScoped.sort((a, b) => this.compareLeaderboardRecords(a, b));
+        const idx = roundScoped.findIndex((r) => r.runId === runId);
+        if (idx < 0) return; // this run is not on the server yet - keep local
+        const serverPlacement = {
+          rank: idx + 1,
+          total: roundScoped.length,
+          inTop10: idx + 1 <= 10,
+          hidden: false,
+        };
+        // Only repaint when the server view actually changes the headline.
+        if (
+          serverPlacement.rank !== placement.rank ||
+          serverPlacement.total !== placement.total
+        ) {
+          this._renderPlacementCard(container, serverPlacement);
+        }
+      })
+      .catch(() => {
+        /* offline / server down - keep the local placement */
+      });
+  }
+
+  // Paint a single placement card into the results-placement container and
+  // trigger its rank-in animation. Shared by the local and server reveals.
+  _renderPlacementCard(container, placement) {
+    if (!container || !placement) return;
+
     if (placement.hidden || !placement.rank) {
       container.innerHTML = `
             <div class="placement-card">
@@ -3921,9 +4683,7 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     const headline = isPodium
       ? `TOP ${rank} OF ${total}`
-      : inTop10
-        ? `#${rank} OF ${total}`
-        : `#${rank} OF ${total}`;
+      : `#${rank} OF ${total}`;
 
     const subline = isPodium
       ? "Outstanding — you are on the podium."
@@ -3991,22 +4751,30 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       determination: this.state.determination || 0,
     };
 
-    let html =
-      '<div class="lead-score-breakdown" style="margin: 30px 0; padding: 25px; background: rgba(0, 0, 0, 0.3); border-radius: 12px;">';
+    let html = '<div class="lead-score-breakdown">';
     html +=
-      '<h3 style="color: var(--jcb-yellow); margin-top: 0;">YOUR LEAD FRAMEWORK SCORES (% of maximum achievable)</h3>';
+      '<h3 class="lead-breakdown-title">YOUR LEAD FRAMEWORK SCORES (% of maximum achievable)</h3>';
     html +=
-      '<p style="color: rgba(255, 255, 255, 0.7); margin-bottom: 20px;">Your performance across all scenarios</p>';
+      '<p class="lead-breakdown-subtitle">Your performance across all scenarios</p>';
     html +=
-      '<p style="color: rgba(255, 255, 255, 0.6); font-size: 13px; margin-bottom: 20px;">These scores show each dimension as a percentage of its maximum achievable points. The "LEAD Quality" figure in your business impact summary is measured against the 19-point-per-scenario benchmark instead, so the two use different scales.</p>';
+      '<p class="lead-breakdown-note">These scores show each dimension as a percentage of its maximum achievable points. The "LEAD Quality" figure in your business impact summary is measured against the 19-point-per-scenario benchmark instead, so the two use different scales.</p>';
 
-    html +=
-      '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">';
+    // minmax(0, 1fr) lets each track shrink below its content width, so the
+    // cards can never overflow the panel's grey border on narrow viewports.
+    html += '<div class="lead-breakdown-grid">';
+
+    // FEASIBILITY GUARD: clamp every "% of maximum" to 0-100 so a strong player
+    // can never be shown an impossible figure (e.g. "Agility 107%"). The raw
+    // per-dimension cap is 250, which can exceed the Agility ceiling of 233, so
+    // without this guard the panel could display >100%. Mirrors the clampPct()
+    // already used in scoring.js generateFeedback().
+    const clampPct = (v) =>
+      !isFinite(v) ? 0 : Math.max(0, Math.min(100, Math.round(v)));
 
     Object.keys(maximums).forEach((dimension) => {
       const totalScore = cumulativeScores[dimension];
       const maximum = maximums[dimension];
-      const percentOfMaximum = ((totalScore / maximum) * 100).toFixed(0);
+      const percentOfMaximum = clampPct((totalScore / maximum) * 100);
       const performanceColor =
         percentOfMaximum >= 70
           ? "#00D084"
@@ -4015,11 +4783,11 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
             : "#FFA500";
 
       html += `
-                <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);">
-                    <div style="font-size: 16px; color: var(--jcb-yellow); margin-bottom: 10px; text-transform: uppercase; font-weight: bold;">${dimension}</div>
-                    <div style="font-size: 32px; font-weight: bold; color: white; margin: 10px 0;">${totalScore}</div>
-                    <div style="font-size: 14px; color: rgba(255, 255, 255, 0.6); margin-bottom: 8px;">out of ${maximum} maximum achievable</div>
-                    <div style="font-size: 18px; font-weight: bold; color: ${performanceColor};">${percentOfMaximum}%</div>
+                <div class="lead-breakdown-card">
+                    <div class="lead-breakdown-dim">${dimension}</div>
+                    <div class="lead-breakdown-score">${totalScore}</div>
+                    <div class="lead-breakdown-max">out of ${maximum} maximum achievable</div>
+                    <div class="lead-breakdown-pct" style="color: ${performanceColor};">${percentOfMaximum}%</div>
                 </div>
             `;
     });
@@ -4032,10 +4800,9 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       0,
     );
     const totalMaximum = Object.values(maximums).reduce((a, b) => a + b, 0);
-    const overallPercentage = ((totalScore / totalMaximum) * 100).toFixed(0);
+    const overallPercentage = clampPct((totalScore / totalMaximum) * 100);
 
-    html +=
-      '<div style="margin-top: 20px; padding: 15px; background: rgba(255, 203, 0, 0.1); border-left: 4px solid var(--jcb-yellow); border-radius: 4px;">';
+    html += '<div class="lead-breakdown-overall">';
     html += `<strong>Overall LEAD Score:</strong> ${totalScore} out of ${totalMaximum} maximum → `;
     html += `<span style="color: #00D084;">${overallPercentage}% of maximum achievable</span>`;
     html += "</div>";
@@ -4689,24 +5456,74 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   }
 
   restart() {
+    // Force the browser to open the reloaded page at the very top. Without
+    // this, the browser restores the previous scroll position (the bottom of
+    // the welcome screen) after the reload.
+    try {
+      if ("scrollRestoration" in history) {
+        history.scrollRestoration = "manual";
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    window.scrollTo(0, 0);
     location.reload();
   }
 
   // COMPANY CULTURE ANALYSIS METHODS
-  showCultureDashboard() {
+  // Password gate for the company culture dashboard.
+  //
+  // The dashboard is visible to everyone on the welcome screen, but it can
+  // surface a picture of the organisation that is not appropriate for all
+  // audiences (e.g. players). Access is therefore gated behind a shared
+  // password that the facilitator controls. This is a deliberate
+  // "keep it out of casual view" gate, not a security boundary - the check
+  // is client-side by design.
+  promptCultureAccess() {
+    const CULTURE_PASSWORD = "JCBLEAD";
+    let entered = null;
+    try {
+      entered = window.prompt("Enter the password to view the Company Culture Analysis:");
+    } catch (e) {
+      entered = null;
+    }
+
+    // Cancelled prompt (null) or empty input: do nothing.
+    if (entered === null) return;
+
+    if (String(entered).trim() === CULTURE_PASSWORD) {
+      this.showCultureDashboard();
+    } else {
+      alert("Incorrect password. The Company Culture Analysis is restricted.");
+    }
+  }
+
+  async showCultureDashboard() {
+    if (!window.CultureAnalysis) {
+      alert("Culture analysis engine not loaded. Please refresh the page.");
+      return;
+    }
+
+    // Hydrate the local stores from the AUTHORITATIVE server cohort first. This
+    // repairs rows written by an older build that lacked the segmentation
+    // fields (jobFunction / seniority / leadCohort), which would otherwise make
+    // the dashboard report "0 players". No-op when the server is unavailable.
+    try {
+      await this.hydrateCultureFromServer();
+    } catch (e) {
+      /* hydration is best-effort - fall back to the local store */
+    }
+
     // Use the FILTERED + ANONYMISED cohort (JCB business functions only, with
     // non-consenting runs anonymised), not the truncated top-10 display
     // leaderboard. getCultureDataForAnalysis() reconciles jcb_culture_data
     // against jcb_leaderboard first, so a stale culture store self-heals.
     const cohort = this.getCultureDataForAnalysis();
 
-    if (!window.CultureAnalysis) {
-      alert("Culture analysis engine not loaded. Please refresh the page.");
-      return;
-    }
-
     const analyzer = new window.CultureAnalysis();
-    const analysis = analyzer.analyzeCulture(cohort);
+    // The dashboard uses the SEGMENTED model (cohort x seniority x colour x
+    // style) rather than the flat descriptive summary.
+    const analysis = analyzer.analyzeCultureDashboard(cohort);
 
     if (analysis.error) {
       // Report the eligible cohort length so the count is truthful even if
@@ -4727,16 +5544,27 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
    * dashboard was never opened. Falls back to an HTML download when the
    * SimplePDF writer is unavailable.
    */
-  downloadCulturePdf() {
+  async downloadCulturePdf() {
     try {
       if (!window.CultureAnalysis) {
         alert("Culture analysis engine not loaded. Please refresh the page.");
         return;
       }
 
+      // Hydrate from the authoritative server cohort first (see
+      // showCultureDashboard) so the PDF reflects every player even when the
+      // local store holds rows written by an older build.
+      try {
+        await this.hydrateCultureFromServer();
+      } catch (e) {
+        /* best-effort */
+      }
+
       const cohort = this.getCultureDataForAnalysis();
       const analyzer = new window.CultureAnalysis();
-      const analysis = analyzer.analyzeCulture(cohort);
+      // The PDF mirrors the dashboard: it uses the SEGMENTED model so the
+      // printed report carries the same cohort/seniority/colour breakdowns.
+      const analysis = analyzer.analyzeCultureDashboard(cohort);
 
       if (analysis.error) {
         alert(analysis.message);
@@ -4848,11 +5676,63 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
   _buildCultureSummaryHtml(analysis) {
     const { a, esc, pct, cap, generated } =
       this._cultureReportHelpers(analysis);
-    const metrics = a.metrics || {};
-    const leadership = a.leadership || {};
     const observations = a.observations || [];
     const recommendations = a.recommendations || [];
     const playerCount = a.playerCount || 0;
+
+    // The dashboard/PDF now uses the SEGMENTED model (analyzeCultureDashboard),
+    // which has no flat `metrics`/`leadership` objects. Derive the headline
+    // figures from the cohort groups so the summary still renders. When the
+    // legacy flat model is passed, use it directly.
+    const isSegmented = Array.isArray(a.byCohort);
+    const metrics = a.metrics || {};
+    const leadership = a.leadership || {};
+    let successCount = metrics.successCount || 0;
+    let optimalCount = metrics.optimalCount || 0;
+    let spreadLabel = leadership.spreadLabel || "n/a";
+    let aggregate = leadership.aggregate || {};
+    let diversity = leadership.diversity || 0;
+    let mostUsed = leadership.mostUsed || ["n/a", 0];
+    let leastUsed = leadership.leastUsed || ["n/a", 0];
+
+    if (isSegmented) {
+      // Roll up the cohort groups into a single headline view.
+      const groups = a.byCohort.filter((g) => g.sufficient);
+      const total = groups.reduce((s, g) => s + g.count, 0) || 1;
+      successCount = Math.round(
+        groups.reduce((s, g) => s + (g.successRate || 0) * g.count, 0) / total,
+      );
+      optimalCount = Math.round(
+        groups.reduce((s, g) => s + (g.optimalRate || 0) * g.count, 0) / total,
+      );
+      // Aggregate style distribution across all groups (weighted by count).
+      const styleTotals = {};
+      groups.forEach((g) => {
+        Object.entries(g.styles || {}).forEach(([k, v]) => {
+          styleTotals[k] = (styleTotals[k] || 0) + (v || 0) * g.count;
+        });
+      });
+      Object.keys(styleTotals).forEach((k) => {
+        styleTotals[k] = styleTotals[k] / total;
+      });
+      aggregate = styleTotals;
+      const sorted = Object.entries(styleTotals).sort(
+        (x, y) => (y[1] || 0) - (x[1] || 0),
+      );
+      if (sorted.length > 0) {
+        mostUsed = sorted[0];
+        leastUsed = sorted[sorted.length - 1];
+      }
+      // Diversity index = 1 - max share (higher = more balanced).
+      const maxShare = sorted.length > 0 ? sorted[0][1] : 0;
+      diversity = Math.max(0, 1 - maxShare / 100);
+      spreadLabel =
+        maxShare >= 70
+          ? "Concentrated"
+          : maxShare >= 50
+            ? "Moderately spread"
+            : "Well spread";
+    }
 
     // --- 1. Title + meta -----------------------------------------------------
     // Plain-language opening summary (2-3 sentences).
@@ -4898,17 +5778,17 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
       esc(playerCount) +
       "</td></tr>" +
       "<tr><td>Met basic targets</td><td>" +
-      esc(metrics.successCount || 0) +
+      esc(successCount) +
       " of " +
       esc(playerCount) +
       "</td></tr>" +
       "<tr><td>Achieved optimal</td><td>" +
-      esc(metrics.optimalCount || 0) +
+      esc(optimalCount) +
       " of " +
       esc(playerCount) +
       "</td></tr>" +
       "<tr><td>Style spread</td><td>" +
-      esc(leadership.spreadLabel || "n/a") +
+      esc(spreadLabel) +
       "</td></tr>" +
       "</table>";
 
@@ -4916,7 +5796,6 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     // Keep the diversity index and most/least used lines, but show only the
     // top-2 and bottom-1 styles rather than all six. The full distribution
     // remains in the appendix.
-    const aggregate = leadership.aggregate || {};
     const styleEntries = Object.keys(aggregate)
       .map((style) => [style, aggregate[style]])
       .sort((x, y) => (y[1] || 0) - (x[1] || 0));
@@ -4936,8 +5815,6 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     if (!styleRows) {
       styleRows = "<tr><td colspan='2'>No style data</td></tr>";
     }
-    const mostUsed = leadership.mostUsed || ["n/a", 0];
-    const leastUsed = leadership.leastUsed || ["n/a", 0];
     html +=
       "<h2>Leadership Style Distribution</h2>" +
       "<table data-width='60,40'><tr><th>Style</th><th>Aggregate Share</th></tr>" +
@@ -5028,6 +5905,13 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     const recommendations = a.recommendations || [];
 
     let html = "<h2>Detailed Appendix</h2>";
+
+    // SEGMENTED MODEL BRANCH: when the dashboard/PDF passes the segmented
+    // model (analyzeCultureDashboard), render the segmented tables and return.
+    // The legacy flat model falls through to the original appendix below.
+    if (Array.isArray(a.byCohort)) {
+      return this._buildSegmentedCultureAppendix(a, esc, num, pct, cap);
+    }
 
     // --- Performance Ranges --------------------------------------------------
     html +=
@@ -5288,197 +6172,593 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
     return html;
   }
 
+  /**
+   * Segmented culture appendix. Renders the cohort / seniority / colour / style
+   * breakdowns and the head-to-head comparisons as PDF-friendly tables (the
+   * SimplePDF writer renders <table> but not CSS grid or SVG). Mirrors the
+   * on-screen dashboard so the printed report carries the same picture.
+   * @param {Object} a segmented model from analyzeCultureDashboard()
+   * @returns {string} HTML fragment
+   */
+  _buildSegmentedCultureAppendix(a, esc, num, pct, cap) {
+    let html = "<h2>Detailed Appendix</h2>";
+
+    // --- Head-to-head comparisons -------------------------------------------
+    const comparisons = a.comparisons || [];
+    if (comparisons.length > 0) {
+      html += "<h2>Head-to-Head Comparisons</h2>";
+      html +=
+        "<table data-width='30,14,14,14,14,14'>" +
+        "<tr><th>Comparison</th><th>LEAD total</th><th>Overall %</th>" +
+        "<th>Growth</th><th>Morale</th><th>Attrition (inv.)</th></tr>";
+      comparisons.forEach((c) => {
+        const sign = (v) => (v >= 0 ? "+" : "") + num(v, 1);
+        html +=
+          "<tr><td>" +
+          esc(c.label) +
+          "</td><td>" +
+          sign(c.leadTotal) +
+          "</td><td>" +
+          sign(c.overallPct) +
+          "%</td><td>" +
+          sign(c.growth) +
+          "%</td><td>" +
+          sign(c.morale) +
+          "%</td><td>" +
+          sign(c.attrition) +
+          "%</td></tr>";
+      });
+      html += "</table>";
+      html +=
+        "<p style='font-size: 9pt; color: #666;'>Positive values mean the " +
+        "second group scores higher. Attrition is inverted so a positive value " +
+        "always means better. Groups with fewer than 3 leaders are omitted.</p>";
+    }
+
+    // --- LEAD scores by cohort ----------------------------------------------
+    html += this._segmentedLeadTable(
+      "LEAD Scores by Course Cohort",
+      a.byCohort,
+      esc,
+      num,
+    );
+
+    // --- LEAD scores by seniority -------------------------------------------
+    html += this._segmentedLeadTable(
+      "LEAD Scores by Seniority",
+      a.bySeniority,
+      esc,
+      num,
+    );
+
+    // --- Leadership style by cohort -----------------------------------------
+    html += this._segmentedDistributionTable(
+      "Leadership Style by Cohort",
+      a.byCohort,
+      "styles",
+      esc,
+      pct,
+      cap,
+    );
+
+    // --- Leadership style by seniority --------------------------------------
+    html += this._segmentedDistributionTable(
+      "Leadership Style by Seniority",
+      a.bySeniority,
+      "styles",
+      esc,
+      pct,
+      cap,
+    );
+
+    // --- Personality colour by cohort ---------------------------------------
+    html += this._segmentedDistributionTable(
+      "Personality Colour by Cohort",
+      a.byCohort,
+      "colors",
+      esc,
+      pct,
+      cap,
+    );
+
+    // --- Personality colour by seniority ------------------------------------
+    html += this._segmentedDistributionTable(
+      "Personality Colour by Seniority",
+      a.bySeniority,
+      "colors",
+      esc,
+      pct,
+      cap,
+    );
+
+    // --- Business area (job function) ---------------------------------------
+    // Show whether culture differs between Engineering, HR, Operations, etc.
+    if (Array.isArray(a.byFunction) && a.byFunction.length > 0) {
+      html += this._segmentedLeadTable(
+        "LEAD Scores by Business Area",
+        a.byFunction,
+        esc,
+        num,
+      );
+      html += this._segmentedDistributionTable(
+        "Leadership Style by Business Area",
+        a.byFunction,
+        "styles",
+        esc,
+        pct,
+        cap,
+      );
+      html += this._segmentedDistributionTable(
+        "Personality Colour by Business Area",
+        a.byFunction,
+        "colors",
+        esc,
+        pct,
+        cap,
+      );
+    }
+
+    // --- Outcomes by cohort --------------------------------------------------
+    const sufficient = (a.byCohort || []).filter((g) => g.sufficient);
+    if (sufficient.length > 0) {
+      html += "<h2>Outcomes by Cohort</h2>";
+      html +=
+        "<table data-width='28,18,18,18,18'>" +
+        "<tr><th>Cohort</th><th>Leaders</th><th>Growth</th>" +
+        "<th>Morale</th><th>Attrition</th></tr>";
+      sufficient.forEach((g) => {
+        html +=
+          "<tr><td>" +
+          esc(g.name) +
+          "</td><td>" +
+          esc(g.count) +
+          "</td><td>" +
+          num(g.avgGrowth, 1) +
+          "%</td><td>" +
+          num(g.avgMorale, 0) +
+          "%</td><td>" +
+          num(g.avgAttrition, 1) +
+          "%</td></tr>";
+      });
+      html += "</table>";
+    }
+
+    // --- Outcomes by business area ------------------------------------------
+    const fnSufficient = (a.byFunction || []).filter((g) => g.sufficient);
+    if (fnSufficient.length > 0) {
+      html += "<h2>Outcomes by Business Area</h2>";
+      html +=
+        "<table data-width='28,18,18,18,18'>" +
+        "<tr><th>Business Area</th><th>Leaders</th><th>Growth</th>" +
+        "<th>Morale</th><th>Attrition</th></tr>";
+      fnSufficient.forEach((g) => {
+        html +=
+          "<tr><td>" +
+          esc(g.name) +
+          "</td><td>" +
+          esc(g.count) +
+          "</td><td>" +
+          num(g.avgGrowth, 1) +
+          "%</td><td>" +
+          num(g.avgMorale, 0) +
+          "%</td><td>" +
+          num(g.avgAttrition, 1) +
+          "%</td></tr>";
+      });
+      html += "</table>";
+    }
+
+    return html;
+  }
+
+  // A LEAD dimension table for a set of dashboard groups.
+  _segmentedLeadTable(title, groups, esc, num) {
+    const sufficient = (groups || []).filter((g) => g.sufficient);
+    if (sufficient.length === 0) return "";
+    let html = "<h2>" + esc(title) + "</h2>";
+    html +=
+      "<table data-width='24,12,12,12,12,12,16'>" +
+      "<tr><th>Group</th><th>Leaders</th><th>Leadership</th>" +
+      "<th>Excellence</th><th>Agility</th><th>Determination</th>" +
+      "<th>Overall %</th></tr>";
+    sufficient.forEach((g) => {
+      html +=
+        "<tr><td>" +
+        esc(g.name) +
+        "</td><td>" +
+        esc(g.count) +
+        "</td><td>" +
+        num(g.leadAvg.leadership, 0) +
+        "</td><td>" +
+        num(g.leadAvg.excellence, 0) +
+        "</td><td>" +
+        num(g.leadAvg.agility, 0) +
+        "</td><td>" +
+        num(g.leadAvg.determination, 0) +
+        "</td><td>" +
+        num(g.overallPct, 0) +
+        "%</td></tr>";
+    });
+    html += "</table>";
+    return html;
+  }
+
+  // A distribution table (styles or colours) for a set of dashboard groups.
+  _segmentedDistributionTable(title, groups, field, esc, pct, cap) {
+    const sufficient = (groups || []).filter((g) => g.sufficient);
+    if (sufficient.length === 0) return "";
+
+    // Union of keys so every group shows the same columns.
+    const keys = [];
+    sufficient.forEach((g) => {
+      Object.keys(g[field] || {}).forEach((k) => {
+        if (keys.indexOf(k) === -1) keys.push(k);
+      });
+    });
+    if (keys.length === 0) return "";
+
+    let html = "<h2>" + esc(title) + "</h2>";
+    html += "<table><tr><th>Group</th><th>Leaders</th>";
+    keys.forEach((k) => {
+      html += "<th>" + esc(cap(k)) + "</th>";
+    });
+    html += "</tr>";
+    sufficient.forEach((g) => {
+      html +=
+        "<tr><td>" + esc(g.name) + "</td><td>" + esc(g.count) + "</td>";
+      keys.forEach((k) => {
+        html += "<td>" + pct((g[field] || {})[k], 0) + "%</td>";
+      });
+      html += "</tr>";
+    });
+    html += "</table>";
+    return html;
+  }
+
   renderCultureDashboard(analysis) {
     const container = document.getElementById("culture-content");
 
+    // The dashboard is driven by the segmented model. If the caller handed us
+    // a flat analyzeCulture() result (legacy path), derive the segmented model
+    // on the fly so the renderer always has the data it expects.
+    let model = analysis;
+    if (!analysis.byCohort && window.CultureAnalysis) {
+      const cohort = this.getCultureDataForAnalysis();
+      model = new window.CultureAnalysis().analyzeCultureDashboard(cohort);
+    }
+
+    if (model.error) {
+      container.innerHTML =
+        '<div class="culture-summary-card"><h2>Not enough data</h2><p>' +
+        model.message +
+        "</p></div>";
+      return;
+    }
+
     let html = "";
 
-    // Executive Summary Card
+    // ---- Headline headcount bins --------------------------------------
+    // Every eligible (JCB, non-student) player is binned into exactly one of
+    // four groups. The counts are shown up front so the dashboard answers the
+    // "how many people have played, and who are they?" question at a glance.
+    const totalPlayers = model.playerCount;
+    const cohortCount = (name) => {
+      const g = this._findGroup(model.byCohort, name);
+      return g ? g.count : 0;
+    };
+    const seniorityCount = (name) => {
+      const g = this._findGroup(model.bySeniority, name);
+      return g ? g.count : 0;
+    };
+
     html += '<div class="culture-summary-card">';
-    html += `<h2>Executive Summary</h2>`;
-    html += `<p style="margin-bottom: 20px; color: rgba(255, 255, 255, 0.85); line-height: 1.6;">This dashboard describes the collective leadership culture of your team based on ${analysis.playerCount} completed simulations. All figures are drawn directly from the results of the players - there is no external comparison point.</p>`;
-    html += `<div class="culture-stat-row">`;
-    html += `<div class="culture-stat"><span class="culture-stat-label">Leaders Analysed:</span><span class="culture-stat-value">${analysis.playerCount}</span></div>`;
-    html += `<div class="culture-stat"><span class="culture-stat-label">Met Basic Targets:</span><span class="culture-stat-value">${analysis.metrics.successCount} of ${analysis.playerCount}</span></div>`;
-    html += `<div class="culture-stat"><span class="culture-stat-label">Achieved Optimal:</span><span class="culture-stat-value">${analysis.metrics.optimalCount} of ${analysis.playerCount}</span></div>`;
-    html += `<div class="culture-stat"><span class="culture-stat-label">Style Spread:</span><span class="culture-stat-value">${analysis.leadership.spreadLabel}</span></div>`;
-    html += `</div>`;
-    html += "</div>";
-
-    // Aggregate Metrics (descriptive ranges)
-    html += '<div class="culture-section">';
-    html += "<h2>📊 Performance Ranges</h2>";
-    html += '<div class="culture-metrics-grid">';
-    html += `<div class="culture-metric-card">
-            <div class="culture-metric-label">Revenue Growth</div>
-            <div class="culture-metric-value">${analysis.metrics.medianGrowth.toFixed(1)}%</div>
-            <div class="culture-metric-target">Median (range ${analysis.metrics.minGrowth.toFixed(1)}% - ${analysis.metrics.maxGrowth.toFixed(1)}%)</div>
-        </div>`;
-    html += `<div class="culture-metric-card">
-            <div class="culture-metric-label">Team Morale</div>
-            <div class="culture-metric-value">${analysis.metrics.medianMorale.toFixed(0)}%</div>
-            <div class="culture-metric-target">Median (range ${analysis.metrics.minMorale.toFixed(0)}% - ${analysis.metrics.maxMorale.toFixed(0)}%)</div>
-        </div>`;
-    html += `<div class="culture-metric-card">
-            <div class="culture-metric-label">Staff Attrition</div>
-            <div class="culture-metric-value">${analysis.metrics.medianAttrition.toFixed(1)}%</div>
-            <div class="culture-metric-target">Median (range ${analysis.metrics.minAttrition.toFixed(1)}% - ${analysis.metrics.maxAttrition.toFixed(1)}%)</div>
-        </div>`;
-    html += `<div class="culture-metric-card">
-            <div class="culture-metric-label">Profit Margin</div>
-            <div class="culture-metric-value">${analysis.metrics.medianProfitMargin.toFixed(0)}%</div>
-            <div class="culture-metric-target">Median across the cohort</div>
-        </div>`;
+    html += "<h2>Company Culture Dashboard</h2>";
+    html += `<p class="culture-intro">A segmented picture of the ${totalPlayers} JCB leaders who have played. Students and non-JCB players are excluded. The cohort view counts each LEAD cohort and bins everyone else into Other; the seniority view counts Senior Leadership or above and bins everyone else into Other.</p>`;
+    html += '<div class="culture-kpi-strip">';
+    html += this._kpiCard("Leaders Analysed", totalPlayers);
+    html += this._kpiCard("LEAD Cohort 2025", cohortCount("LEAD Cohort 2025"));
+    html += this._kpiCard("LEAD Cohort 2026", cohortCount("LEAD Cohort 2026"));
+    html += this._kpiCard(
+      "Senior Leadership or above",
+      seniorityCount("Senior Leadership or above"),
+    );
+    html += this._kpiCard("Other", cohortCount("Other"));
     html += "</div>";
     html += "</div>";
 
-    // Leadership Style Distribution
-    html += '<div class="culture-section">';
-    html += "<h2>👥 Leadership Style Distribution</h2>";
-    html += `<div class="culture-diversity-score">`;
-    html += `<strong>Style Spread:</strong> ${analysis.leadership.spreadLabel}`;
-    html += ` (diversity index ${(analysis.leadership.diversity * 100).toFixed(0)}%)`;
-    html += `</div>`;
-    html += '<div class="culture-style-bars">';
-
-    Object.entries(analysis.leadership.aggregate).forEach(
-      ([style, percentage]) => {
-        html += `<div class="culture-style-bar">`;
-        html += `<div class="culture-style-label">${this.capitalizeFirst(style)}</div>`;
-        html += `<div class="culture-style-track">`;
-        html += `<div class="culture-style-fill" style="width: ${percentage}%"></div>`;
-        html += `</div>`;
-        html += `<div class="culture-style-percentage">${percentage.toFixed(0)}%</div>`;
-        html += `</div>`;
-      },
+    // ---- LEAD dimension graph by cohort -------------------------------
+    html += this._renderSegmentGraph(
+      "🎓 LEAD Scores by Course Cohort",
+      model.byCohort,
+      "leadAvg",
     );
 
-    html += "</div>";
-    html += `<p class="culture-insight"><strong>Most Used:</strong> ${this.capitalizeFirst(analysis.leadership.mostUsed[0])} (${analysis.leadership.mostUsed[1].toFixed(0)}%) | `;
-    html += `<strong>Least Used:</strong> ${this.capitalizeFirst(analysis.leadership.leastUsed[0])} (${analysis.leadership.leastUsed[1].toFixed(0)}%)</p>`;
-    html += "</div>";
-
-    // LEAD Scores (descriptive ranges)
-    html += '<div class="culture-section">';
-    html += "<h2>🎯 LEAD Framework Scores</h2>";
-    html += '<div class="culture-lead-grid">';
-    html += this.renderLEADRange("Leadership", analysis.lead.leadership);
-    html += this.renderLEADRange("Excellence", analysis.lead.excellence);
-    html += this.renderLEADRange("Agility", analysis.lead.agility);
-    html += this.renderLEADRange("Determination", analysis.lead.determination);
-    html += "</div>";
-    html += "</div>";
-
-    // Segmentation by function
-    const funcSegments = analysis.segments.byFunction.filter(
-      (s) => s.sufficient,
+    // ---- LEAD dimension graph by seniority ----------------------------
+    html += this._renderSegmentGraph(
+      "📈 LEAD Scores by Seniority",
+      model.bySeniority,
+      "leadAvg",
     );
-    if (funcSegments.length > 0) {
-      html += '<div class="culture-section">';
-      html += "<h2>🏢 By Business Function</h2>";
-      html += '<div class="culture-segment-grid">';
-      funcSegments.forEach((seg) => {
-        html += `<div class="culture-segment-card">`;
-        html += `<h3>${seg.name} <span class="culture-segment-count">${seg.count} leaders</span></h3>`;
-        html += `<p><strong>Most used style:</strong> ${this.capitalizeFirst(seg.dominantStyle || "n/a")}</p>`;
-        html += `<p><strong>Average growth:</strong> ${seg.avgGrowth.toFixed(1)}%</p>`;
-        html += `<p><strong>Average morale:</strong> ${seg.avgMorale.toFixed(0)}%</p>`;
-        html += `<p><strong>Average attrition:</strong> ${seg.avgAttrition.toFixed(1)}%</p>`;
-        html += `</div>`;
-      });
-      html += "</div>";
-      html += "</div>";
-    }
 
-    // Segmentation by seniority
-    const senSegments = analysis.segments.bySeniority.filter(
-      (s) => s.sufficient,
+    // ---- Leadership style distribution by cohort ----------------------
+    html += this._renderDistributionGraph(
+      "👥 Leadership Style by Cohort",
+      model.byCohort,
+      "styles",
     );
-    if (senSegments.length > 0) {
-      html += '<div class="culture-section">';
-      html += "<h2>📈 By Seniority</h2>";
-      html += '<div class="culture-segment-grid">';
-      senSegments.forEach((seg) => {
-        html += `<div class="culture-segment-card">`;
-        html += `<h3>${seg.name} <span class="culture-segment-count">${seg.count} leaders</span></h3>`;
-        html += `<p><strong>Most used style:</strong> ${this.capitalizeFirst(seg.dominantStyle || "n/a")}</p>`;
-        html += `<p><strong>Average growth:</strong> ${seg.avgGrowth.toFixed(1)}%</p>`;
-        html += `<p><strong>Average morale:</strong> ${seg.avgMorale.toFixed(0)}%</p>`;
-        html += `<p><strong>Average attrition:</strong> ${seg.avgAttrition.toFixed(1)}%</p>`;
-        html += `</div>`;
-      });
-      html += "</div>";
-      html += "</div>";
-    }
 
-    // Segmentation by LEAD course cohort
-    const cohorts = analysis.cohorts || {};
-    const cohortCards = [
-      cohorts.byCohort && cohorts.byCohort["2025"],
-      cohorts.byCohort && cohorts.byCohort["2026"],
-      cohorts.nonParticipants,
-      cohorts.course,
-    ].filter((c) => c && c.sufficient === true);
-    // Only render when actual course data exists (see _buildCultureReportHtml).
-    const hasCourseData = cohortCards.some((c) => c.key !== "none");
-    if (cohortCards.length > 0 && hasCourseData) {
-      html += '<div class="culture-section">';
-      html += "<h2>🎓 By LEAD Course Cohort</h2>";
-      html += '<div class="culture-segment-grid">';
-      cohortCards.forEach((c) => {
-        html += `<div class="culture-segment-card">`;
-        html += `<h3>${c.label} <span class="culture-segment-count">${c.count} leaders</span></h3>`;
-        html += `<p><strong>LEAD average:</strong> ${(c.leadAvg ? c.leadAvg.total : 0).toFixed(0)} pts</p>`;
-        html += `<p><strong>Style balance:</strong> ${c.maxStyleShare.toFixed(0)}% max</p>`;
-        html += `<p><strong>Average growth:</strong> ${c.avgGrowth.toFixed(1)}%</p>`;
-        html += `<p><strong>Average morale:</strong> ${c.avgMorale.toFixed(0)}%</p>`;
-        html += `<p><strong>Average attrition:</strong> ${c.avgAttrition.toFixed(1)}%</p>`;
-        html += `</div>`;
-      });
-      html += "</div>";
-      html += `<p style="font-size: 9pt; color: rgba(255, 255, 255, 0.6);">Cohorts with fewer than 3 leaders are not shown. This compares observed outcomes between groups; it does not by itself establish that the course caused the difference.</p>`;
-      html += "</div>";
-    }
+    // ---- Leadership style distribution by seniority -------------------
+    html += this._renderDistributionGraph(
+      "👥 Leadership Style by Seniority",
+      model.bySeniority,
+      "styles",
+    );
 
-    // Observations
-    if (analysis.observations.length > 0) {
-      html += '<div class="culture-section culture-observations">';
-      html += "<h2>🔍 What the Data Shows</h2>";
-      analysis.observations.forEach((obs) => {
-        html += `<div class="culture-observation-card">`;
-        html += `<div class="culture-observation-category">${obs.category}</div>`;
-        html += `<h3>${obs.headline}</h3>`;
-        html += `<p>${obs.detail}</p>`;
-        html += `</div>`;
-      });
-      html += "</div>";
-    }
+    // ---- Personality colour distribution by cohort --------------------
+    html += this._renderDistributionGraph(
+      "🎨 Personality Colour by Cohort",
+      model.byCohort,
+      "colors",
+      true,
+    );
 
-    // Recommendations
-    if (analysis.recommendations.length > 0) {
-      html += '<div class="culture-section culture-recommendations">';
-      html += "<h2>💡 Suggested Focus Areas</h2>";
-      analysis.recommendations.forEach((rec, index) => {
-        const displayPriority = index + 1;
-        html += `<div class="culture-rec-card priority-${displayPriority}">`;
-        html += `<div class="culture-rec-header">`;
-        html += `<h3><span class="culture-rec-number">Focus ${displayPriority}</span> ${rec.title}</h3>`;
-        html += `</div>`;
-        html += `<div class="culture-rec-body">`;
-        html += `<p><strong>Why:</strong> ${rec.rationale}</p>`;
-        html += `<h4>Suggested actions:</h4>`;
-        html += `<ul>`;
-        rec.actions.forEach((action) => {
-          html += `<li>${action}</li>`;
-        });
-        html += `</ul>`;
-        html += `</div>`;
-        html += `</div>`;
-      });
-      html += "</div>";
+    // ---- Personality colour distribution by seniority -----------------
+    html += this._renderDistributionGraph(
+      "🎨 Personality Colour by Seniority",
+      model.bySeniority,
+      "colors",
+      true,
+    );
+
+    // ---- Outcome graph (growth / morale / attrition) by cohort --------
+    html += this._renderOutcomeGraph(model.byCohort, "📊 Outcomes by Cohort");
+
+    // ---- Outcome graph (growth / morale / attrition) by seniority -----
+    html += this._renderOutcomeGraph(
+      model.bySeniority,
+      "📊 Outcomes by Seniority",
+    );
+
+    // ---- Business-area (job function) graphs --------------------------
+    // Show whether culture differs between Engineering, HR, Operations, etc.
+    // Only groups with >= minSegmentSize players are rendered (the graph
+    // helpers filter on `sufficient`), so small areas are not over-interpreted.
+    if (Array.isArray(model.byFunction) && model.byFunction.length > 0) {
+      html += this._renderSegmentGraph(
+        "🏢 LEAD Scores by Business Area",
+        model.byFunction,
+        "leadAvg",
+      );
+      html += this._renderDistributionGraph(
+        "🏢 Leadership Style by Business Area",
+        model.byFunction,
+        "styles",
+      );
+      html += this._renderDistributionGraph(
+        "🏢 Personality Colour by Business Area",
+        model.byFunction,
+        "colors",
+        true,
+      );
+      html += this._renderOutcomeGraph(
+        model.byFunction,
+        "📊 Outcomes by Business Area",
+      );
     }
 
     container.innerHTML = html;
+  }
+
+  // Find a group by name in a group array.
+  _findGroup(groups, name) {
+    return (groups || []).find((g) => g.name === name) || null;
+  }
+
+  // Merge the per-year course cohort groups ("2025 cohort" + "2026 cohort")
+  // into a single "LEAD cohort" group for the headline KPI. Returns null when
+  // no course cohort is present.
+  _mergeCohortGroups(byCohort) {
+    const years = (byCohort || []).filter(
+      (g) => g.name === "2025 cohort" || g.name === "2026 cohort",
+    );
+    if (years.length === 0) return null;
+    if (years.length === 1) return years[0];
+    const total = years.reduce((s, g) => s + g.count, 0);
+    if (total === 0) return null;
+    const w = (field) =>
+      years.reduce((s, g) => s + (g[field] || 0) * g.count, 0) / total;
+    const wObj = (field) => {
+      const out = {};
+      years.forEach((g) => {
+        Object.entries(g[field] || {}).forEach(([k, v]) => {
+          out[k] = (out[k] || 0) + (v || 0) * g.count;
+        });
+      });
+      Object.keys(out).forEach((k) => {
+        out[k] = out[k] / total;
+      });
+      return out;
+    };
+    return {
+      name: "LEAD cohort",
+      count: total,
+      leadAvg: {
+        leadership: years.reduce((s, g) => s + g.leadAvg.leadership * g.count, 0) / total,
+        excellence: years.reduce((s, g) => s + g.leadAvg.excellence * g.count, 0) / total,
+        agility: years.reduce((s, g) => s + g.leadAvg.agility * g.count, 0) / total,
+        determination: years.reduce((s, g) => s + g.leadAvg.determination * g.count, 0) / total,
+        total: years.reduce((s, g) => s + g.leadAvg.total * g.count, 0) / total,
+      },
+      overallPct: w("overallPct"),
+      styles: wObj("styles"),
+      colors: wObj("colors"),
+    };
+  }
+
+  // A single KPI tile.
+  _kpiCard(label, value) {
+    return (
+      '<div class="culture-kpi-card">' +
+      '<div class="culture-kpi-value">' +
+      value +
+      "</div>" +
+      '<div class="culture-kpi-label">' +
+      label +
+      "</div>" +
+      "</div>"
+    );
+  }
+
+  // A head-to-head comparison card with signed delta bars.
+  _renderComparisonCard(c) {
+    const rows = [
+      { label: "LEAD total", value: c.leadTotal, unit: " pts" },
+      { label: "Overall %", value: c.overallPct, unit: "%" },
+      { label: "Growth", value: c.growth, unit: "%" },
+      { label: "Morale", value: c.morale, unit: "%" },
+      { label: "Attrition (inv.)", value: c.attrition, unit: "%" },
+      { label: "Style balance", value: c.balance, unit: "%" },
+    ];
+
+    let html = '<div class="culture-comparison-card">';
+    html += `<h3>${c.label}</h3>`;
+    html += `<div class="culture-comparison-sub">${c.aName} (${c.aCount}) vs ${c.bName} (${c.bCount})</div>`;
+    rows.forEach((r) => {
+      const positive = r.value >= 0;
+      const width = Math.min(100, Math.abs(r.value) * 2); // scale for visibility
+      html += '<div class="culture-delta-row">';
+      html += `<div class="culture-delta-label">${r.label}</div>`;
+      html += '<div class="culture-delta-track">';
+      html += `<div class="culture-delta-fill ${positive ? "positive" : "negative"}" style="width:${width}%"></div>`;
+      html += "</div>";
+      html += `<div class="culture-delta-value ${positive ? "positive" : "negative"}">${positive ? "+" : ""}${r.value.toFixed(1)}${r.unit}</div>`;
+      html += "</div>";
+    });
+    html += "</div>";
+    return html;
+  }
+
+  // A grouped bar chart of LEAD dimension averages across segments.
+  _renderSegmentGraph(title, groups, field) {
+    const dims = [
+      { key: "leadership", label: "Leadership" },
+      { key: "excellence", label: "Excellence" },
+      { key: "agility", label: "Agility" },
+      { key: "determination", label: "Determination" },
+    ];
+    const sufficient = (groups || []).filter((g) => g.sufficient);
+    if (sufficient.length === 0) return "";
+
+    // Scale bars against the largest single-dimension average present.
+    let maxVal = 1;
+    sufficient.forEach((g) => {
+      dims.forEach((d) => {
+        const v = (g[field] || {})[d.key] || 0;
+        if (v > maxVal) maxVal = v;
+      });
+    });
+
+    let html = '<div class="culture-section">';
+    html += `<h2>${title}</h2>`;
+    html += '<div class="culture-bar-chart">';
+    sufficient.forEach((g) => {
+      html += '<div class="culture-bar-group">';
+      html += `<div class="culture-bar-group-title">${g.name} <span class="culture-bar-count">${g.count}</span></div>`;
+      dims.forEach((d) => {
+        const v = (g[field] || {})[d.key] || 0;
+        const pct = (v / maxVal) * 100;
+        html += '<div class="culture-bar-row">';
+        html += `<div class="culture-bar-label">${d.label}</div>`;
+        html += '<div class="culture-bar-track">';
+        html += `<div class="culture-bar-fill dim-${d.key}" style="width:${pct}%"></div>`;
+        html += "</div>";
+        html += `<div class="culture-bar-value">${v.toFixed(0)}</div>`;
+        html += "</div>";
+      });
+      html += `<div class="culture-bar-overall">Overall: ${g.overallPct.toFixed(0)}% of maximum</div>`;
+      html += "</div>";
+    });
+    html += "</div>";
+    html += "</div>";
+    return html;
+  }
+
+  // A stacked distribution chart (styles or colours) across segments.
+  _renderDistributionGraph(title, groups, field, isColor) {
+    const sufficient = (groups || []).filter((g) => g.sufficient);
+    if (sufficient.length === 0) return "";
+
+    // Collect the union of keys so every segment shows the same legend order.
+    const keys = [];
+    sufficient.forEach((g) => {
+      Object.keys(g[field] || {}).forEach((k) => {
+        if (keys.indexOf(k) === -1) keys.push(k);
+      });
+    });
+
+    let html = '<div class="culture-section">';
+    html += `<h2>${title}</h2>`;
+    html += '<div class="culture-stack-chart">';
+    sufficient.forEach((g) => {
+      html += '<div class="culture-stack-group">';
+      html += `<div class="culture-stack-title">${g.name} <span class="culture-bar-count">${g.count}</span></div>`;
+      html += '<div class="culture-stack-bar">';
+      keys.forEach((k) => {
+        const v = (g[field] || {})[k] || 0;
+        if (v <= 0) return;
+        const cls = isColor ? "color-" + k.toLowerCase() : "style-" + k;
+        html += `<div class="culture-stack-seg ${cls}" style="width:${v}%" title="${k}: ${v.toFixed(0)}%">`;
+        if (v >= 8) html += `<span>${v.toFixed(0)}%</span>`;
+        html += "</div>";
+      });
+      html += "</div>";
+      html += "</div>";
+    });
+    html += "</div>";
+    // Legend
+    html += '<div class="culture-legend">';
+    keys.forEach((k) => {
+      const cls = isColor ? "color-" + k.toLowerCase() : "style-" + k;
+      html += `<span class="culture-legend-item"><span class="culture-legend-swatch ${cls}"></span>${this.capitalizeFirst(k)}</span>`;
+    });
+    html += "</div>";
+    html += "</div>";
+    return html;
+  }
+
+  // Outcome comparison (growth / morale / attrition) across segments.
+  _renderOutcomeGraph(groups, title) {
+    const sufficient = (groups || []).filter((g) => g.sufficient);
+    if (sufficient.length === 0) return "";
+
+    const metrics = [
+      { key: "avgGrowth", label: "Growth %", max: 40 },
+      { key: "avgMorale", label: "Morale %", max: 100 },
+      { key: "avgAttrition", label: "Attrition %", max: 40 },
+    ];
+
+    let html = '<div class="culture-section">';
+    html += `<h2>${title || "📊 Outcomes by Cohort"}</h2>`;
+    html += '<div class="culture-bar-chart">';
+    sufficient.forEach((g) => {
+      html += '<div class="culture-bar-group">';
+      html += `<div class="culture-bar-group-title">${g.name} <span class="culture-bar-count">${g.count}</span></div>`;
+      metrics.forEach((m) => {
+        const v = g[m.key] || 0;
+        const pct = Math.min(100, (v / m.max) * 100);
+        html += '<div class="culture-bar-row">';
+        html += `<div class="culture-bar-label">${m.label}</div>`;
+        html += '<div class="culture-bar-track">';
+        html += `<div class="culture-bar-fill outcome-${m.key}" style="width:${pct}%"></div>`;
+        html += "</div>";
+        html += `<div class="culture-bar-value">${v.toFixed(1)}</div>`;
+        html += "</div>";
+      });
+      html += "</div>";
+    });
+    html += "</div>";
+    html += "</div>";
+    return html;
   }
 
   renderLEADRange(dimension, stats) {

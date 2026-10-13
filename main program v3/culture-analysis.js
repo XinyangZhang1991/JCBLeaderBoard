@@ -614,6 +614,314 @@ class CultureAnalysis {
     };
   }
 
+  // ------------------------------------------------------------------
+  // DASHBOARD MODEL (segmented comparison)
+  //
+  // Builds the data model behind the redesigned culture dashboard. Unlike
+  // analyzeCulture() (which is a flat descriptive summary), this method
+  // segments the eligible cohort along the axes the business actually cares
+  // about and returns ready-to-render groups:
+  //
+  //   - byCohort      : LEAD course cohort (2025 / 2026 / non-participants)
+  //   - bySeniority   : Exec / Senior / Middle Manager / etc.
+  //   - byColour      : personality colour (RED / BLUE / YELLOW / GREEN / BALANCED)
+  //   - byStyle       : dominant Goleman leadership style
+  //
+  // Every group carries:
+  //   - count, sufficient (>= minSegmentSize)
+  //   - leadAvg  : per-dimension averages + weighted overall %
+  //   - styles   : normalised Goleman distribution (sums to 100)
+  //   - colors   : personality-colour distribution (sums to 100)
+  //   - outcomes : avg growth / morale / attrition / profit margin
+  //
+  // Students and non-JCB players are excluded upstream by isCultureEligible();
+  // this method re-applies the filter defensively so a direct call is safe.
+  // ------------------------------------------------------------------
+
+  analyzeCultureDashboard(cohortData) {
+    const eligible = (Array.isArray(cohortData) ? cohortData : []).filter((r) =>
+      this.isCultureEligible(r),
+    );
+
+    if (eligible.length < this.minPlayers) {
+      return {
+        error: "Insufficient data",
+        message:
+          "Company Culture Analysis requires at least " +
+          this.minPlayers +
+          " leaders to have completed the game.",
+        playerCount: eligible.length,
+      };
+    }
+
+    const data = eligible.map((r) => this.anonymiseForCulture(r));
+
+    // ---- Headcount bins -------------------------------------------------
+    // The dashboard presents TWO independent segmentations. A player can
+    // appear in a cohort bin AND a seniority bin (they are different axes, not
+    // one mutually-exclusive list):
+    //
+    //   Cohort view (byCohort):
+    //     1. LEAD Cohort 2025
+    //     2. LEAD Cohort 2026
+    //     3. Other  (eligible JCB players in neither LEAD cohort)
+    //
+    //   Seniority view (bySeniority):
+    //     1. Senior Leadership or above  (Senior Leader / Executive)
+    //     2. Other  (every remaining eligible JCB player)
+    //
+    // Students and non-JCB players are excluded upstream by isCultureEligible().
+    const byCohort = this._buildCohortBins(data);
+    const bySeniority = this._buildSeniorityBins(data);
+
+    const byColour = this._buildDashboardGroups(data, (p) => {
+      const raw = p.personalityColor || "BALANCED";
+      return String(raw).split("/")[0].trim() || "BALANCED";
+    });
+
+    const byStyle = this._buildDashboardGroups(data, (p) => {
+      const profile = p.leadershipProfile || {};
+      const entries = Object.entries(profile);
+      if (entries.length === 0) return "Not specified";
+      entries.sort((a, b) => (b[1] || 0) - (a[1] || 0));
+      return this.capitalize(entries[0][0]);
+    });
+
+    // Business-area view: group by the player's JCB business function so the
+    // dashboard can show whether culture differs between Engineering, HR,
+    // Operations, etc. Only valid JCB functions reach here (isCultureEligible
+    // filtered upstream), so every group is a real business area.
+    const byFunction = this._buildDashboardGroups(data, (p) => {
+      const fn = p.jobFunction;
+      return fn ? String(fn).trim() : "Not specified";
+    });
+
+    return {
+      playerCount: data.length,
+      byCohort: byCohort,
+      bySeniority: bySeniority,
+      byFunction: byFunction,
+      byColour: byColour,
+      byStyle: byStyle,
+    };
+  }
+
+  // The COHORT segmentation, in display order. A player is assigned to the
+  // FIRST bin whose predicate matches, so the bins never overlap and every
+  // eligible player is counted exactly once:
+  //   1. LEAD Cohort 2025
+  //   2. LEAD Cohort 2026
+  //   3. Other (eligible JCB players in neither LEAD cohort)
+  _cohortBinDefs() {
+    return [
+      {
+        name: "LEAD Cohort 2025",
+        match: (p) => this.leadCohortOf(p) === "2025",
+      },
+      {
+        name: "LEAD Cohort 2026",
+        match: (p) => this.leadCohortOf(p) === "2026",
+      },
+      {
+        name: "Other",
+        match: () => true,
+      },
+    ];
+  }
+
+  // The SENIORITY segmentation, in display order:
+  //   1. Senior Leadership or above (Senior Leader / Executive)
+  //   2. Other (every remaining eligible JCB player)
+  _seniorityBinDefs() {
+    return [
+      {
+        name: "Senior Leadership or above",
+        match: (p) => this._isSeniorLeadershipOrAbove(p),
+      },
+      {
+        name: "Other",
+        match: () => true,
+      },
+    ];
+  }
+
+  // True when the player holds a senior-leadership-or-above JCB role. The
+  // seniority values come from the registration form (see index.html).
+  // Middle managers and team leaders fall into the "Other" bin.
+  _isSeniorLeadershipOrAbove(p) {
+    const s = String((p && p.seniority) || "").toLowerCase();
+    return s.indexOf("senior leader") !== -1 || s.indexOf("executive") !== -1;
+  }
+
+  // Bin eligible players using a set of mutually-exclusive bin definitions,
+  // preserving the fixed display order (rather than sorting by size) so the
+  // dashboard reads consistently as more people play.
+  _buildBins(data, defs) {
+    const buckets = defs.map(() => []);
+    data.forEach((p) => {
+      const idx = defs.findIndex((d) => d.match(p));
+      buckets[idx === -1 ? defs.length - 1 : idx].push(p);
+    });
+    return defs.map((d, i) => this._summariseGroup(d.name, buckets[i]));
+  }
+
+  // Cohort view: 2025 / 2026 / Other.
+  _buildCohortBins(data) {
+    return this._buildBins(data, this._cohortBinDefs());
+  }
+
+  // Seniority view: Senior Leadership or above / Other.
+  _buildSeniorityBins(data) {
+    return this._buildBins(data, this._seniorityBinDefs());
+  }
+
+  // Build dashboard groups from a keying function. Each group is enriched with
+  // LEAD averages, style/colour distributions and outcome averages.
+  _buildDashboardGroups(data, keyFn) {
+    const groups = {};
+    data.forEach((p) => {
+      const key = keyFn(p) || "Not specified";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    });
+
+    return Object.entries(groups)
+      .map(([name, players]) => this._summariseGroup(name, players))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  // Summarise a set of players into a single dashboard group.
+  _summariseGroup(name, players) {
+    const lead = this.analyzeLEADScores(players);
+    const metrics = this.calculateAggregateMetrics(players);
+    const leadership = this.analyzeLeadershipDistribution(players);
+    const colors = this.analyzePersonalityColors(players);
+
+    const dims = ["leadership", "excellence", "agility", "determination"];
+    const leadAvg = {};
+    let total = 0;
+    dims.forEach((d) => {
+      leadAvg[d] = lead[d].avg;
+      total += lead[d].avg;
+    });
+    leadAvg.total = total;
+
+    // Weighted overall % of the maximum possible LEAD score. The maximum is
+    // the sum of the per-dimension breakdown ceilings for the round(s) played;
+    // we use the highest round present in the group so mixed cohorts are not
+    // unfairly penalised. Falls back to a 171-point Round 1 ceiling.
+    const maxTotal = this._leadMaxForGroup(players);
+    const overallPct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+
+    return {
+      name: name,
+      count: players.length,
+      sufficient: players.length >= this.minSegmentSize,
+      leadAvg: leadAvg,
+      overallPct: overallPct,
+      styles: leadership.aggregate,
+      colors: colors.percentages,
+      dominantColor: colors.dominant,
+      maxStyleShare: Math.max(0, ...Object.values(leadership.aggregate)),
+      diversity: leadership.diversity,
+      avgGrowth: metrics.avgGrowth,
+      avgMorale: metrics.avgMorale,
+      avgAttrition: metrics.avgAttrition,
+      avgProfitMargin: metrics.avgProfitMargin,
+      successRate: metrics.successRate,
+      optimalRate: metrics.optimalRate,
+    };
+  }
+
+  // Highest cumulative LEAD ceiling across the rounds present in a group.
+  _leadMaxForGroup(players) {
+    const constants =
+      typeof window !== "undefined" ? window.LEAD_CONSTANTS : null;
+    if (!constants || typeof constants.breakdownMaximumsForRound !== "function") {
+      return 171; // Round 1 fallback (9 scenarios x 19 pts)
+    }
+    let max = 0;
+    players.forEach((p) => {
+      const round = p.round === 2 ? 2 : 1;
+      const m = constants.breakdownMaximumsForRound(round);
+      const sum = m.leadership + m.excellence + m.agility + m.determination;
+      if (sum > max) max = sum;
+    });
+    return max || 171;
+  }
+
+  // Merge several groups into one combined group (e.g. 2025 + 2026 -> course).
+  _mergeGroups(groups, name) {
+    const present = groups.filter(Boolean);
+    if (present.length === 0) return null;
+    if (present.length === 1) {
+      return Object.assign({}, present[0], { name: name });
+    }
+    // Weighted merge by count for the numeric fields.
+    const totalCount = present.reduce((s, g) => s + g.count, 0);
+    const weighted = (field) =>
+      present.reduce((s, g) => s + (g[field] || 0) * g.count, 0) / totalCount;
+    const weightedObj = (field) => {
+      const out = {};
+      present.forEach((g) => {
+        Object.entries(g[field] || {}).forEach(([k, v]) => {
+          out[k] = (out[k] || 0) + (v || 0) * g.count;
+        });
+      });
+      Object.keys(out).forEach((k) => {
+        out[k] = out[k] / totalCount;
+      });
+      return out;
+    };
+    return {
+      name: name,
+      count: totalCount,
+      sufficient: totalCount >= this.minSegmentSize,
+      leadAvg: {
+        leadership: present.reduce((s, g) => s + g.leadAvg.leadership * g.count, 0) / totalCount,
+        excellence: present.reduce((s, g) => s + g.leadAvg.excellence * g.count, 0) / totalCount,
+        agility: present.reduce((s, g) => s + g.leadAvg.agility * g.count, 0) / totalCount,
+        determination: present.reduce((s, g) => s + g.leadAvg.determination * g.count, 0) / totalCount,
+        total: present.reduce((s, g) => s + g.leadAvg.total * g.count, 0) / totalCount,
+      },
+      overallPct: weighted("overallPct"),
+      styles: weightedObj("styles"),
+      colors: weightedObj("colors"),
+      maxStyleShare: Math.max(...present.map((g) => g.maxStyleShare || 0)),
+      diversity: weighted("diversity"),
+      avgGrowth: weighted("avgGrowth"),
+      avgMorale: weighted("avgMorale"),
+      avgAttrition: weighted("avgAttrition"),
+      avgProfitMargin: weighted("avgProfitMargin"),
+      successRate: weighted("successRate"),
+      optimalRate: weighted("optimalRate"),
+    };
+  }
+
+  // Build a single comparison row between two groups. Returns null when either
+  // side is missing or below the minimum sample size. Sign convention: positive
+  // = the second group (b) is higher; attrition is inverted so positive = better.
+  _comparison(label, a, b) {
+    if (!a || !b || !a.sufficient || !b.sufficient) return null;
+    return {
+      label: label,
+      aName: a.name,
+      bName: b.name,
+      aCount: a.count,
+      bCount: b.count,
+      leadTotal: b.leadAvg.total - a.leadAvg.total,
+      overallPct: b.overallPct - a.overallPct,
+      leadership: b.leadAvg.leadership - a.leadAvg.leadership,
+      excellence: b.leadAvg.excellence - a.leadAvg.excellence,
+      agility: b.leadAvg.agility - a.leadAvg.agility,
+      determination: b.leadAvg.determination - a.leadAvg.determination,
+      balance: a.maxStyleShare - b.maxStyleShare, // +ve = b more balanced
+      growth: b.avgGrowth - a.avgGrowth,
+      morale: b.avgMorale - a.avgMorale,
+      attrition: a.avgAttrition - b.avgAttrition, // +ve = b better (lower attrition)
+    };
+  }
+
   segmentBy(data, field) {
     const groups = {};
 

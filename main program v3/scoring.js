@@ -885,18 +885,30 @@ class ScoringEngine {
     }
 
     // Part 1: Resource allocation
+    //
+    // UNIT FIX: the slider values arrive as FRACTIONS of the £400K budget
+    // (each slider max is 0.1-0.3, so a value is in the range 0..0.3). The
+    // thresholds below (0.6 / 0.8 / 1.0) were written as if the values were
+    // percentages of the budget, so EVERY condition was unreachable - which is
+    // why spending on the dealer incentive program had no effect on growth.
+    // Normalise each allocation to its SHARE of the total amount allocated
+    // (0..1) so the thresholds mean "60% / 80% / 100% of what you spent".
     const allocation = decision.choices[0].values;
     // [priceMatch, r&d, dealers, marketing, loyalty, dealerPartnership]
 
-    const priceMatch = allocation[0] || 0;
-    const rnd = allocation[1] || 0;
-    const dealers = allocation[2] || 0;
-    const marketing = allocation[3] || 0;
-    const loyalty = allocation[4] || 0;
-    const dealerPartnership = allocation[5] || 0; // NEW: Affiliative option
+    const rawAllocation = allocation.map((v) => Number(v) || 0);
+    const totalAllocated = rawAllocation.reduce((sum, v) => sum + v, 0);
+    const share = (v) => (totalAllocated > 0 ? v / totalAllocated : 0);
+
+    const priceMatch = share(rawAllocation[0] || 0);
+    const rnd = share(rawAllocation[1] || 0);
+    const dealers = share(rawAllocation[2] || 0);
+    const marketing = share(rawAllocation[3] || 0);
+    const loyalty = share(rawAllocation[4] || 0);
+    const dealerPartnership = share(rawAllocation[5] || 0); // Affiliative option
 
     // Heavy price matching is trap
-    if (priceMatch >= 1.0) {
+    if (priceMatch >= 0.6) {
       // REBALANCE FIX 2026-05-17: Increased from +2% to +2.7% (35% increase)
       impact.growth += 2.7;
       impact.profitMargin -= 8;
@@ -906,7 +918,9 @@ class ScoringEngine {
 
     // CRITICAL FIX #2: Balanced investment in R&D and relationships
     // Strategic investments pay off in later scenarios (not immediate)
-    if (rnd >= 1.0 && dealers >= 0.8) {
+    // UNIT FIX: thresholds are now shares of the total allocated (0..1), so
+    // "40% on R&D and 30% on dealers" is a reachable, meaningful combination.
+    if (rnd >= 0.4 && dealers >= 0.3) {
       // REBALANCE FIX 2026-05-17: Increased delayed payoff from +8% to +10% (25% increase)
       // This further rewards long-term thinking
       impact.delayedGrowth = {
@@ -923,13 +937,14 @@ class ScoringEngine {
     }
 
     // NEW: Dealer partnership strengthening (affiliative approach - KEEP FULL IMPACT)
-    if (dealerPartnership >= 0.6) {
+    // UNIT FIX: thresholds are now shares of the total allocated (0..1).
+    if (dealerPartnership >= 0.3) {
       impact.morale += 6; // Team feels supported in relationship-building
       impact.attrition -= 2; // Reduces pressure on sales team
       impact.leadership += 12; // Shows people-first approach
       impact.leadershipStyles.affiliative += 15;
       // Long-term benefit, modest short-term cost
-      if (dealerPartnership >= 0.8) {
+      if (dealerPartnership >= 0.4) {
         // REBALANCE FIX 2026-05-17: Increased from +1% to +1.3% (30% increase)
         impact.growth += 1.3; // Dealer loyalty pays off
       }
@@ -1373,10 +1388,20 @@ class ScoringEngine {
     // Part 3: Risk mitigation allocation
     const mitigation = decision.choices[2].values;
     // [qa, pilot, warranty, marketing, contingency]
+    //
+    // UNIT FIX: slider values arrive in £M (budget £0.5M, maxima 0.2/0.2/0.1/
+    // 0.3/0.1), so the old absolute thresholds (qa >= 0.5, pilot >= 0.4,
+    // marketing > 0.6) were UNREACHABLE - every risk-mitigation choice was
+    // silently ignored. Normalise each allocation to its SHARE of the total
+    // allocated (0..1) so the thresholds mean "50% / 40% / 60% of what you
+    // spent", which is scale-independent and matches the original intent.
+    const rawMitigation = mitigation.map((v) => Number(v) || 0);
+    const totalMitigation = rawMitigation.reduce((sum, v) => sum + v, 0);
+    const mitShare = (v) => (totalMitigation > 0 ? v / totalMitigation : 0);
 
-    const qa = mitigation[0] || 0;
-    const pilot = mitigation[1] || 0;
-    const marketing = mitigation[3] || 0;
+    const qa = mitShare(rawMitigation[0] || 0);
+    const pilot = mitShare(rawMitigation[1] || 0);
+    const marketing = mitShare(rawMitigation[3] || 0);
 
     if (qa >= 0.5 && pilot >= 0.4) {
       // Good risk management
@@ -1449,10 +1474,20 @@ class ScoringEngine {
     // Part 2: Team investment
     const investment = decision.choices[2].values;
     // [bonuses, celebration, capability, savings]
+    //
+    // UNIT FIX: slider values arrive in £M (budget £0.25M, maxima 0.25/0.01/
+    // 0.25/0.25), so the old absolute thresholds (capability >= 0.4,
+    // celebration >= 0.3, bonuses > 0.5) were UNREACHABLE - the entire team
+    // investment decision was silently ignored. Normalise each allocation to
+    // its SHARE of the total allocated (0..1) so the thresholds mean "40% /
+    // 30% / 50% of what you spent", preserving the original intent.
+    const rawInvestment = investment.map((v) => Number(v) || 0);
+    const totalInvestment = rawInvestment.reduce((sum, v) => sum + v, 0);
+    const invShare = (v) => (totalInvestment > 0 ? v / totalInvestment : 0);
 
-    const bonuses = investment[0] || 0;
-    const celebration = investment[1] || 0;
-    const capability = investment[2] || 0;
+    const bonuses = invShare(rawInvestment[0] || 0);
+    const celebration = invShare(rawInvestment[1] || 0);
+    const capability = invShare(rawInvestment[2] || 0);
 
     if (capability >= 0.4) {
       // Invest in Year 2 capabilities (COACHING/STRATEGIC - keep full morale impact)
@@ -1808,6 +1843,13 @@ class ScoringEngine {
 
     // Determine personality color
     results.personalityColor = this.calculatePersonalityColor(gameState);
+    // When BALANCED, capture the colour the player leans towards most (null when
+    // genuinely even) so the report can say "balanced, with a slight tendency
+    // towards X" rather than a flat "BALANCED".
+    results.personalityTendency =
+      results.personalityColor === "BALANCED"
+        ? this.calculatePersonalityTendency(gameState)
+        : null;
     results.personalityDescription = this.getPersonalityDescription(
       results.personalityColor,
     );
@@ -2170,6 +2212,63 @@ class ScoringEngine {
     } else {
       return "BALANCED";
     }
+  }
+
+  /**
+   * When the profile is BALANCED (no single Jung bucket reaches the 40%
+   * dominance threshold), identify the colour the player leans towards MOST so
+   * the report can say "balanced, with a slight tendency towards X" instead of
+   * a flat "BALANCED" that reads as if the assessment failed.
+   *
+   * Returns null when the profile is genuinely even (all four buckets equal to
+   * within a rounding tolerance) or when there is no style data - in those
+   * cases a plain "BALANCED" is the honest answer.
+   *
+   * @param {Object} gameState
+   * @returns {?string} "RED" | "BLUE" | "YELLOW" | "GREEN" | null
+   */
+  calculatePersonalityTendency(gameState) {
+    const styles = (gameState && gameState.leadershipStyles) || {};
+    const coercive = styles.coercive || 0;
+    const authoritative = styles.authoritative || 0;
+    const affiliative = styles.affiliative || 0;
+    const democratic = styles.democratic || 0;
+    const pacesetting = styles.pacesetting || 0;
+    const coaching = styles.coaching || 0;
+
+    const total =
+      coercive +
+      authoritative +
+      affiliative +
+      democratic +
+      pacesetting +
+      coaching;
+    if (total === 0) return null;
+
+    const buckets = {
+      RED: ((coercive + pacesetting) / total) * 100,
+      BLUE: (authoritative / total) * 100,
+      YELLOW: ((affiliative + democratic) / total) * 100,
+      GREEN: (coaching / total) * 100,
+    };
+
+    const values = Object.keys(buckets).map((k) => buckets[k]);
+    const max = Math.max.apply(null, values);
+    const min = Math.min.apply(null, values);
+
+    // Genuinely even: every bucket within 1pp of the others. Only then is a
+    // flat "BALANCED" the honest label (the user's "unless absolutely 100%
+    // balanced" case).
+    if (max - min <= 1) return null;
+
+    // Otherwise name the single most-leaned-towards colour. Ties are broken by
+    // a fixed priority so the output is deterministic.
+    const priority = ["RED", "BLUE", "YELLOW", "GREEN"];
+    let best = null;
+    priority.forEach((k) => {
+      if (best === null || buckets[k] > buckets[best]) best = k;
+    });
+    return best;
   }
 
   getPersonalityDescription(color) {
@@ -2839,7 +2938,11 @@ class ScoringEngine {
           feedback += `Interestingly, your Determination score is higher than typical for GREEN - you have developed urgency beyond your natural preference.`;
         }
       } else if (results.personalityColor === "BALANCED") {
+        const tendency = results.personalityTendency;
         feedback += `<br><br><strong>Balanced Leadership Profile:</strong> You do not show a strong preference for any single Jung temperament. `;
+        if (tendency) {
+          feedback += `That said, you lean slightly towards <strong>${tendency}</strong> - not enough to dominate your profile, but it is the colour you return to most often. `;
+        }
         feedback += `This suggests high adaptability - you can shift between different leadership modes as context requires. `;
         feedback += `Your LEAD scores likely show relatively even development across all four dimensions.`;
       }
@@ -3894,9 +3997,18 @@ class ScoringEngine {
 
     // Part 3: Cultural integration budget
     const budget = decision.choices[2].values;
-    const teamBuilding = budget[0] || 0;
-    const retention = budget[2] || 0;
-    const training = budget[4] || 0;
+    // UNIT FIX: slider values arrive in £M (budget £0.5M, maxima 0.2/0.15/0.3/
+    // 0.1/0.25). The old absolute thresholds (retention >= 0.3, teamBuilding
+    // >= 0.2 && training >= 0.2) were borderline/unreachable. Normalise each
+    // allocation to its SHARE of the total allocated (0..1) so the thresholds
+    // mean "30% / 20% / 20% of what you spent", preserving the original intent.
+    const rawBudget = budget.map((v) => Number(v) || 0);
+    const totalBudget = rawBudget.reduce((sum, v) => sum + v, 0);
+    const budShare = (v) => (totalBudget > 0 ? v / totalBudget : 0);
+
+    const teamBuilding = budShare(rawBudget[0] || 0);
+    const retention = budShare(rawBudget[2] || 0);
+    const training = budShare(rawBudget[4] || 0);
 
     if (retention >= 0.3) {
       impact.attrition -= 8;
@@ -4313,22 +4425,32 @@ class ScoringEngine {
 
     // Part 2: £500K investment allocation
     const investment = decision.choices[1].values;
-    const rd = investment[0] || 0;
-    const innovation = investment[3] || 0;
-    const talent = investment[4] || 0;
+    // UNIT FIX: slider values arrive in £M (budget £0.5M, maxima 0.3/0.2/0.15/
+    // 0.2/0.2), so the old absolute thresholds (rd >= 2.0, innovation >= 1.0,
+    // talent >= 1.5) were UNREACHABLE - they were written on the old £M-scale
+    // budget and never rescaled. Normalise each allocation to its SHARE of the
+    // total allocated (0..1) so the thresholds mean "20% / 20% / 20% of what
+    // you spent", which is scale-independent and matches the original intent.
+    const rawInvestment = investment.map((v) => Number(v) || 0);
+    const totalInvestment = rawInvestment.reduce((sum, v) => sum + v, 0);
+    const invShare = (v) => (totalInvestment > 0 ? v / totalInvestment : 0);
 
-    if (rd >= 2.0) {
+    const rd = invShare(rawInvestment[0] || 0);
+    const innovation = invShare(rawInvestment[3] || 0);
+    const talent = invShare(rawInvestment[4] || 0);
+
+    if (rd >= 0.2) {
       impact.excellence += 25;
       impact.agility += 20;
       impact.determination += 20;
       impact.organizationalCapability += 10; // R&D builds technical capability
     }
-    if (innovation >= 1.0) {
+    if (innovation >= 0.2) {
       impact.agility += 25;
       impact.leadership += 20;
       impact.organizationalCapability += 10; // Innovation lab builds capability
     }
-    if (talent >= 1.5) {
+    if (talent >= 0.2) {
       impact.excellence += 20;
       impact.agility += 15;
       impact.organizationalCapability += 15; // Upskilling is direct capability investment

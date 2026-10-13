@@ -92,7 +92,11 @@ body {
 .welcome-content {
   display: flex;
   width: 100%;
-  height: 100%;
+  /* The leaderboard only ever holds three entries and will not grow, so the
+     welcome screen no longer needs to reserve a full viewport of scrollable
+     space below it. Let the content size to its children instead of forcing
+     height: 100%. */
+  min-height: 100%;
   gap: 40px;
   padding: 40px;
 }
@@ -101,18 +105,24 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  /* Anchor the hero to the top instead of vertically centring it. Centring
+     left a large dead zone above the logo on tall screens, which players
+     read as the screen "starting" with empty space. */
+  justify-content: flex-start;
   align-items: center;
+  padding-top: 20px;
 }
 
 .welcome-right {
   flex: 1;
   display: flex;
   flex-direction: column;
+  /* Align the leaderboard column to the top so it does not stretch to fill the
+     viewport with empty space below the (fixed, three-row) leaderboard. */
+  justify-content: flex-start;
   padding: 40px;
   background: rgba(0, 0, 0, 0.3);
   border-left: 5px solid var(--jcb-yellow);
-  overflow-y: auto;
 }
 
 .leaderboard-title {
@@ -123,10 +133,48 @@ body {
   letter-spacing: 3px;
 }
 
-.leaderboard-list {
+/* Round selector for the home-screen leaderboard. Round 1 and Round 2 are
+   scored against different benchmarks, so they are shown on separate boards. */
+.leaderboard-round-tabs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.leaderboard-round-tab {
   flex: 1;
-  overflow-y: auto;
-  max-height: 70vh; /* Limit height to make it scrollable when many players */
+  max-width: 160px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.leaderboard-round-tab:hover {
+  background: rgba(255, 203, 0, 0.12);
+  border-color: rgba(255, 203, 0, 0.4);
+}
+
+.leaderboard-round-tab.active {
+  color: var(--jcb-black);
+  background: var(--jcb-yellow);
+  border-color: var(--jcb-yellow);
+}
+
+.leaderboard-list {
+  /* The leaderboard is capped at three entries and never grows, so it should
+     size to its content rather than reserving a tall scroll region. */
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
 .leaderboard-item {
@@ -301,6 +349,16 @@ body {
   cursor: pointer;
 }
 
+/* Welcome screen: the culture dashboard is password-gated (see
+   GameEngine.promptCultureAccess) so the button is visible to everyone but
+   only opens for those who know the password. The export/import controls
+   remain in the markup (so nothing breaks and they can be restored) but are
+   hidden from players. */
+#export-results-btn,
+#import-results-btn {
+  display: none;
+}
+
 .btn-tertiary {
   background: var(--jcb-gray);
   color: var(--jcb-white);
@@ -337,13 +395,23 @@ body {
   overflow-y: auto;
   justify-content: flex-start !important;
   align-items: center;
-  padding: 2rem 1rem;
+  /* No vertical padding: on a height:100% scroll container it added a
+     scrollable band of black space above/below the form, so the user could
+     scroll well past where the registration boxes end. Horizontal padding
+     only; the container supplies its own internal spacing. */
+  padding: 0 1rem;
 }
 
 .registration-container {
   width: 90%;
-  max-width: 1200px;
-  padding: 40px;
+  max-width: 1100px;
+  /* The screen itself is the single scroll container (#registration-screen
+     has overflow-y:auto). Giving the container its own max-height + scroll
+     created a nested scroll region: the wheel would scroll the inner box
+     until it hit its end, then the outer screen, which felt broken and left
+     the BEGIN button stranded inside a short inner viewport. Let the
+     container size to its content and let the screen scroll instead. */
+  padding: clamp(20px, 2.5vh, 40px) clamp(20px, 3vw, 48px);
   background: rgba(51, 51, 51, 0.95);
   border-left: 5px solid var(--jcb-yellow);
   animation: slideUp 0.5s ease-out;
@@ -361,8 +429,8 @@ body {
 }
 
 .registration-container h2 {
-  font-size: 36px;
-  margin-bottom: 40px;
+  font-size: clamp(24px, 3vh, 36px);
+  margin-bottom: clamp(20px, 3vh, 40px);
   color: var(--jcb-yellow);
   text-align: center;
 }
@@ -464,20 +532,20 @@ body {
 }
 
 .form-group {
-  margin-bottom: 40px;
+  margin-bottom: clamp(18px, 2.6vh, 40px);
 }
 
 .form-group label {
   display: block;
-  font-size: 20px;
-  margin-bottom: 15px;
+  font-size: clamp(16px, 1.8vh, 20px);
+  margin-bottom: clamp(8px, 1.2vh, 15px);
   color: var(--jcb-white);
 }
 
 .input-large {
   width: 100%;
-  padding: 20px;
-  font-size: 24px;
+  padding: clamp(12px, 1.8vh, 20px);
+  font-size: clamp(17px, 2.2vh, 24px);
   background: rgba(255, 255, 255, 0.1);
   border: 2px solid var(--jcb-yellow);
   color: var(--jcb-white);
@@ -546,14 +614,14 @@ select.input-large option:hover {
 }
 
 .radio-option {
-  padding: 20px;
+  padding: clamp(12px, 1.6vh, 20px);
   background: rgba(255, 255, 255, 0.05);
   border: 2px solid rgba(255, 203, 0, 0.3);
   cursor: pointer;
   transition: all 0.3s ease;
   display: flex;
   align-items: flex-start;
-  gap: 15px;
+  gap: clamp(10px, 1.2vw, 15px);
 }
 
 .radio-option:hover {
@@ -575,13 +643,13 @@ select.input-large option:hover {
 
 .radio-content strong {
   display: block;
-  font-size: 18px;
+  font-size: clamp(15px, 1.7vh, 18px);
   margin-bottom: 5px;
   color: var(--jcb-yellow);
 }
 
 .radio-content p {
-  font-size: 14px;
+  font-size: clamp(12px, 1.4vh, 14px);
   color: rgba(255, 255, 255, 0.8);
 }
 
@@ -605,6 +673,15 @@ select.input-large option:hover {
   align-items: center;
   gap: 40px;
   z-index: 1;
+  /* The briefing is the single scroll container. Previously the container was
+     locked to height:80% and each column scrolled internally, which produced
+     a nested scroll (wheel scrolled the column, then the page) and clipped
+     the countdown / SKIP button on shorter screens. Anchor to the top and let
+     the screen scroll when the content is taller than the viewport. */
+  overflow-y: auto;
+  justify-content: flex-start !important;
+  align-items: flex-start;
+  padding: 40px;
 }
 
 #briefing-screen .briefing-container,
@@ -620,7 +697,10 @@ select.input-large option:hover {
   gap: 40px;
   max-width: 1400px;
   width: 100%;
-  height: 80%;
+  /* Size to content: the screen scrolls, so the container must not be locked
+     to a fixed height (which forced the columns to scroll internally). */
+  height: auto;
+  align-items: stretch;
 }
 
 .briefing-text {
@@ -628,7 +708,6 @@ select.input-large option:hover {
   background: rgba(255, 203, 0, 0.05);
   border: 2px solid rgba(255, 203, 0, 0.3);
   padding: 40px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -752,7 +831,12 @@ select.input-large option:hover {
   animation: slideUp 0.5s ease-out;
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 20px;
+  /* No internal scroll: the briefing screen is now the single scroll
+     container, so this column simply sizes to its content and the whole
+     briefing scrolls as one. This keeps the countdown + SKIP button
+     reachable without a nested scroll region. */
+  padding-right: 8px;
 }
 
 .briefing-info h2,
@@ -765,14 +849,14 @@ select.input-large option:hover {
 
 .brief-details {
   background: rgba(51, 51, 51, 0.8);
-  padding: 30px;
-  margin-bottom: 30px;
+  padding: 20px;
+  margin-bottom: 20px;
   border-left: 4px solid var(--jcb-yellow);
 }
 
 .brief-details p {
   font-size: 18px;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   line-height: 1.6;
   display: flex;
   gap: 12px;
@@ -864,7 +948,9 @@ select.input-large option:hover {
 
 .hud-metrics {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  /* 4 columns: Revenue Growth, Team Morale, Staff Attrition, Org Capability.
+     The Profit Margin tile was removed from the HUD (see index.html). */
+  grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   margin-bottom: 15px;
 }
@@ -1143,6 +1229,50 @@ select.input-large option:hover {
   opacity: 0.5;
 }
 
+/* Touch-friendly reorder controls. HTML5 drag-and-drop does not work on touch
+   devices, so these up/down buttons are the primary way to rank on a phone.
+   They also work with a mouse and keyboard on desktop. */
+.ranking-move {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.ranking-move-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--jcb-yellow);
+  background: rgba(255, 203, 0, 0.12);
+  border: 2px solid rgba(255, 203, 0, 0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  /* Prevent the browser from treating a tap as a scroll/zoom gesture so the
+     button reliably registers on touch devices. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.ranking-move-btn:hover:not(:disabled),
+.ranking-move-btn:focus-visible:not(:disabled) {
+  background: rgba(255, 203, 0, 0.25);
+  border-color: var(--jcb-yellow);
+}
+
+.ranking-move-btn:active:not(:disabled) {
+  background: rgba(255, 203, 0, 0.35);
+}
+
+.ranking-move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 /* Timeline Slider */
 .timeline-slider-container {
   padding: 30px;
@@ -1233,6 +1363,8 @@ select.input-large option:hover {
   gap: 20px;
   justify-content: center;
   margin-top: 30px;
+  /* Allow the action buttons to wrap rather than overflow the modal. */
+  flex-wrap: wrap;
 }
 
 #info-options {
@@ -1322,6 +1454,20 @@ select.input-large option:hover {
   flex-wrap: wrap;
   justify-content: center;
   gap: 14px;
+}
+
+.research-payoff {
+  display: inline-block;
+  margin: 0 auto 18px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(76, 175, 80, 0.16);
+  border: 1px solid rgba(76, 175, 80, 0.5);
+  color: #8be28b;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-align: center;
 }
 
 .impact-chip {
@@ -1561,10 +1707,36 @@ select.input-large option:hover {
 /* Results Screen */
 #results-screen {
   z-index: 1;
+  /* The results page is the one screen that can be much taller than the
+     viewport (metrics + outcome + feedback + breakdown + actions). Keep it as
+     its own scroll container so it works inside the fixed-height body, but
+     anchor content to the TOP (never centre it) and give it no min-height, so
+     a short results page cannot leave a scrollable black band and a tall one
+     scrolls cleanly from the first section. */
+  height: 100%;
+  min-height: 0;
   overflow-y: auto;
-  /* Override .screen.active centering to allow scrolling */
+  overflow-x: hidden;
   justify-content: flex-start !important;
   align-items: center;
+  padding: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Collapse every results section while it is still empty. The reveal chain
+   fills these containers one at a time (metrics -> outcome -> feedback ->
+   business-impact -> placement -> breakdown), so before a section is
+   populated it must contribute ZERO height. Without this, the empty
+   containers' padding/margins reserved a tall band of black space - most
+   visible on Round 2, whose longer feedback pushed the empty sections into
+   view. `.results-feedback` already had this rule; the others did not. */
+#results-screen .results-feedback:empty,
+#results-screen .results-business-impact:empty,
+#results-screen .results-placement:empty,
+#results-screen .results-breakdown:empty,
+#results-screen .results-outcome:empty,
+#results-screen .results-metrics:empty {
+  display: none;
 }
 
 #results-screen .results-container,
@@ -1578,8 +1750,15 @@ select.input-large option:hover {
   width: 90%;
   max-width: 1400px;
   text-align: center;
-  padding: 40px 0;
-  margin-top: 20px; /* Add space from top when scrolling */
+  /* Bottom padding only. The container sizes to its content (it is a flex item
+     in a top-anchored column), so it never stretches to fill the viewport and
+     therefore never creates a black band below the last button.
+     NO top padding: the verdict (TARGET MET / NOT MET) is the first element and
+     must sit flush at the very top of the page - any top padding read as dead
+     black space above the result. */
+  padding: 0 0 24px;
+  margin: 0 auto;
+  flex: 0 0 auto;
 }
 
 .results-header h1 {
@@ -1603,7 +1782,7 @@ select.input-large option:hover {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 30px;
-  margin-bottom: 40px;
+  margin-bottom: 24px;
 }
 
 .result-metric {
@@ -1625,7 +1804,9 @@ select.input-large option:hover {
 }
 
 .results-outcome {
-  margin: 60px 0;
+  /* The verdict is the FIRST section on the results page, so it must sit flush
+     to the top - no top margin reserving dead space above it. */
+  margin: 0 0 24px;
   padding: 40px;
   border: 5px solid var(--jcb-yellow);
   background: rgba(255, 203, 0, 0.1);
@@ -1651,7 +1832,7 @@ select.input-large option:hover {
 }
 
 .results-breakdown {
-  margin-bottom: 40px;
+  margin-bottom: 24px;
 }
 
 .leadership-chart {
@@ -1736,30 +1917,38 @@ select.input-large option:hover {
    with the metric tiles and the leadership chart (dark card, JCB yellow
    accent, left border). */
 .results-business-impact {
-  margin-bottom: 40px;
+  margin-bottom: 24px;
 }
 
 .business-impact {
-  max-width: 900px;
+  /* SCALING FIX: the card previously used a fixed 900px max-width and 40px
+     padding, so on narrower viewports the row (label + value + 160px
+     assessment) overflowed horizontally and ran off the screen. Cap the width
+     to the viewport and use fluid padding so it always fits. */
+  width: 100%;
+  max-width: min(900px, 100%);
   margin: 0 auto;
   background: rgba(51, 51, 51, 0.8);
-  padding: 40px;
+  padding: clamp(16px, 4vw, 40px);
   border-left: 4px solid var(--jcb-yellow);
+  box-sizing: border-box;
 }
 
 .business-impact h3 {
-  font-size: 32px;
+  font-size: clamp(20px, 4vw, 32px);
   color: var(--jcb-yellow);
-  margin-bottom: 30px;
+  margin-bottom: clamp(16px, 3vw, 30px);
 }
 
 .business-impact-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 20px;
-  padding: 16px 0;
+  gap: clamp(8px, 2vw, 20px);
+  padding: clamp(10px, 2vw, 16px) 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  /* Allow the row to wrap rather than overflow when the viewport is narrow. */
+  flex-wrap: wrap;
 }
 
 .business-impact-row:last-child {
@@ -1768,21 +1957,25 @@ select.input-large option:hover {
 
 .business-impact-label {
   flex: 1 1 auto;
-  font-size: 16px;
+  min-width: 0;
+  font-size: clamp(13px, 2vw, 16px);
   color: rgba(255, 255, 255, 0.7);
 }
 
 .business-impact-value {
   flex: 0 0 auto;
-  font-size: 28px;
+  font-size: clamp(20px, 3.5vw, 28px);
   font-weight: bold;
   color: var(--jcb-yellow);
 }
 
 .business-impact-assessment {
-  flex: 0 0 160px;
+  /* Was a fixed 160px column that forced horizontal overflow on phones.
+     Use a fluid basis that can shrink, and let it wrap under the row. */
+  flex: 0 1 auto;
+  min-width: 0;
   text-align: right;
-  font-size: 14px;
+  font-size: clamp(11px, 1.6vw, 14px);
   text-transform: uppercase;
   letter-spacing: 1px;
   color: rgba(255, 255, 255, 0.85);
@@ -1795,6 +1988,15 @@ select.input-large option:hover {
   padding: 40px;
   border-left: 4px solid var(--jcb-yellow);
   text-align: left;
+}
+
+/* The feedback block sits between the outcome and the business-impact card in
+   the DOM, but the reveal animation populates it LAST. Until it is filled it
+   would otherwise reserve a large empty padded box, forcing the player to
+   scroll past a blank gap before reaching the feedback. Hide it while empty
+   and reveal it the moment showFeedback() populates it. */
+.results-feedback:empty {
+  display: none;
 }
 
 .results-feedback h3 {
@@ -1817,6 +2019,102 @@ select.input-large option:hover {
   font-size: 18px;
   line-height: 1.8;
   color: rgba(255, 255, 255, 0.9);
+}
+
+/* LEAD Framework score breakdown panel (feedback page).
+   The cards previously used an inline grid with a hard 250px minimum track,
+   which overflowed the panel's grey border on narrower viewports. The grid now
+   uses minmax(0, 1fr) so tracks can shrink below their content, and every box
+   is border-box so padding/border never push it past the panel edge. */
+.lead-score-breakdown {
+  margin: 30px 0;
+  padding: 25px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.lead-breakdown-title {
+  color: var(--jcb-yellow);
+  margin-top: 0;
+}
+
+.lead-breakdown-subtitle {
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 20px;
+}
+
+.lead-breakdown-note {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.lead-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.lead-breakdown-card {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.lead-breakdown-dim {
+  font-size: 16px;
+  color: var(--jcb-yellow);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  font-weight: bold;
+}
+
+.lead-breakdown-score {
+  font-size: 32px;
+  font-weight: bold;
+  color: white;
+  margin: 10px 0;
+}
+
+.lead-breakdown-max {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 8px;
+}
+
+.lead-breakdown-pct {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.lead-breakdown-overall {
+  margin-top: 20px;
+  padding: 15px;
+  background: rgba(255, 203, 0, 0.1);
+  border-left: 4px solid var(--jcb-yellow);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* On narrow screens, stack the LEAD cards in a single column so they always
+   fit inside the panel. */
+@media (max-width: 640px) {
+  .lead-breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lead-score-breakdown {
+    padding: 18px;
+  }
 }
 
 .development-recommendations {
@@ -1880,10 +2178,13 @@ button,
   margin-bottom: 15px;
   display: grid;
   grid-template-columns: 40px 1fr;
-  grid-template-rows: auto auto auto;
+  /* Let rows size to their content; the rank column spans them all. */
+  grid-auto-rows: auto;
   gap: 12px;
   transition: all 0.3s ease;
   min-height: fit-content; /* Prevent shrinking */
+  /* Keep all content inside the card's bounding box. */
+  overflow: hidden;
 }
 
 .leaderboard-item-compact:hover {
@@ -1896,8 +2197,27 @@ button,
   transform: translateX(5px);
 }
 
+/* Teaser footer under the front-screen top-3 list: tells the player how many
+   more finished this round and points them at the LIVE LEADERBOARD button. */
+.leaderboard-more {
+  margin: 4px 0 12px;
+  padding: 10px 14px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 203, 0, 0.08);
+  border: 1px dashed rgba(255, 203, 0, 0.4);
+  border-radius: 8px;
+}
+
+.leaderboard-more strong {
+  color: var(--jcb-yellow);
+  white-space: nowrap;
+}
+
 .leaderboard-rank {
-  grid-row: 1 / 4;
+  grid-row: 1 / -1;
   font-size: 28px !important; /* Fixed size, prevent shrinking */
   font-weight: bold;
   color: var(--jcb-yellow);
@@ -1913,6 +2233,23 @@ button,
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* Allow the name + action buttons to wrap instead of overflowing the
+     card's right border on narrower viewports. */
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The row holding the status badge + VIEW FEEDBACK / PDF buttons. Let it
+   wrap so the PDF button never spills past the card's bounding box. */
+.leaderboard-player-info > div {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.leaderboard-player-info .btn-secondary {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .leaderboard-name {
@@ -2202,4 +2539,475 @@ button,
   padding: 50px 20px;
   color: rgba(255, 255, 255, 0.5);
   font-size: 17px;
+}
+
+/* ================================================================
+   CROSS-DEVICE RESPONSIVE LAYER
+   ----------------------------------------------------------------
+   The base styles above target a large kiosk touchscreen. The two
+   blocks below adapt the SAME markup for tablets and phones using
+   viewport-width media queries only (no device sniffing).
+
+     >= 1200px : base kiosk / desktop layout (unchanged)
+     768-1199px: tablet (iPad portrait, phone landscape)
+     < 768px   : phone (portrait)
+
+   Everything here is additive and overrides only what is needed,
+   so the large-screen experience is preserved exactly.
+   ================================================================ */
+
+/* ---------- Tablet: iPad portrait, phone landscape ---------- */
+@media (max-width: 1199px) {
+  /* Trim the oversized kiosk padding so content fits the narrower canvas */
+  .welcome-content {
+    gap: 24px;
+    padding: 24px;
+  }
+
+  .welcome-right {
+    padding: 24px;
+  }
+
+  .briefing-container {
+    gap: 24px;
+    height: auto;
+    /* No max-height: the container no longer scrolls internally (the
+       briefing screen does), so capping its height would clip the
+       countdown / SKIP button instead of letting the page scroll. */
+  }
+
+  .briefing-text {
+    padding: 24px;
+  }
+
+  .decision-interface {
+    padding: 24px;
+  }
+
+  .registration-container {
+    padding: 24px;
+  }
+
+  /* Scale down the largest display type */
+  .scenario-title {
+    font-size: 32px;
+  }
+
+  .briefing-text h2 {
+    font-size: 26px;
+  }
+
+  .briefing-emphasis {
+    font-size: 20px;
+  }
+
+  /* Keep the HUD readable without crowding */
+  .hud-metrics {
+    gap: 12px;
+  }
+}
+
+/* ---------- Phone: portrait handsets ---------- */
+@media (max-width: 767px) {
+  /* Unlock the viewport. The base rule pins body to 100vh with
+     overflow:hidden, which clips content behind the mobile address
+     bar and makes screens unreachable. dvh tracks the dynamic
+     viewport so nothing is hidden. */
+  body {
+    height: auto;
+    min-height: 100dvh;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* Screens must be able to grow and scroll instead of being locked
+     to a fixed height. Do NOT force min-height:100dvh here: a screen whose
+     content is shorter than the viewport then leaves a scrollable band of
+     black space below the last element (the "black scroll space at the end").
+     Screens now size to their content; the welcome screen opts back into a
+     full-height fill via its own rule below. */
+  .screen {
+    position: relative;
+    height: auto;
+    min-height: 0;
+  }
+
+  /* #gameplay-screen sets display:flex in its base rule, which beats the
+     .screen { display:none } class rule. On desktop that is hidden by the
+     absolute positioning, but once screens are relative on phone the
+     inactive gameplay screen stays in flow and pushes the results down,
+     leaving a long empty black gap. Force only the active screen to show. */
+  .screen:not(.active) {
+    display: none;
+  }
+
+  .screen.active {
+    justify-content: flex-start;
+    /* No vertical padding: it added scrollable black space below short
+       screens. Horizontal breathing room comes from the inner containers. */
+    padding: 0;
+  }
+
+  /* Results screen: the base rule keeps overflow-y:auto + a tall
+     min-height, which on phone created a huge empty black gap above the
+     results. Let the page scroll instead and anchor content to the top. */
+  #results-screen {
+    overflow-y: visible;
+    min-height: 0;
+    height: auto;
+    /* The base .screen rule is position:absolute with height:100%. On phone
+       the .screen rule above switches to position:relative/height:auto, but
+       #results-screen's own height:auto must win and the screen must not
+       stretch to fill the viewport, otherwise a short results page leaves a
+       scrollable black band below the last button. */
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  #results-screen .results-container {
+    /* Bottom padding only - no top padding, so the verdict sits flush at the
+       very top of the page on phone too (matches the desktop rule). */
+    padding: 0 0 16px;
+    margin-top: 0;
+  }
+
+  #results-screen .results-header h1 {
+    font-size: 26px;
+    margin-bottom: 20px;
+  }
+
+  #results-screen .results-outcome {
+    /* No top margin: the verdict must sit flush at the top on phone too. */
+    margin: 0 0 24px;
+    padding: 20px;
+  }
+
+  #results-screen .outcome-status {
+    font-size: 40px;
+  }
+
+  #results-screen .outcome-message {
+    font-size: 18px;
+  }
+
+  #results-screen .result-metric {
+    padding: 18px;
+  }
+
+  #results-screen .result-metric-value {
+    font-size: 30px;
+  }
+
+  #results-screen .results-feedback {
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+
+  /* Business-impact card on phone: stack the assessment under the label/value
+     so the row can never overflow horizontally. */
+  #results-screen .business-impact {
+    padding: 16px;
+  }
+
+  #results-screen .business-impact-row {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  #results-screen .business-impact-label {
+    flex: 1 1 100%;
+  }
+
+  #results-screen .business-impact-value {
+    flex: 1 1 auto;
+    text-align: left;
+  }
+
+  #results-screen .business-impact-assessment {
+    flex: 0 0 auto;
+    text-align: right;
+  }
+
+  /* Stack every side-by-side layout into a single column */
+  .welcome-content,
+  .briefing-container,
+  #briefing-screen {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+    height: auto;
+  }
+
+  .welcome-left,
+  .welcome-right {
+    flex: none;
+    width: 100%;
+    padding: 16px;
+  }
+
+  .welcome-right {
+    border-left: none;
+    border-top: 5px solid var(--jcb-yellow);
+  }
+
+  /* The welcome screen is the one screen that should still fill the
+     viewport so the hero + leaderboard sit on a full black canvas. */
+  #welcome-screen {
+    min-height: 100dvh;
+  }
+
+  #welcome-screen .welcome-content {
+    min-height: auto;
+  }
+
+  .briefing-text,
+  .briefing-info {
+    flex: none;
+    width: 100%;
+    padding: 16px;
+  }
+
+  .registration-container,
+  .round-choice-container,
+  .welcome-back-container {
+    width: 100%;
+    max-width: 100%;
+    padding: 16px;
+    /* On phone the PAGE scrolls (screens are height:auto), so the container
+       must not create its own nested scroll region. */
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  /* Welcome-screen hero. The base rule is 64px with 4px letter-spacing,
+     which makes "LEADERSHIP" ~430px wide - wider than a ~360px phone -
+     so it overflowed its container and got clipped. Scale it fluidly and
+     reduce letter-spacing so it always fits. */
+  .title-main {
+    font-size: clamp(28px, 9vw, 64px);
+    letter-spacing: clamp(1px, 0.5vw, 4px);
+    text-align: center;
+    word-break: break-word;
+    max-width: 100%;
+  }
+
+  .title-sub {
+    font-size: clamp(18px, 5vw, 36px);
+    letter-spacing: clamp(1px, 0.4vw, 2px);
+    margin-bottom: 32px;
+    text-align: center;
+  }
+
+  .jcb-logo-large {
+    width: 130px;
+    height: 130px;
+    margin-bottom: 24px;
+  }
+
+  .jcb-logo-large::after {
+    font-size: 32px;
+    letter-spacing: 5px;
+  }
+
+  /* Scale type down for a ~360-430px wide screen */
+  .scenario-title {
+    font-size: 26px;
+  }
+
+  .scenario-subtitle {
+    font-size: 18px;
+  }
+
+  .scenario-description,
+  .scenario-brief-text p {
+    font-size: 16px;
+  }
+
+  .briefing-text h2 {
+    font-size: 22px;
+  }
+
+  .briefing-narrative {
+    font-size: 15px;
+  }
+
+  .briefing-emphasis {
+    font-size: 18px;
+  }
+
+  .form-group {
+    margin-bottom: 24px;
+  }
+
+  .form-group label {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+
+  .input-large {
+    font-size: 18px;
+    padding: 14px;
+  }
+
+  /* Full-width, comfortable touch targets */
+  button,
+  .choice-option,
+  .radio-option,
+  .info-option {
+    min-height: 48px;
+  }
+
+  .results-actions,
+  .results-io-actions,
+  .culture-header-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 12px;
+  }
+
+  .results-actions button,
+  .results-io-actions button,
+  .culture-header-actions button {
+    width: 100%;
+  }
+
+  /* HUD collapses to a single column of metrics */
+  .hud-metrics {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .results-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  /* Leaderboard rows: let the metric row wrap instead of overflowing */
+  .leaderboard-item-compact {
+    grid-template-columns: 32px 1fr;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .leaderboard-rank {
+    font-size: 22px !important;
+  }
+
+  .leaderboard-name {
+    font-size: 17px !important;
+  }
+
+  .leaderboard-metrics-row {
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+
+  .leaderboard-profile {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* Live leaderboard overlay: allow the table to scroll sideways */
+  .live-overlay {
+    padding: 10px;
+  }
+
+  .live-overlay-panel {
+    width: 100%;
+    max-height: 92dvh;
+  }
+
+  .live-overlay-header {
+    padding: 14px 16px;
+  }
+
+  .live-overlay-header h2 {
+    font-size: 18px;
+  }
+
+  .live-overlay-body {
+    padding: 14px 16px;
+    overflow-x: auto;
+  }
+
+  .live-table {
+    font-size: 14px;
+    min-width: 420px;
+  }
+
+  /* Modals fill the screen comfortably */
+  .modal-content,
+  .modal-content.large {
+    width: 100%;
+    max-width: 100%;
+    padding: 20px;
+    max-height: 92dvh;
+    overflow-y: auto;
+  }
+
+  /* Modal action buttons: the base rule uses 20px 60px padding at 24px,
+     which is far wider than a phone. Stack them full-width so neither the
+     REQUEST SELECTED nor PROCEED WITHOUT INFO button sits half off-screen. */
+  .modal-actions {
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .modal-actions button {
+    width: 100%;
+    padding: 16px 20px;
+    font-size: 18px;
+    letter-spacing: 1px;
+  }
+
+  /* Consequence modal: the 16/9 video box is far too short for the
+     impact card on a phone, so the metric chips overflowed downward and
+     collided with the CONTINUE NOW button (covering the attrition
+     value). Let the box grow with its content instead of clipping. */
+  #consequence-modal .modal-content.large {
+    max-height: 92dvh;
+    overflow-y: auto;
+  }
+
+  #consequence-modal .video-container {
+    aspect-ratio: auto;
+    flex: none;
+    max-width: 100%;
+    height: auto;
+  }
+
+  #consequence-modal .video-placeholder {
+    height: auto;
+    padding: 16px;
+  }
+
+  .impact-card {
+    padding: 20px 16px 24px;
+  }
+
+  .impact-consequence {
+    font-size: 18px;
+    margin-bottom: 20px;
+  }
+
+  .impact-strip {
+    gap: 10px;
+  }
+
+  .impact-chip {
+    min-width: 90px;
+    padding: 10px 14px;
+  }
+
+  .impact-value {
+    font-size: 20px;
+  }
+
+  .consequence-continue {
+    margin-top: 20px;
+    padding-bottom: 8px;
+  }
 }

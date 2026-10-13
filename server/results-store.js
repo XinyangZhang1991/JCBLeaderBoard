@@ -187,9 +187,11 @@ class ServerResultsStore {
     return {
       count: ordered.length,
       updatedAt: new Date().toISOString(),
-      leaderboard: ordered
-        .slice(0, 10)
-        .map((rec, i) => ResultsStore.toLeaderboardEntry(rec, i + 1)),
+      // Full cohort - the live display must show every player, not just the
+      // top 10 (cohorts can run to ~150 players).
+      leaderboard: ordered.map((rec, i) =>
+        ResultsStore.toLeaderboardEntry(rec, i + 1),
+      ),
     };
   }
 

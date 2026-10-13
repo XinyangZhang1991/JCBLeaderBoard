@@ -654,13 +654,33 @@
   }
 
   // Build the leaderboard entry projection for a canonical record.
+  //
+  // CULTURE-COUNT FIX: the projection MUST carry the segmentation fields
+  // (jobFunction, seniority, leadCohort). The client merges these server
+  // records into jcb_culture_data (see live-sync.js), and the culture analysis
+  // filters that store through isCultureEligible(), which requires a valid JCB
+  // business function. When jobFunction was omitted, every server-sourced
+  // record was rejected and the culture dashboard reported "0 players" even
+  // though the leaderboard showed the full cohort. These fields are not
+  // sensitive (they are already shown/segmented elsewhere) and are required
+  // for the culture analysis to see the whole cohort.
   function toLeaderboardEntry(record, rank) {
     const flat = canonicalToFlat(record);
     return {
       rank: rank,
       runId: flat.runId,
       name: flat.name,
+      jobFunction: flat.jobFunction,
+      seniority: flat.seniority,
+      leadCohort: flat.leadCohort,
       growth: flat.growth,
+      // Individual LEAD dimensions are included (not just the total) so the
+      // home-screen board can render "L:x E:x A:x D:x". Previously only
+      // leadTotal was projected, so server-merged rows showed 0 0 0 0.
+      leadership: flat.leadership,
+      excellence: flat.excellence,
+      agility: flat.agility,
+      determination: flat.determination,
       leadTotal: leadTotalOf(record),
       morale: flat.morale,
       attrition: flat.attrition,

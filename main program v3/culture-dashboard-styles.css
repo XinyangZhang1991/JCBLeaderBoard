@@ -39,51 +39,64 @@
   opacity: 0.7;
 }
 
-.culture-dashboard-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 40px 20px;
-  max-height: 100vh;
+/* The base .screen.active rule centres its child vertically, which pushes the
+   dashboard header down and leaves dead space above the title. Top-align this
+   screen so the "COMPANY CULTURE ANALYSIS" heading sits at the top. */
+#culture-dashboard-screen.active {
+  justify-content: flex-start;
+  align-items: stretch;
+}
+
+/* DEADSPACE FIX: the screen itself is the scroll container. The inner
+   container must NOT create a second nested scroll region (which produced a
+   scrollable band of empty space above the title and below the last section).
+   Let the screen scroll, anchor content to the top, and drop the vertical
+   padding that added the gap. */
+#culture-dashboard-screen.active {
   overflow-y: auto;
   overflow-x: hidden;
-}
-
-/* Ensure smooth scrolling */
-.culture-dashboard-container {
+  -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--jcb-yellow) rgba(0, 0, 0, 0.3);
 }
 
-/* Scrollbar styling for better UX */
-.culture-dashboard-container::-webkit-scrollbar {
+/* Scrollbar styling for better UX (now on the scrolling screen). */
+#culture-dashboard-screen.active::-webkit-scrollbar {
   width: 12px;
 }
 
-.culture-dashboard-container::-webkit-scrollbar-track {
+#culture-dashboard-screen.active::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.3);
   border-radius: 6px;
 }
 
-.culture-dashboard-container::-webkit-scrollbar-thumb {
+#culture-dashboard-screen.active::-webkit-scrollbar-thumb {
   background: var(--jcb-yellow);
   border-radius: 6px;
 }
 
-.culture-dashboard-container::-webkit-scrollbar-thumb:hover {
+#culture-dashboard-screen.active::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 203, 0, 0.8);
 }
 
-/* For Firefox */
 .culture-dashboard-container {
-  scrollbar-width: thin;
-  scrollbar-color: var(--jcb-yellow) rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  /* Small top padding so the title is not flush to the viewport edge, but no
+     large vertical band that the user has to scroll past. */
+  padding: 16px 20px 40px;
+  max-height: none;
+  overflow: visible;
 }
 
 .culture-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 40px;
-  padding-bottom: 20px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
   border-bottom: 2px solid var(--jcb-yellow);
 }
 
@@ -611,4 +624,341 @@
 
 .culture-segment-card p:last-child {
   margin-bottom: 0;
+}
+
+/* ==================================================================
+   SEGMENTED DASHBOARD — KPI strip, comparisons, bar & stack charts
+   ================================================================== */
+
+.culture-intro {
+  margin: 0 0 20px 0;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.6;
+}
+
+/* Headline KPI strip */
+.culture-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.culture-kpi-card {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 3px solid var(--jcb-yellow);
+  border-radius: 8px;
+  padding: 16px 18px;
+  text-align: center;
+}
+
+.culture-kpi-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.1;
+}
+
+.culture-kpi-label {
+  margin-top: 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* Head-to-head comparison cards */
+.culture-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.culture-comparison-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 20px 22px;
+}
+
+.culture-comparison-card h3 {
+  margin: 0 0 4px 0;
+  color: #ffffff;
+  font-size: 17px;
+}
+
+.culture-comparison-sub {
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.culture-delta-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 70px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.culture-delta-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.culture-delta-track {
+  position: relative;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.culture-delta-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.4s ease;
+}
+
+.culture-delta-fill.positive {
+  background: linear-gradient(90deg, #2e9e5b, #4fd07f);
+}
+
+.culture-delta-fill.negative {
+  background: linear-gradient(90deg, #b23b3b, #e06060);
+}
+
+.culture-delta-value {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.culture-delta-value.positive {
+  color: #4fd07f;
+}
+
+.culture-delta-value.negative {
+  color: #e06060;
+}
+
+.culture-footnote {
+  margin: 16px 0 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.5;
+}
+
+/* Grouped bar charts */
+.culture-bar-chart {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.culture-bar-group {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+
+.culture-bar-group-title {
+  margin-bottom: 14px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.culture-bar-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  background: rgba(255, 203, 0, 0.15);
+  border: 1px solid rgba(255, 203, 0, 0.35);
+  border-radius: 4px;
+  color: var(--jcb-yellow);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.culture-bar-row {
+  display: grid;
+  grid-template-columns: 96px 1fr 40px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.culture-bar-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.culture-bar-track {
+  height: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.culture-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.culture-bar-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: right;
+}
+
+.culture-bar-overall {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* LEAD dimension colours */
+.culture-bar-fill.dim-leadership {
+  background: linear-gradient(90deg, #2f6fb0, #4f9fe0);
+}
+.culture-bar-fill.dim-excellence {
+  background: linear-gradient(90deg, #8a5cc4, #b07fe0);
+}
+.culture-bar-fill.dim-agility {
+  background: linear-gradient(90deg, #c48a2f, #e0b04f);
+}
+.culture-bar-fill.dim-determination {
+  background: linear-gradient(90deg, #2e9e5b, #4fd07f);
+}
+
+/* Outcome metric colours */
+.culture-bar-fill.outcome-avgGrowth {
+  background: linear-gradient(90deg, #2e9e5b, #4fd07f);
+}
+.culture-bar-fill.outcome-avgMorale {
+  background: linear-gradient(90deg, #2f6fb0, #4f9fe0);
+}
+.culture-bar-fill.outcome-avgAttrition {
+  background: linear-gradient(90deg, #b23b3b, #e06060);
+}
+
+/* Stacked distribution charts */
+.culture-stack-chart {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.culture-stack-group {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+
+.culture-stack-title {
+  margin-bottom: 12px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.culture-stack-bar {
+  display: flex;
+  height: 26px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.culture-stack-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.75);
+  transition: width 0.4s ease;
+}
+
+.culture-stack-seg span {
+  pointer-events: none;
+}
+
+/* Goleman style colours */
+.culture-stack-seg.style-coercive,
+.culture-legend-swatch.style-coercive {
+  background: #b23b3b;
+}
+.culture-stack-seg.style-authoritative,
+.culture-legend-swatch.style-authoritative {
+  background: #2f6fb0;
+}
+.culture-stack-seg.style-affiliative,
+.culture-legend-swatch.style-affiliative {
+  background: #2e9e5b;
+}
+.culture-stack-seg.style-democratic,
+.culture-legend-swatch.style-democratic {
+  background: #8a5cc4;
+}
+.culture-stack-seg.style-pacesetting,
+.culture-legend-swatch.style-pacesetting {
+  background: #c48a2f;
+}
+.culture-stack-seg.style-coaching,
+.culture-legend-swatch.style-coaching {
+  background: #3aa6a6;
+}
+
+/* Personality colour swatches */
+.culture-stack-seg.color-red,
+.culture-legend-swatch.color-red {
+  background: #d64545;
+}
+.culture-stack-seg.color-blue,
+.culture-legend-swatch.color-blue {
+  background: #3f7fd6;
+}
+.culture-stack-seg.color-yellow,
+.culture-legend-swatch.color-yellow {
+  background: #e0c341;
+}
+.culture-stack-seg.color-green,
+.culture-legend-swatch.color-green {
+  background: #46a758;
+}
+.culture-stack-seg.color-balanced,
+.culture-legend-swatch.color-balanced {
+  background: #9aa0a6;
+}
+
+/* Legend */
+.culture-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.culture-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.culture-legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
 }

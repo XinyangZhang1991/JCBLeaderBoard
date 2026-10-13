@@ -78,30 +78,30 @@
         '<tr class="' +
         (isNew ? "flash" : "") +
         '">' +
-        '<td class="col-rank"><span class="rank-badge">' +
+        '<td class="col-rank" data-label="Rank"><span class="rank-badge">' +
         escapeHtml(e.rank) +
         "</span></td>" +
-        '<td class="col-name">' +
+        '<td class="col-name" data-label="Player">' +
         escapeHtml(e.name || "Anonymous") +
         "</td>" +
-        '<td class="col-num">' +
+        '<td class="col-num" data-label="Growth">' +
         fmt(e.growth, 1) +
         "</td>" +
-        '<td class="col-num">' +
+        '<td class="col-num" data-label="LEAD">' +
         fmt(e.leadTotal, 0) +
         "</td>" +
-        '<td class="col-num">' +
+        '<td class="col-num" data-label="Morale">' +
         fmt(e.morale, 0) +
         "</td>" +
-        '<td class="col-num">' +
+        '<td class="col-num" data-label="Attrition">' +
         fmt(e.attrition, 0) +
         "</td>" +
-        '<td class="col-style"><span class="' +
+        '<td class="col-style" data-label="Style"><span class="' +
         styleClass(e.leadershipStyle) +
         '">' +
         escapeHtml(e.leadershipStyle || e.personalityColor || "—") +
         "</span></td>" +
-        '<td class="col-round">' +
+        '<td class="col-round" data-label="Round">' +
         escapeHtml(e.round || 1) +
         "</td>" +
         "</tr>";

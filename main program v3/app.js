@@ -1,5 +1,14 @@
 // Main Application Initialization
 
+// Prevent the browser from restoring the previous scroll position on reload
+// (e.g. after NEW PLAYER). Each screen should open at the top.
+if ("scrollRestoration" in history) {
+  history.scrollRestoration = "manual";
+}
+window.addEventListener("load", () => {
+  window.scrollTo(0, 0);
+});
+
 // Load scenarios when available
 window.addEventListener("DOMContentLoaded", () => {
   // Initialize scenarios with the Round 1 default.
