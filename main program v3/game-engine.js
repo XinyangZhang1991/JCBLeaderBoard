@@ -3398,9 +3398,9 @@ Your team is shaken. Some privately wonder if the relentless pace you set contri
 
     modal.classList.add("active");
 
-    // Auto-continue after 10 seconds so players have time to read the impact
+    // Auto-continue after 20 seconds so players have time to read the impact
     // card before it advances.
-    let countdown = 10;
+    let countdown = 20;
     const timerEl = document.getElementById("consequence-timer");
     timerEl.textContent = countdown;
 
